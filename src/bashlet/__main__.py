@@ -4,7 +4,15 @@ import argparse
 import json
 from pathlib import Path
 
-from . import Bash, GradingCase, Limits, Submit, Task, run_experiment
+from . import (
+    Bash,
+    GradingCase,
+    InteractionBudget,
+    Limits,
+    Submit,
+    Task,
+    run_experiment,
+)
 
 
 def main() -> None:
@@ -35,6 +43,7 @@ def main() -> None:
             actions=actions,
             output_dir=options.output_dir,
             limits=Limits(**request.get("limits", {})),
+            budget=InteractionBudget(**request.get("budget", {})),
             bwrap=options.bwrap,
         )
     except (OSError, ValueError, TypeError, KeyError) as error:

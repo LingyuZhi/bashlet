@@ -10,7 +10,16 @@ from pathlib import Path
 
 import pytest
 
-from bashlet import Bash, GradingCase, Limits, Submit, Task, run_experiment
+from bashlet import (
+    Bash,
+    ExperimentResult,
+    GradingCase,
+    Limits,
+    Observation,
+    Submit,
+    Task,
+    run_experiment,
+)
 
 
 def sum_task() -> Task:
@@ -25,6 +34,12 @@ def sum_task() -> Task:
         ),
         reference_implementation="def solve(numbers):\n    return sum(numbers)\n",
     )
+
+
+def observed(result: ExperimentResult, index: int) -> Observation:
+    observation = result.trajectory[index].observation
+    assert observation is not None, result.trajectory[index]
+    return observation
 
 
 def write_solution(source: str) -> Bash:
@@ -53,7 +68,7 @@ def test_experiment_executes_feedback_and_grades_a_distinct_correct_submission(
 
     assert result.status == "completed", result
     assert result.isolation.passed, result.isolation
-    assert result.trajectory[1].observation.stdout == "feedback passed"
+    assert observed(result, 1).stdout == "feedback passed"
     assert result.grade is not None and result.grade.passed
     assert result.grade.passed_cases == 3
     assert result.submission is not None
@@ -90,7 +105,7 @@ def test_feedback_or_self_report_cannot_determine_the_grade(
         output_dir=tmp_path,
     )
     assert result.status == "completed", result.reason
-    assert result.trajectory[1].observation.status == "ok"
+    assert observed(result, 1).status == "ok"
     assert result.grade is not None and not result.grade.passed
 
 
@@ -136,17 +151,15 @@ def test_task_and_grading_processes_cannot_read_host_secrets(
             output_dir=tmp_path / "runs",
         )
     assert result.isolation.passed, result.isolation
-    for step in result.trajectory[:6]:
-        assert step.observation.status == "command_failed"
-        assert step.observation.exit_code != 0
+    for index in range(6):
+        assert observed(result, index).status == "command_failed"
+        assert observed(result, index).exit_code != 0
     assert secret not in json.dumps(
-        [
-            (step.observation.stdout, step.observation.stderr)
-            for step in result.trajectory
-        ]
+        [(step.observation, step.feedback) for step in result.trajectory],
+        default=str,
     )
     assert result.grade is not None and result.grade.passed
-    assert result.trajectory[6].observation.status == "ok"
+    assert observed(result, 6).status == "ok"
     assert host_private.read_text() == secret
 
 
@@ -192,7 +205,7 @@ def test_execution_limits_produce_recorded_real_observations(
         limits=limits,
     )
     assert result.status == "not_submitted", result.reason
-    observation = result.trajectory[0].observation
+    observation = observed(result, 0)
     assert observation.status == expected_status
     assert len(observation.stdout.encode()) + len(observation.stderr.encode()) <= 128
     if "exit 17" in command:
@@ -291,7 +304,7 @@ def test_submission_ends_the_episode_and_runs_keep_independent_snapshots(
     assert first.run_dir != second.run_dir
     assert first.grade is not None and first.grade.passed
     assert second.grade is not None and second.grade.passed
-    assert len(first.trajectory) == 1
+    assert [type(step.action) for step in first.trajectory] == [Bash, Submit]
     assert (first.run_dir / "run.json").read_bytes() == first_record
     assert (first.run_dir / first.submission.path).read_bytes() == snapshot
     assert not (first.run_dir / "workspace" / "grading_tests.py").exists()
@@ -334,8 +347,8 @@ def test_task_cannot_connect_to_a_host_service(tmp_path: Path) -> None:
             output_dir=tmp_path,
         )
     assert result.isolation.passed
-    assert result.trajectory[0].observation.status == "command_failed"
-    assert "ConnectionRefusedError" in result.trajectory[0].observation.stderr
+    assert observed(result, 0).status == "command_failed"
+    assert "ConnectionRefusedError" in observed(result, 0).stderr
 
 
 @pytest.mark.parametrize("wait_command", ["sleep 10", ":"])
@@ -356,6 +369,6 @@ def test_detached_processes_cannot_mutate_the_workspace_after_an_action(
     )
     assert result.status == "not_submitted", result.reason
     if wait_command == "sleep 10":
-        assert result.trajectory[0].observation.status == "timeout"
+        assert observed(result, 0).status == "timeout"
     time.sleep(0.7)
     assert not (result.run_dir / "workspace" / "delayed-write").exists()

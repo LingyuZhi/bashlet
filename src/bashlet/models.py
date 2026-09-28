@@ -1,9 +1,10 @@
 """Inputs and recorded outcomes of one small experiment."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 type JSONValue = (
     None | bool | int | float | str | list[JSONValue] | dict[str, JSONValue]
@@ -29,11 +30,78 @@ class Task:
 @dataclass(frozen=True)
 class Bash:
     command: str
+    kind: Literal["bash"] = field(default="bash", init=False)
 
 
 @dataclass(frozen=True)
 class Submit:
     """Submit the current solution.py and end the experiment's episode."""
+
+    kind: Literal["submit"] = field(default="submit", init=False)
+
+
+@dataclass(frozen=True)
+class InvalidAction:
+    """A generation the action protocol rejected; nothing was executed."""
+
+    reason: str
+    kind: Literal["invalid"] = field(default="invalid", init=False)
+
+
+@dataclass(frozen=True)
+class SamplingParams:
+    max_tokens: int = 1024
+    temperature: float = 1.0
+    top_p: float = 1.0
+    seed: int | None = None
+
+
+@dataclass(frozen=True)
+class Generation:
+    """Raw sampler output: token IDs with the logprob of each sampled token."""
+
+    tokens: tuple[int, ...]
+    logprobs: tuple[float, ...]
+    stop_reason: Literal["stop", "length"]
+    request_id: str = ""
+
+
+class Encoding(Protocol):
+    """Tokenizer and chat template that frame the student's context."""
+
+    @property
+    def identity(self) -> str: ...
+
+    def prompt(self, system: str, user: str) -> list[int]:
+        """Tokens up to and including the first assistant header."""
+        ...
+
+    def continuation(self, generated: Sequence[int], observation: str) -> list[int]:
+        """Tokens that follow a raw generation: turn close, observation turn and
+        the next assistant header. Earlier tokens are never re-encoded."""
+        ...
+
+    def decode(self, tokens: Sequence[int]) -> str: ...
+
+
+class Model(Protocol):
+    """A student policy behind a model-call Adapter."""
+
+    @property
+    def identity(self) -> str: ...
+
+    @property
+    def encoding(self) -> Encoding: ...
+
+    def sample(self, prompt: Sequence[int], sampling: SamplingParams) -> Generation: ...
+
+
+@dataclass(frozen=True)
+class InteractionBudget:
+    max_steps: int = 10
+    max_generated_tokens: int = 8192
+    max_seconds: float = 120.0
+    max_consecutive_invalid: int = 3
 
 
 @dataclass(frozen=True)
@@ -65,9 +133,59 @@ class Isolation:
 
 
 @dataclass(frozen=True)
+class ModelCall:
+    """One sampling request; ``context_offset`` is where its tokens start."""
+
+    policy: str
+    sampling: SamplingParams
+    context_offset: int
+    generation: Generation
+    text: str
+    duration_seconds: float
+
+
+@dataclass(frozen=True)
 class Step:
-    action: Bash
-    observation: Observation
+    """One Interaction Step. ``feedback`` is the exact text the policy sees next;
+    ``candidate`` indexes the candidate implementation after the step."""
+
+    action: Bash | Submit | InvalidAction
+    observation: Observation | None = None
+    model_call: ModelCall | None = None
+    feedback: str | None = None
+    candidate: int | None = None
+    verification: bool = False
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """A distinct solution.py state, saved when an executed step formed it."""
+
+    index: int
+    sha256: str
+    path: str
+    formed_at_step: int
+
+
+@dataclass
+class RepairAttempt:
+    """Opens when a verification fails; closes when a different candidate is
+    verified. It may span several Interaction Steps."""
+
+    index: int
+    failed_step: int
+    from_candidate: int | None
+    to_candidate: int | None = None
+    verified_at_step: int | None = None
+    passed: bool | None = None
+
+
+@dataclass
+class Usage:
+    steps: int = 0
+    generated_tokens: int = 0
+    invalid_actions: int = 0
+    elapsed_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -99,9 +217,18 @@ class ExperimentResult:
     task_sha256: str
     limits: Limits
     isolation: Isolation
+    mode: Literal["scripted", "model"] = "scripted"
+    policy: str = ""
+    encoding: str = ""
+    budget: InteractionBudget = field(default_factory=InteractionBudget)
     started_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: str = "running"
     trajectory: list[Step] = field(default_factory=list)
+    context_tokens: list[int] = field(default_factory=list)
+    candidates: list[Candidate] = field(default_factory=list)
+    repair_attempts: list[RepairAttempt] = field(default_factory=list)
+    usage: Usage = field(default_factory=Usage)
+    rejected_generation: Generation | None = None
     submission: Submission | None = None
     grade: Grade | None = None
     reason: str = ""
