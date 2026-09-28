@@ -1,0 +1,25 @@
+{
+  "task": {
+    "task_id": "manual/sum-v1",
+    "prompt": "Write solution.py with solve(numbers), returning the sum of the integers, including an empty list and negative integers.",
+    "feedback_tests": "from solution import solve\nassert solve([1, 2]) == 3\nprint('feedback passed')\n",
+    "grading_cases": [
+      {"args": [[1, 2]], "expected": 3},
+      {"args": [[]], "expected": 0},
+      {"args": [[-5, 2]], "expected": -3}
+    ],
+    "reference_implementation": "def solve(numbers):\n    return sum(numbers)\n"
+  },
+  "actions": [
+    {"kind": "bash", "command": "cat > solution.py <<'PY'\ndef solve(numbers):\n    total = 0\n    for number in numbers:\n        total += number\n    return total\nPY\n"},
+    {"kind": "bash", "command": "python3 feedback_tests.py"},
+    {"kind": "submit"}
+  ],
+  "limits": {
+    "timeout_seconds": 2.0,
+    "output_bytes": 16384,
+    "submission_bytes": 65536,
+    "memory_bytes": 536870912,
+    "file_bytes": 1048576
+  }
+}

@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Implement Plan
+.scratch
+
+# Developing Docs
+docs
+
+# Agent-assistant docs
+AGENTS.md
+CONTEXT.md
+
+# Local checks and experiment artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.uv-cache/
+runs/
