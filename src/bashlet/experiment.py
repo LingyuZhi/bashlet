@@ -9,13 +9,11 @@ import stat
 import sys
 import time
 import uuid
-from collections.abc import Sequence
 from dataclasses import asdict, replace
 from pathlib import Path
 
 from . import protocol
 from .models import (
-    Bash,
     Candidate,
     CaseResult,
     ExperimentResult,
@@ -168,13 +166,25 @@ def _sample(model: Model, context: list[int], sampling: SamplingParams) -> Model
     duration = time.monotonic() - started
     tokens, logprobs = generation.tokens, generation.logprobs
     problem = ""
-    if len(tokens) != len(logprobs):
+    if generation.source not in ("sampled", "replayed"):
+        problem = f"Unknown generation source {generation.source!r}"
+    elif generation.source == "replayed" and logprobs is not None:
+        problem = "Replayed generations cannot carry sampling logprobs"
+    elif generation.source == "sampled" and logprobs is None:
+        problem = "Sampled generations require per-token logprobs"
+    elif (
+        generation.source == "sampled"
+        and logprobs is not None
+        and len(tokens) != len(logprobs)
+    ):
         problem = f"{len(tokens)} tokens but {len(logprobs)} logprobs"
     elif len(tokens) > sampling.max_tokens:
         problem = f"{len(tokens)} tokens exceed max_tokens={sampling.max_tokens}"
     elif not all(type(token) is int and token >= 0 for token in tokens):
         problem = "Token IDs must be non-negative integers"
-    elif not all(math.isfinite(value) and value <= 0 for value in logprobs):
+    elif logprobs is not None and not all(
+        math.isfinite(value) and value <= 0 for value in logprobs
+    ):
         problem = "Logprobs must be finite and non-positive"
     elif generation.stop_reason not in ("stop", "length"):
         problem = f"Unknown stop reason {generation.stop_reason!r}"
@@ -289,27 +299,24 @@ def _track_repair(
 def run_experiment(
     *,
     task: Task,
-    actions: Sequence[Bash | Submit] | None = None,
-    model: Model | None = None,
+    model: Model,
     sampling: SamplingParams = _DEFAULT_SAMPLING,
     budget: InteractionBudget = _DEFAULT_BUDGET,
     output_dir: Path = Path("runs"),
     limits: Limits = _DEFAULT_LIMITS,
     bwrap: str = "/usr/bin/bwrap",
 ) -> ExperimentResult:
-    """Run one Episode from trusted scripted actions or from a model's policy.
+    """Run one Episode from a sampling model or pre-written replay replies.
 
-    Both sources share the bash-block-v1 Harness: the same budget, execution,
-    feedback text, candidate tracking and grading. A model only ever receives
-    the system prompt, the task prompt and real feedback from earlier steps.
+    Both sources share the bash-block-v1 Harness: token context, budget,
+    execution, feedback text, candidate tracking and grading. A model only ever
+    receives the system prompt, task prompt and real feedback from earlier steps.
 
     The returned record is operator-only. It is not an agent observation.
     Grading v1 calls a named function with JSON positional arguments and compares
     its JSON result in the host; neither reference code nor expected values enter
     any student process. A submission always ends the episode.
     """
-    if (actions is None) == (model is None):
-        raise ValueError("Provide exactly one of scripted actions or a model")
     if not task.task_id or not task.grading_cases:
         raise ValueError("A task identity and at least one grading case are required")
     if not task.function_name.isidentifier() or keyword.iskeyword(task.function_name):
@@ -333,18 +340,17 @@ def run_experiment(
         hashlib.sha256(task_json.encode()).hexdigest(),
         limits,
         Isolation(False, reason="Not yet checked"),
-        mode="scripted" if model is None else "model",
-        policy="" if model is None else model.identity,
-        encoding="" if model is None else model.encoding.identity,
+        policy=model.identity,
+        encoding=model.encoding.identity,
         budget=budget,
     )
     sandbox = Sandbox(limits, bwrap)
 
     def save() -> None:
         record = asdict(result) | {
-            "schema_version": 2,
+            "schema_version": 3,
             "protocol": protocol.describe(),
-            "sampling": None if model is None else asdict(sampling),
+            "sampling": asdict(sampling),
             "grading_protocol": "json-function-v1",
             "isolation_policy": "linux-bwrap-v1",
             "effective_resource_limits": sandbox.resource_limits,
@@ -354,9 +360,6 @@ def run_experiment(
             },
             "host_python": sys.version,
             "bwrap": bwrap,
-            "action_plan": None
-            if actions is None
-            else [asdict(action) for action in actions],
         }
         pending = run_dir / "run.json.tmp"
         pending.write_text(
@@ -379,10 +382,8 @@ def run_experiment(
         (workspace / "task.md").write_text(task.prompt)
         (workspace / "feedback_tests.py").write_text(task.feedback_tests)
         (run_dir / "candidates").mkdir()
-        scripted = iter(actions) if actions is not None else None
         context = result.context_tokens
-        if model is not None:
-            context.extend(model.encoding.prompt(protocol.SYSTEM_PROMPT, task.prompt))
+        context.extend(model.encoding.prompt(protocol.SYSTEM_PROMPT, task.prompt))
         candidate: int | None = None
         consecutive_invalid = 0
         feedback_sha256 = hashlib.sha256(task.feedback_tests.encode()).hexdigest()
@@ -392,38 +393,26 @@ def run_experiment(
             if reason:
                 result.status, result.reason = "budget_exhausted", reason
                 return result
-            call: ModelCall | None = None
-            action: Bash | Submit | InvalidAction
-            if scripted is not None:
-                next_action = next(scripted, None)
-                if next_action is None:
-                    result.status = "not_submitted"
-                    return result
-                action = next_action
-            else:
-                assert model is not None
-                remaining = budget.max_generated_tokens - result.usage.generated_tokens
-                request = replace(
-                    sampling, max_tokens=min(sampling.max_tokens, remaining)
-                )
-                try:
-                    call = _sample(model, context, request)
-                except _ModelError as error:
-                    # Rejected output is kept for audit but never enters context.
-                    result.rejected_generation = error.generation
-                    if error.generation is not None:
-                        result.usage.generated_tokens += len(error.generation.tokens)
-                    result.status, result.reason = "model_error", str(error)
-                    return result
-                except _SamplerError as error:
-                    result.status = "infrastructure_error"
-                    result.reason = f"Model call failed: {error}"
-                    return result
-                context.extend(call.generation.tokens)
-                result.usage.generated_tokens += len(call.generation.tokens)
-                action = protocol.parse_action(
-                    call.text, call.generation.stop_reason == "length"
-                )
+            remaining = budget.max_generated_tokens - result.usage.generated_tokens
+            request = replace(sampling, max_tokens=min(sampling.max_tokens, remaining))
+            try:
+                call = _sample(model, context, request)
+            except _ModelError as error:
+                # Rejected output is kept for audit but never enters context.
+                result.rejected_generation = error.generation
+                if error.generation is not None:
+                    result.usage.generated_tokens += len(error.generation.tokens)
+                result.status, result.reason = "model_error", str(error)
+                return result
+            except _SamplerError as error:
+                result.status = "infrastructure_error"
+                result.reason = f"Model call failed: {error}"
+                return result
+            context.extend(call.generation.tokens)
+            result.usage.generated_tokens += len(call.generation.tokens)
+            action = protocol.parse_action(
+                call.text, call.generation.stop_reason == "length"
+            )
             index = len(result.trajectory)
             result.usage.steps += 1
             if isinstance(action, Submit):
@@ -494,11 +483,10 @@ def run_experiment(
                 result.trajectory.append(
                     Step(action, observation, call, feedback, candidate, verification)
                 )
-            if model is not None and call is not None:
-                # Feedback is appended only after its action has actually run.
-                context.extend(
-                    model.encoding.continuation(call.generation.tokens, feedback)
-                )
+            # Feedback is appended only after its action has actually run.
+            context.extend(
+                model.encoding.continuation(call.generation.tokens, feedback)
+            )
             save()
     except OSError as error:
         result.status = "infrastructure_error"

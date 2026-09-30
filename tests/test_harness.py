@@ -8,10 +8,17 @@ from pathlib import Path
 
 import pytest
 from adapters import (
+    ASSISTANT,
+    END,
+    SYSTEM,
+    USER,
     WORDS,
+    ByteEncoding,
     ScriptedModel,
     bash,
     latest_feedback,
+    replay,
+    submit,
     turn_number,
     write_file,
 )
@@ -23,11 +30,13 @@ from bashlet import (
     GradingCase,
     InteractionBudget,
     InvalidAction,
+    ReplayModel,
     SamplingParams,
     Submit,
     Task,
     run_experiment,
 )
+from bashlet.protocol import SYSTEM_PROMPT
 
 FROZEN_PROTOCOL_SHA256 = (
     "e3212936cc2175b313e7f2036e13d3dc5b61be5dee0ea68236a7ccae8f865077"
@@ -63,8 +72,111 @@ def repairing_policy(context: str) -> str:
     if "solve([4]) should be 4" in feedback:
         return write_file(FIXED)
     if "feedback passed" in feedback:
-        return "Feedback passed.\n```bash\nsubmit\n```"
+        return submit()
     return bash("python3 feedback_tests.py")
+
+
+def test_replay_keeps_reply_tokens_and_append_only_context(tmp_path: Path) -> None:
+    task = sum_task()
+    replies = [bash("printf '雪\\n'"), write_file(FIXED), submit()]
+    result = run_experiment(
+        task=task,
+        model=ReplayModel(replies, encoding=ByteEncoding()),
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "completed", result.reason
+    assert result.grade is not None and result.grade.passed
+    assert result.trajectory[0].observation is not None
+    assert result.trajectory[0].observation.stdout == "雪\n"
+    expected_context = [
+        SYSTEM, *SYSTEM_PROMPT.encode(), END, USER, *task.prompt.encode(), END,
+        ASSISTANT,
+    ]  # fmt: skip
+    for reply, step in zip(replies, result.trajectory, strict=True):
+        call = step.model_call
+        assert call is not None
+        assert call.context_offset == len(expected_context)
+        assert call.text == reply
+        assert call.generation.tokens == tuple(reply.encode())
+        assert call.generation.source == "replayed"
+        assert call.generation.logprobs is None
+        expected_context.extend(reply.encode())
+        if step.feedback is not None:
+            expected_context.extend(
+                [END, USER, *step.feedback.encode(), END, ASSISTANT]
+            )
+        assert result.context_tokens[: len(expected_context)] == expected_context
+    assert result.context_tokens == expected_context
+    assert result.usage.generated_tokens == sum(
+        len(reply.encode()) for reply in replies
+    )
+    record = json.loads((result.run_dir / "run.json").read_text())
+    assert record["context_tokens"] == expected_context
+    assert all(
+        step["model_call"]["generation"]["source"] == "replayed"
+        and step["model_call"]["generation"]["logprobs"] is None
+        for step in record["trajectory"]
+    )
+
+
+@pytest.mark.parametrize("replies", [[], [bash("true")]])
+def test_exhausted_replies_end_through_normal_invalid_action_rules(
+    tmp_path: Path, replies: list[str]
+) -> None:
+    result = run_experiment(task=sum_task(), model=replay(replies), output_dir=tmp_path)
+
+    assert result.status == "invalid_action"
+    assert result.usage.steps == len(replies) + 3
+    assert result.usage.invalid_actions == 3
+    assert result.rejected_generation is None
+    assert result.submission is None and result.grade is None
+    for step in result.trajectory[len(replies) :]:
+        assert isinstance(step.action, InvalidAction)
+        assert step.observation is None
+        assert step.model_call is not None
+        assert step.model_call.generation.tokens == ()
+        assert step.model_call.generation.source == "replayed"
+        assert step.model_call.generation.logprobs is None
+
+
+@pytest.mark.parametrize(
+    ("budget", "sampling", "reason"),
+    [
+        (
+            InteractionBudget(max_generated_tokens=8),
+            SamplingParams(),
+            "max_generated_tokens=8",
+        ),
+        (
+            InteractionBudget(max_steps=1),
+            SamplingParams(max_tokens=8),
+            "max_steps=1",
+        ),
+    ],
+)
+def test_replay_obeys_generation_and_interaction_limits(
+    tmp_path: Path, budget: InteractionBudget, sampling: SamplingParams, reason: str
+) -> None:
+    reply = write_file(FIXED)
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([reply]),
+        budget=budget,
+        sampling=sampling,
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "budget_exhausted"
+    assert reason in result.reason
+    assert result.usage.generated_tokens == 8
+    step = result.trajectory[0]
+    assert step.action == InvalidAction("The reply hit the generation length limit")
+    assert step.model_call is not None
+    assert step.model_call.sampling.max_tokens == 8
+    assert step.model_call.generation.tokens == tuple(reply.encode()[:8])
+    assert step.model_call.generation.stop_reason == "length"
+    assert not (result.run_dir / "workspace" / "solution.py").exists()
 
 
 def test_policy_repairs_after_real_feedback_and_submission_is_graded(
@@ -100,6 +212,7 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
         call = step.model_call
         assert call is not None
         assert call.generation == generation
+        assert call.generation.source == "sampled"
         assert call.policy == "test/scripted-student@step-0"
         assert call.sampling.temperature == 0.7 and call.sampling.seed == 11
     assert result.policy == "test/scripted-student@step-0"
@@ -125,7 +238,7 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     assert "feedback passed" not in "".join(renders[:4])
 
     record = json.loads((result.run_dir / "run.json").read_text())
-    assert record["mode"] == "model"
+    assert record["schema_version"] == 3
     assert record["protocol"]["name"] == "bash-block-v1"
     # Frozen before demonstrations: changing any agent-visible protocol text
     # must come with a new protocol version and an updated fingerprint here.
@@ -141,7 +254,7 @@ def test_single_invalid_action_is_fed_back_without_execution(tmp_path: Path) -> 
             return "I will write the file now."  # no block
         if "<invalid_action>" in latest_feedback(context):
             return write_file(FIXED)
-        return "```bash\nsubmit\n```"
+        return submit()
 
     result = run_experiment(
         task=sum_task(), model=ScriptedModel(policy), output_dir=tmp_path
@@ -164,6 +277,66 @@ def raising(context: str) -> str:
 
 def mismatched(context: str) -> Generation:
     return Generation(tokens=(65, 66), logprobs=(-0.1,), stop_reason="stop")
+
+
+@pytest.mark.parametrize(
+    ("logprobs", "reason"),
+    [
+        (None, "require per-token logprobs"),
+        ((), "2 tokens but 0 logprobs"),
+        ((-0.1, float("nan")), "finite and non-positive"),
+        ((-0.1, float("inf")), "finite and non-positive"),
+        ((-0.1, float("-inf")), "finite and non-positive"),
+        ((-0.1, 0.1), "finite and non-positive"),
+    ],
+    ids=["missing", "empty", "nan", "inf", "negative-inf", "positive"],
+)
+def test_sampled_generations_require_valid_per_token_logprobs(
+    tmp_path: Path, logprobs: tuple[float, ...] | None, reason: str
+) -> None:
+    generation = Generation(tokens=(65, 66), logprobs=logprobs, stop_reason="stop")
+    result = run_experiment(
+        task=sum_task(),
+        model=ScriptedModel(lambda context: generation),
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "model_error"
+    assert reason in result.reason
+    assert result.rejected_generation == generation
+    assert result.trajectory == []
+    assert result.usage.generated_tokens == 2
+    assert result.context_tokens[-1] == ASSISTANT
+    record = json.loads((result.run_dir / "run.json").read_text())
+    assert record["rejected_generation"]["source"] == "sampled"
+
+
+@pytest.mark.parametrize(
+    ("source", "logprobs", "reason"),
+    [
+        ("unknown", None, "Unknown generation source"),
+        ("replayed", (-0.1,), "Replayed generations cannot carry sampling logprobs"),
+    ],
+)
+def test_generation_source_cannot_bypass_the_probability_contract(
+    tmp_path: Path, source: str, logprobs: tuple[float, ...] | None, reason: str
+) -> None:
+    generation = Generation(
+        tokens=(65,),
+        stop_reason="stop",
+        logprobs=logprobs,
+        source=source,  # type: ignore[arg-type]
+    )
+    result = run_experiment(
+        task=sum_task(),
+        model=ScriptedModel(lambda context: generation),
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "model_error"
+    assert reason in result.reason
+    assert result.rejected_generation == generation
+    assert result.trajectory == []
 
 
 @pytest.mark.parametrize(
@@ -288,11 +461,11 @@ def test_repair_attempts_are_counted_apart_from_interaction_steps(
         bash("python3 feedback_tests.py"),  # 5: fails, closes 0 and opens 1
         write_file(FIXED),  # 6: candidate 2
         bash("python3 feedback_tests.py"),  # 7: passes, closes 1
-        "```bash\nsubmit\n```",
+        submit(),
     ]
     result = run_experiment(
         task=sum_task(),
-        model=ScriptedModel(lambda context: script[turn_number(context) - 1]),
+        model=replay(script),
         output_dir=tmp_path,
     )
 
@@ -335,7 +508,7 @@ def test_student_never_sees_reference_grading_material_or_credentials(
         # The searched value is computed so the command itself cannot leak it.
         bash("grep -rs $((424240 + 2)) / | head; cat /proc/1/environ"),
         write_file(FIXED),
-        "```bash\nsubmit\n```",
+        submit(),
     ]
     model = ScriptedModel(lambda context: probes[turn_number(context) - 1])
     result = run_experiment(task=task, model=model, output_dir=tmp_path)
@@ -393,11 +566,11 @@ def test_only_unmodified_feedback_runs_verify_and_reverts_reuse_candidates(
         bash("printf 'print(1)' > feedback_tests.py"),  # 4: tampers with the tests
         bash("python3 feedback_tests.py"),  # 5: tests modified, not verification
         write_file(WRONG),  # 6: revert to candidate 0
-        "```bash\nsubmit\n```",
+        submit(),
     ]
     result = run_experiment(
         task=sum_task(),
-        model=ScriptedModel(lambda context: script[turn_number(context) - 1]),
+        model=replay(script),
         output_dir=tmp_path,
     )
 

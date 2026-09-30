@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01–02：一个小型实验入口 `bashlet.run_experiment`，贯通任务、隔离 bash、真实反馈、修复、提交快照、独立评分和运行记录。入口接受可信的受控行动序列（`actions=`），或一个根据真实观察逐步采样行动的策略（`model=`）；两者共用同一 Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
+当前实现任务 01、02、12：一个小型实验入口 `bashlet.run_experiment`，贯通任务、隔离 bash、真实反馈、修复、提交快照、独立评分和运行记录。每个交互回合都由 `model=` 驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
 
 ## 运行
 
@@ -17,13 +17,15 @@ uv run bashlet examples/sum.json
 也可以用 `uv run python -m bashlet examples/sum.json`。终端返回状态和运行目录：退出码 0 表示提交通过，1 表示任务未通过或未提交，2 表示基础设施或配置错误。
 用 `--output-dir <目录>` 指定产物根目录，每次都会建立新的运行目录。
 
-JSON 请求是可信实验配置，包含 `task`、`actions` 和可选的 `limits`，结构见示例。`bash` 行动携带 `command`；`submit` 提交固定的 `solution.py` 并立即结束回合。命令失败、超时和超量输出保留真实观察，后续受控命令可继续执行。
+JSON 请求是可信实验配置，包含 `task`、`replies` 和可选的 `limits`、`budget`，结构见示例。`replies` 是完整回复文本的列表，每条回复包含一个 bash 围栏块；块内容为 `submit` 时提交固定的 `solution.py` 并立即结束回合。命令失败、超时和超量输出保留真实观察，后续回复仍可继续执行。旧的 `actions` 请求会被视为配置错误。
+
+请求文件 CLI 使用回放专用的 `Utf8Encoding`，以 UTF-8 字节作为 token，编码身份为 `replay/utf8-v1`。Python 调用者可以把学生的真实编码传给 `ReplayModel`，用于构造示范轨迹。
 
 Python 调用者直接使用相同入口：
 
 ```python
 from pathlib import Path
-from bashlet import Bash, GradingCase, Submit, Task, run_experiment
+from bashlet import GradingCase, ReplayModel, Task, Utf8Encoding, run_experiment
 
 result = run_experiment(
     task=Task(
@@ -32,11 +34,14 @@ result = run_experiment(
         feedback_tests="from solution import solve\nassert solve(2) == 4\n",
         grading_cases=(GradingCase(args=(-3,), expected=-6),),
     ),
-    actions=[
-        Bash("printf 'def solve(n): return n * 2\\n' > solution.py"),
-        Bash("python3 feedback_tests.py"),
-        Submit(),
-    ],
+    model=ReplayModel(
+        [
+            "```bash\nprintf 'def solve(n): return n * 2\\n' > solution.py\n```",
+            "```bash\npython3 feedback_tests.py\n```",
+            "```bash\nsubmit\n```",
+        ],
+        encoding=Utf8Encoding(),
+    ),
     output_dir=Path("runs"),
 )
 print(result.status, result.grade)
@@ -49,11 +54,11 @@ print(result.status, result.grade)
 - 每条回复恰好包含一个 ```` ```bash ```` 围栏块，块外文本允许。块内容为 `submit` 时提交；否则以 bash 在隔离工作区执行。
 - 观察以 `<status>`、`<exit_code>`、`<stdout>`、`<stderr>` 标签作为下一条 user 消息返回；缺少末尾换行时补一个。标签内容不转义，原始输出另存于 `observation`。
 - 无效行动（零个或多个块、空块、因长度上限被截断）不执行，返回 `<invalid_action>` 说明并计入步数；连续 `max_consecutive_invalid` 次后以 `invalid_action` 终止。
-- 历史是只追加的 token 序列：先 `encoding.prompt(system, task.prompt)`，之后每步追加原始采样 token 和 `encoding.continuation(tokens, feedback)`。已采样 token 从不 decode 后重新 tokenize；观察只在对应行动实际执行后追加。
+- 历史是只追加的 token 序列：先 `encoding.prompt(system, task.prompt)`，之后每步追加原始生成 token 和 `encoding.continuation(tokens, feedback)`。采样和回放的 token 都不会 decode 后重新 tokenize；观察只在对应行动实际执行后追加。
 
-模型通过 `Model` Adapter 接入（`identity`、`encoding`、`sample(prompt, sampling) -> Generation`）。`Generation` 须携带等长的 token IDs 与有限、非正的采样 logprob。返回内容违反约定或无法解码时以 `model_error` 结束，被拒输出保存在 `rejected_generation`，不进入上下文；采样调用本身抛错（服务、网络、Adapter）记为 `infrastructure_error`。测试用可控 Adapter 位于 `tests/adapters.py`，不是生产后端。
+模型通过 `Model` Adapter 接入（`identity`、`encoding`、`sample(prompt, sampling) -> Generation`）；编码还提供 `encode(text)`，供回放使用。每次 `Generation` 标注 `source`：默认 `sampled`，必须带等长、有限、非正的逐 token `logprobs`；`replayed` 的 `logprobs` 为 `None`。回放 token 不属于 on-policy 样本。返回内容违反约定或无法解码时以 `model_error` 结束，被拒输出保存在 `rejected_generation`，不进入上下文；模型调用本身抛错（服务、网络、Adapter）记为 `infrastructure_error`。测试用可控采样 Adapter 位于 `tests/adapters.py`。
 
-回合结果互斥：`completed`（显式提交并完成评分，成功与否看 `grade.passed`）、`invalid_submission`、`invalid_action`、`model_error`、`not_submitted`（受控行动用尽）、`budget_exhausted`（`InteractionBudget` 的步数、生成 token 数或墙钟秒数）和 `infrastructure_error`。每次请求的 `max_tokens` 裁剪到剩余生成额度；`usage` 记录实际步数、生成量、无效行动数与耗时。墙钟预算从隔离探针通过后开始计时，在步与步之间检查；单条命令另受 `Limits.timeout_seconds` 约束，单次采样调用的超时由接入的 Adapter 负责。受控行动同样受预算约束，CLI 请求可用可选的 `budget` 字段设置。
+回合结果互斥：`completed`（显式提交并完成评分，成功与否看 `grade.passed`）、`invalid_submission`、`invalid_action`、`model_error`、`budget_exhausted`（`InteractionBudget` 的步数、生成 token 数或墙钟秒数）和 `infrastructure_error`。回放回复用尽后返回空回复，按连续格式错误上限或交互预算结束。每次请求的 `max_tokens` 裁剪到剩余生成额度；回放也按此裁剪 token，并将被截断的回复标记为 `length`。`usage` 记录实际步数、生成量、无效行动数与耗时。墙钟预算从隔离探针通过后开始计时，在步与步之间检查；单条命令另受 `Limits.timeout_seconds` 约束，单次模型调用的超时由接入的 Adapter 负责。
 
 候选实现：每次执行后 `solution.py` 出现未见过的内容就保存为新候选（`candidates/NNN.py`，记录形成的步号），恢复到先前内容时沿用原候选编号；第 0 个候选即首次实现。只有整条命令为 `python3 feedback_tests.py` 且反馈测试未被修改的 bash 步计为验证，其结果即反馈测试的退出状态。修复尝试从一次失败验证开始，到验证一个不同候选时结束；对同一候选重复测试不算新尝试。
 
@@ -71,7 +76,7 @@ print(result.status, result.grade)
 
 `runs/<唯一运行 ID>/` 与源码分离，权限为当前用户私有：
 
-- `run.json`：任务身份与材料摘要、协议、采样条件、策略与编码身份、预算与用量、隔离检查、实际轨迹（含每次模型调用的原始 token、logprob、上下文位置及学生实际看到的反馈）、完整 token 上下文、候选、修复尝试、提交哈希和评分。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。
+- `run.json`（schema version 3）：任务身份与材料摘要、协议、采样条件、模型与编码身份、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置及学生实际看到的反馈）、完整 token 上下文、候选、修复尝试、提交哈希和评分。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。
 - `private/task.json`：完整可信任务配置，包括参考实现和评分材料。
 - `workspace/`：学生可见的需求、反馈测试和实际文件状态。
 - `candidates/NNN.py`：回合中各候选实现的只读快照。

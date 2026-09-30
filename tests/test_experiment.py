@@ -5,15 +5,17 @@ import socket
 import subprocess
 import sys
 import time
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
+from adapters import bash, replay, submit, write_file
 
 from bashlet import (
     Bash,
     ExperimentResult,
     GradingCase,
+    InteractionBudget,
     Limits,
     Observation,
     Submit,
@@ -42,8 +44,33 @@ def observed(result: ExperimentResult, index: int) -> Observation:
     return observation
 
 
-def write_solution(source: str) -> Bash:
-    return Bash("cat > solution.py <<'PY'\n" + source + "PY\n")
+def run_cli(
+    request: Path, output_dir: Path, *, bwrap: str = "/usr/bin/bwrap"
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "bashlet",
+            str(request),
+            "--output-dir",
+            str(output_dir),
+            "--bwrap",
+            bwrap,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+
+def test_experiment_rejects_scripted_actions(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="actions"):
+        run_experiment(
+            task=sum_task(),
+            actions=[],  # type: ignore[call-arg]
+            output_dir=tmp_path,
+        )
 
 
 def test_experiment_executes_feedback_and_grades_a_distinct_correct_submission(
@@ -58,11 +85,13 @@ def test_experiment_executes_feedback_and_grades_a_distinct_correct_submission(
     )
     result = run_experiment(
         task=sum_task(),
-        actions=[
-            Bash("cat > solution.py <<'PY'\n" + implementation + "PY\n"),
-            Bash("python3 feedback_tests.py && printf 'feedback passed'"),
-            Submit(),
-        ],
+        model=replay(
+            [
+                write_file(implementation),
+                bash("python3 feedback_tests.py && printf 'feedback passed'"),
+                submit(),
+            ]
+        ),
         output_dir=tmp_path,
     )
 
@@ -101,7 +130,7 @@ def test_feedback_or_self_report_cannot_determine_the_grade(
 ) -> None:
     result = run_experiment(
         task=sum_task(),
-        actions=[write_solution(source), Bash(feedback_command), Submit()],
+        model=replay([write_file(source), bash(feedback_command), submit()]),
         output_dir=tmp_path,
     )
     assert result.status == "completed", result.reason
@@ -122,32 +151,36 @@ def test_task_and_grading_processes_cannot_read_host_secrets(
         os.set_inheritable(descriptor.fileno(), True)
         result = run_experiment(
             task=replace(sum_task(), reference_implementation=secret),
-            actions=[
-                Bash(f"cat {shlex.quote(str(host_private))}"),
-                Bash("printenv SERVICE_API_TOKEN"),
-                Bash("cat /proc/1/root" + shlex.quote(str(host_private))),
-                Bash("cat /workspace/../private/task.json"),
-                Bash("cat /workspace/../run.json"),
-                Bash(f"printf 'overwrite' > {shlex.quote(str(host_private))}"),
-                Bash(
-                    "python3 -c "
-                    + shlex.quote(
-                        "from pathlib import Path; "
-                        f"assert {str(host_private)!r} not in "
-                        "[str(p.resolve()) for p in Path('/proc/self/fd').iterdir()]"
-                    )
-                ),
-                write_solution(
-                    "import os\nfrom pathlib import Path\n"
-                    "def solve(numbers):\n"
-                    "    assert 'SERVICE_API_TOKEN' not in os.environ\n"
-                    f"    assert not Path({str(host_private)!r}).exists()\n"
-                    "    assert not Path('/workspace/feedback_tests.py').exists()\n"
-                    "    assert not Path('/workspace/../private/task.json').exists()\n"
-                    "    return sum(numbers)\n"
-                ),
-                Submit(),
-            ],
+            model=replay(
+                [
+                    bash(f"cat {shlex.quote(str(host_private))}"),
+                    bash("printenv SERVICE_API_TOKEN"),
+                    bash("cat /proc/1/root" + shlex.quote(str(host_private))),
+                    bash("cat /workspace/../private/task.json"),
+                    bash("cat /workspace/../run.json"),
+                    bash(f"printf 'overwrite' > {shlex.quote(str(host_private))}"),
+                    bash(
+                        "python3 -c "
+                        + shlex.quote(
+                            "from pathlib import Path; "
+                            f"assert {str(host_private)!r} not in "
+                            "[str(p.resolve()) for p in "
+                            "Path('/proc/self/fd').iterdir()]"
+                        )
+                    ),
+                    write_file(
+                        "import os\nfrom pathlib import Path\n"
+                        "def solve(numbers):\n"
+                        "    assert 'SERVICE_API_TOKEN' not in os.environ\n"
+                        f"    assert not Path({str(host_private)!r}).exists()\n"
+                        "    assert not Path('/workspace/feedback_tests.py').exists()\n"
+                        "    assert not "
+                        "Path('/workspace/../private/task.json').exists()\n"
+                        "    return sum(numbers)\n"
+                    ),
+                    submit(),
+                ]
+            ),
             output_dir=tmp_path / "runs",
         )
     assert result.isolation.passed, result.isolation
@@ -168,7 +201,7 @@ def test_unavailable_isolation_preserves_reason_without_executing_actions(
 ) -> None:
     result = run_experiment(
         task=sum_task(),
-        actions=[Bash("touch SHOULD_NOT_RUN"), Submit()],
+        model=replay([bash("touch SHOULD_NOT_RUN"), submit()]),
         output_dir=tmp_path,
         bwrap="/does-not-exist/bwrap",
     )
@@ -200,11 +233,12 @@ def test_execution_limits_produce_recorded_real_observations(
     limits = Limits(timeout_seconds=0.3, output_bytes=128)
     result = run_experiment(
         task=sum_task(),
-        actions=[Bash(command)],
+        model=replay([bash(command)]),
+        budget=InteractionBudget(max_steps=1),
         output_dir=tmp_path,
         limits=limits,
     )
-    assert result.status == "not_submitted", result.reason
+    assert result.status == "budget_exhausted", result.reason
     observation = observed(result, 0)
     assert observation.status == expected_status
     assert len(observation.stdout.encode()) + len(observation.stderr.encode()) <= 128
@@ -233,10 +267,12 @@ def test_infrastructure_failure_during_grading_retains_its_diagnostic(
     launcher.chmod(0o700)
     result = run_experiment(
         task=sum_task(),
-        actions=[
-            write_solution("def solve(numbers):\n    return sum(numbers)\n"),
-            Submit(),
-        ],
+        model=replay(
+            [
+                write_file("def solve(numbers):\n    return sum(numbers)\n"),
+                submit(),
+            ]
+        ),
         output_dir=tmp_path / "runs",
         bwrap=str(launcher),
     )
@@ -250,13 +286,15 @@ def test_malformed_grading_output_is_a_failed_submission_not_a_crashed_run(
 ) -> None:
     result = run_experiment(
         task=sum_task(),
-        actions=[
-            write_solution(
-                "import os\n"
-                "os.write(1, b'[' * 2000 + b'0' + b']' * 2000)\nos._exit(0)\n"
-            ),
-            Submit(),
-        ],
+        model=replay(
+            [
+                write_file(
+                    "import os\n"
+                    "os.write(1, b'[' * 2000 + b'0' + b']' * 2000)\nos._exit(0)\n"
+                ),
+                submit(),
+            ]
+        ),
         output_dir=tmp_path,
     )
     assert result.status == "completed"
@@ -279,7 +317,7 @@ def test_submission_must_be_a_bounded_regular_file(
 ) -> None:
     result = run_experiment(
         task=sum_task(),
-        actions=[Bash(command), Submit()],
+        model=replay([bash(command), submit()]),
         output_dir=tmp_path,
     )
     assert result.status == "invalid_submission"
@@ -290,17 +328,17 @@ def test_submission_must_be_a_bounded_regular_file(
 def test_submission_ends_the_episode_and_runs_keep_independent_snapshots(
     tmp_path: Path,
 ) -> None:
-    actions: list[Bash | Submit] = [
-        write_solution("def solve(numbers):\n    return sum(numbers)\n"),
-        Submit(),
-        Bash("echo 'MUST NOT EXECUTE' > solution.py"),
+    replies = [
+        write_file("def solve(numbers):\n    return sum(numbers)\n"),
+        submit(),
+        bash("echo 'MUST NOT EXECUTE' > solution.py"),
     ]
-    first = run_experiment(task=sum_task(), actions=actions, output_dir=tmp_path)
+    first = run_experiment(task=sum_task(), model=replay(replies), output_dir=tmp_path)
     first_record = (first.run_dir / "run.json").read_bytes()
     assert first.submission is not None
     snapshot = (first.run_dir / first.submission.path).read_bytes()
     (first.run_dir / "workspace" / "solution.py").write_text("later mutation")
-    second = run_experiment(task=sum_task(), actions=actions, output_dir=tmp_path)
+    second = run_experiment(task=sum_task(), model=replay(replies), output_dir=tmp_path)
     assert first.run_dir != second.run_dir
     assert first.grade is not None and first.grade.passed
     assert second.grade is not None and second.grade.passed
@@ -311,25 +349,86 @@ def test_submission_ends_the_episode_and_runs_keep_independent_snapshots(
 
 
 def test_cli_runs_the_same_small_experiment(tmp_path: Path) -> None:
-    process = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "bashlet",
-            "examples/sum.json",
-            "--output-dir",
-            str(tmp_path),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
+    process = run_cli(Path("examples/sum.json"), tmp_path)
     assert process.returncode == 0, process.stderr
     report = json.loads(process.stdout)
     assert report["passed"] is True
     record = json.loads((Path(report["run_dir"]) / "run.json").read_text())
     assert record["task_id"] == "manual/sum-v1"
     assert record["grade"]["passed_cases"] == 3
+    assert record["encoding"] == "replay/utf8-v1"
+    assert record["context_tokens"]
+    assert all(
+        step["model_call"]["generation"]["source"] == "replayed"
+        and step["model_call"]["generation"]["logprobs"] is None
+        for step in record["trajectory"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("replies", "bwrap", "exit_code", "status", "passed"),
+    [
+        (
+            [write_file("def solve(numbers):\n    return 3\n"), submit()],
+            "/usr/bin/bwrap",
+            1,
+            "completed",
+            False,
+        ),
+        ([bash("true")], "/usr/bin/bwrap", 1, "budget_exhausted", None),
+        ([submit()], "/does-not-exist/bwrap", 2, "infrastructure_error", None),
+    ],
+    ids=["failed-grade", "unsubmitted", "unavailable-isolation"],
+)
+def test_cli_preserves_failure_and_infrastructure_exit_codes(
+    tmp_path: Path,
+    replies: list[str],
+    bwrap: str,
+    exit_code: int,
+    status: str,
+    passed: bool | None,
+) -> None:
+    request = tmp_path / "request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "task": asdict(sum_task()),
+                "replies": replies,
+                "budget": {"max_steps": 2},
+            }
+        )
+    )
+    process = run_cli(request, tmp_path / "runs", bwrap=bwrap)
+
+    assert process.returncode == exit_code, process.stderr
+    report = json.loads(process.stdout)
+    assert report["status"] == status
+    assert report["passed"] is passed
+    record = json.loads((Path(report["run_dir"]) / "run.json").read_text())
+    assert record["status"] == status
+
+
+@pytest.mark.parametrize(
+    "invalid_request",
+    [
+        {"replies": "a single string"},
+        {"replies": [1]},
+        {"replies": None},
+        {"actions": [{"kind": "submit"}]},
+        {"actions": [], "replies": [submit()]},
+    ],
+    ids=["string", "non-text", "null", "old-actions", "mixed-inputs"],
+)
+def test_cli_rejects_invalid_or_scripted_requests_as_configuration_errors(
+    tmp_path: Path, invalid_request: dict[str, object]
+) -> None:
+    request = tmp_path / "request.json"
+    request.write_text(json.dumps({"task": asdict(sum_task())} | invalid_request))
+    process = run_cli(request, tmp_path / "runs")
+
+    assert process.returncode == 2
+    assert "error:" in process.stderr
+    assert not (tmp_path / "runs").exists()
 
 
 def test_task_cannot_connect_to_a_host_service(tmp_path: Path) -> None:
@@ -343,7 +442,8 @@ def test_task_cannot_connect_to_a_host_service(tmp_path: Path) -> None:
         )
         result = run_experiment(
             task=sum_task(),
-            actions=[Bash("python3 -c " + shlex.quote(command))],
+            model=replay([bash("python3 -c " + shlex.quote(command))]),
+            budget=InteractionBudget(max_steps=1),
             output_dir=tmp_path,
         )
     assert result.isolation.passed
@@ -358,16 +458,19 @@ def test_detached_processes_cannot_mutate_the_workspace_after_an_action(
 ) -> None:
     result = run_experiment(
         task=sum_task(),
-        actions=[
-            Bash(
-                "setsid bash -c 'sleep 0.6; echo late > delayed-write' "
-                ">/dev/null 2>&1 < /dev/null & " + wait_command
-            )
-        ],
+        model=replay(
+            [
+                bash(
+                    "setsid bash -c 'sleep 0.6; echo late > delayed-write' "
+                    ">/dev/null 2>&1 < /dev/null & " + wait_command
+                )
+            ]
+        ),
+        budget=InteractionBudget(max_steps=1),
         output_dir=tmp_path,
         limits=Limits(timeout_seconds=0.2),
     )
-    assert result.status == "not_submitted", result.reason
+    assert result.status == "budget_exhausted", result.reason
     if wait_command == "sleep 10":
         assert observed(result, 0).status == "timeout"
     time.sleep(0.7)

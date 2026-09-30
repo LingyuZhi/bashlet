@@ -1,23 +1,23 @@
-"""Run a trusted, scripted experiment request through the shared interface."""
+"""Run a trusted replay experiment request through the shared interface."""
 
 import argparse
 import json
 from pathlib import Path
 
 from . import (
-    Bash,
     GradingCase,
     InteractionBudget,
     Limits,
-    Submit,
+    ReplayModel,
     Task,
+    Utf8Encoding,
     run_experiment,
 )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run one isolated bashlet experiment")
-    parser.add_argument("request", type=Path, help="Trusted task/actions JSON file")
+    parser.add_argument("request", type=Path, help="Trusted task/replies JSON file")
     parser.add_argument("--output-dir", type=Path, default=Path("runs"))
     parser.add_argument("--bwrap", default="/usr/bin/bwrap")
     options = parser.parse_args()
@@ -29,18 +29,16 @@ def main() -> None:
             for case in task_data.pop("grading_cases")
         )
         task = Task(**task_data, grading_cases=cases)
-        actions: list[Bash | Submit] = []
-        for action in request["actions"]:
-            kind = action.pop("kind")
-            if kind == "bash":
-                actions.append(Bash(**action))
-            elif kind == "submit":
-                actions.append(Submit(**action))
-            else:
-                raise ValueError(f"Unknown action kind: {kind!r}")
+        if "actions" in request:
+            raise ValueError("Use replay replies instead of actions")
+        replies = request["replies"]
+        if not isinstance(replies, list) or not all(
+            isinstance(reply, str) for reply in replies
+        ):
+            raise ValueError("Replay replies must be a list of strings")
         result = run_experiment(
             task=task,
-            actions=actions,
+            model=ReplayModel(replies, encoding=Utf8Encoding()),
             output_dir=options.output_dir,
             limits=Limits(**request.get("limits", {})),
             budget=InteractionBudget(**request.get("budget", {})),

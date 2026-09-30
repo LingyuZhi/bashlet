@@ -17,6 +17,7 @@ from .models import (
     Task,
 )
 from .protocol import PROTOCOL_SHA256, PROTOCOL_VERSION
+from .replay import ReplayModel, Utf8Encoding
 
 __all__ = [
     "PROTOCOL_SHA256",
@@ -31,8 +32,10 @@ __all__ = [
     "Limits",
     "Model",
     "Observation",
+    "ReplayModel",
     "SamplingParams",
     "Submit",
     "Task",
+    "Utf8Encoding",
     "run_experiment",
 ]

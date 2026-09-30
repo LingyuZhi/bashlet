@@ -10,10 +10,10 @@
     ],
     "reference_implementation": "def solve(numbers):\n    return sum(numbers)\n"
   },
-  "actions": [
-    {"kind": "bash", "command": "cat > solution.py <<'PY'\ndef solve(numbers):\n    total = 0\n    for number in numbers:\n        total += number\n    return total\nPY\n"},
-    {"kind": "bash", "command": "python3 feedback_tests.py"},
-    {"kind": "submit"}
+  "replies": [
+    "Write the implementation.\n```bash\ncat > solution.py <<'PY'\ndef solve(numbers):\n    total = 0\n    for number in numbers:\n        total += number\n    return total\nPY\n```",
+    "Run the feedback tests.\n```bash\npython3 feedback_tests.py\n```",
+    "Submit the solution.\n```bash\nsubmit\n```"
   ],
   "limits": {
     "timeout_seconds": 2.0,

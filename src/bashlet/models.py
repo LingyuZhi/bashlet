@@ -58,12 +58,13 @@ class SamplingParams:
 
 @dataclass(frozen=True)
 class Generation:
-    """Raw sampler output: token IDs with the logprob of each sampled token."""
+    """Raw model output; only sampled tokens carry sampling logprobs."""
 
     tokens: tuple[int, ...]
-    logprobs: tuple[float, ...]
     stop_reason: Literal["stop", "length"]
+    logprobs: tuple[float, ...] | None = None
     request_id: str = ""
+    source: Literal["sampled", "replayed"] = "sampled"
 
 
 class Encoding(Protocol):
@@ -71,6 +72,10 @@ class Encoding(Protocol):
 
     @property
     def identity(self) -> str: ...
+
+    def encode(self, text: str) -> list[int]:
+        """Encode a pre-written reply using this tokenizer."""
+        ...
 
     def prompt(self, system: str, user: str) -> list[int]:
         """Tokens up to and including the first assistant header."""
@@ -85,7 +90,7 @@ class Encoding(Protocol):
 
 
 class Model(Protocol):
-    """A student policy behind a model-call Adapter."""
+    """A sampling or replay model behind a token-based Adapter."""
 
     @property
     def identity(self) -> str: ...
@@ -134,7 +139,7 @@ class Isolation:
 
 @dataclass(frozen=True)
 class ModelCall:
-    """One sampling request; ``context_offset`` is where its tokens start."""
+    """One generation request; ``context_offset`` is where its tokens start."""
 
     policy: str
     sampling: SamplingParams
@@ -217,7 +222,6 @@ class ExperimentResult:
     task_sha256: str
     limits: Limits
     isolation: Isolation
-    mode: Literal["scripted", "model"] = "scripted"
     policy: str = ""
     encoding: str = ""
     budget: InteractionBudget = field(default_factory=InteractionBudget)

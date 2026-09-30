@@ -3,7 +3,7 @@
 from collections.abc import Callable, Sequence
 from typing import Literal
 
-from bashlet import Generation, SamplingParams
+from bashlet import Generation, ReplayModel, SamplingParams
 
 SYSTEM, USER, ASSISTANT, END = 256, 257, 258, 259
 # Whole-word tokens a model may sample. ByteEncoding never produces them when
@@ -16,6 +16,9 @@ class ByteEncoding:
     """A reversible toy chat template: bytes, four special tokens, two words."""
 
     identity = "test/byte-chat-v1"
+
+    def encode(self, text: str) -> list[int]:
+        return list(text.encode())
 
     def prompt(self, system: str, user: str) -> list[int]:
         return [SYSTEM, *system.encode(), END, USER, *user.encode(), END, ASSISTANT]
@@ -115,3 +118,11 @@ def bash(command: str) -> str:
 
 def write_file(source: str) -> str:
     return bash(f"cat > solution.py <<'PY'\n{source}PY")
+
+
+def submit() -> str:
+    return bash("submit")
+
+
+def replay(replies: Sequence[str]) -> ReplayModel:
+    return ReplayModel(replies, encoding=ByteEncoding())
