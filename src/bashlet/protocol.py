@@ -1,57 +1,25 @@
-"""The bash-block-v1 action protocol: an experimental condition, not a detail.
+"""The action protocol: an experimental condition loaded from versioned config.
 
-SFT demonstrations, student rollouts and evaluation all share this text. Any
-change needs a new ``PROTOCOL_VERSION`` and regenerated demonstrations.
+SFT demonstrations, student rollouts and evaluation all share one rendered
+text. Any change needs a new protocol name and regenerated demonstrations.
 """
 
 import hashlib
 import json
 import re
+from dataclasses import asdict
 
+from .config import ExperimentConfig, ProtocolConfig, load_config
 from .models import Bash, InvalidAction, Observation, Submit
 
-PROTOCOL_VERSION = "bash-block-v1"
-
-SYSTEM_PROMPT = """\
-You are a programming agent working in a Linux shell. The current directory \
-contains task.md (the task) and feedback_tests.py (tests you may run). Write the \
-implementation to solution.py.
-
-Each reply must contain exactly one fenced block that starts with ```bash on its \
-own line and ends with ``` on its own line. Text outside the block is allowed. \
-The block is run with bash in the current directory, without network access. \
-Each block runs in a fresh shell; only files in the current \
-directory persist. To run the feedback tests, use a block that contains only \
-`python3 feedback_tests.py`.
-
-The result is returned as the next message:
-<status>...</status>
-<exit_code>...</exit_code>
-<stdout>
-...
-</stdout>
-<stderr>
-...
-</stderr>
-
-When solution.py is final, reply with a block whose only content is submit:
-```bash
-submit
-```
-Submitting ends the task; solution.py is then graded with tests you cannot see. \
-A reply without exactly one block, or cut off by the length limit, is not \
-executed and counts against your step limit."""
-
-# Analysis definition, not an agent-visible rule: a Bash step verifies the
-# current candidate when it runs exactly the canonical feedback command on
-# unmodified feedback tests, so its exit status is the tests' own verdict.
-_VERIFICATION = re.compile(r"\s*python3 feedback_tests\.py\s*")
-VERIFICATION_RULE = (
-    f"bash command fully matches {_VERIFICATION.pattern!r} while feedback_tests.py "
-    "is unchanged; passed iff status ok"
-)
-
+# Appended to the observation template when fingerprinting. It describes the
+# rendering rule and is not itself shown to the agent.
+_OBSERVATION_NOTE = " (stdout/stderr get a final newline if missing; not escaped)"
 _BLOCK = re.compile(r"^```bash[ \t]*\n(.*?)\n?^```[ \t]*$", re.DOTALL | re.MULTILINE)
+_DEFAULT = load_config()
+
+PROTOCOL_VERSION = _DEFAULT.protocol.name
+SYSTEM_PROMPT = _DEFAULT.protocol.system_prompt
 
 
 def parse_action(text: str, truncated: bool) -> Bash | Submit | InvalidAction:
@@ -68,25 +36,13 @@ def parse_action(text: str, truncated: bool) -> Bash | Submit | InvalidAction:
     return Bash(command)
 
 
-OBSERVATION_TEMPLATE = (
-    "<status>{status}</status>\n"
-    "<exit_code>{exit_code}</exit_code>\n"
-    "<stdout>\n{stdout}</stdout>\n"
-    "<stderr>\n{stderr}</stderr>"
-)
-INVALID_TEMPLATE = (
-    "<invalid_action>{reason}</invalid_action>\n"
-    "Nothing was executed. Reply with exactly one ```bash block."
-)
-
-
 def _line_terminated(text: str) -> str:
     return text if not text or text.endswith("\n") else text + "\n"
 
 
-def render_observation(observation: Observation) -> str:
+def render_observation(observation: Observation, template: str) -> str:
     """Tag contents are not escaped; the raw Observation is recorded beside it."""
-    return OBSERVATION_TEMPLATE.format(
+    return template.format(
         status=observation.status,
         exit_code=observation.exit_code,
         stdout=_line_terminated(observation.stdout),
@@ -94,36 +50,47 @@ def render_observation(observation: Observation) -> str:
     )
 
 
-def render_invalid(action: InvalidAction) -> str:
-    return INVALID_TEMPLATE.format(reason=action.reason)
+def render_invalid(action: InvalidAction, template: str) -> str:
+    return template.format(reason=action.reason)
 
 
-def is_verification(action: Bash, feedback_unchanged: bool) -> bool:
-    return feedback_unchanged and _VERIFICATION.fullmatch(action.command) is not None
+def is_verification(action: Bash, feedback_unchanged: bool, pattern: str) -> bool:
+    return feedback_unchanged and re.fullmatch(pattern, action.command) is not None
 
 
-def _definition() -> dict[str, str]:
+def definition(protocol: ProtocolConfig) -> dict[str, str]:
+    """The canonical protocol record. Its hash is the protocol fingerprint."""
     return {
-        "name": PROTOCOL_VERSION,
-        "system_prompt": SYSTEM_PROMPT,
-        "user_prompt": "task.prompt verbatim",
-        "observation_format": OBSERVATION_TEMPLATE
-        + " (stdout/stderr get a final newline if missing; not escaped)",
-        "invalid_action_format": INVALID_TEMPLATE,
-        "history": (
-            "append-only token context: encoding.prompt(system, user), then per "
-            "step the raw sampled tokens followed by encoding.continuation("
-            "tokens, feedback); earlier tokens are never decoded and re-encoded"
+        "name": protocol.name,
+        "system_prompt": protocol.system_prompt,
+        "user_prompt": protocol.user_prompt,
+        "observation_format": protocol.observation_template + _OBSERVATION_NOTE,
+        "invalid_action_format": protocol.invalid_action_format,
+        "history": protocol.history,
+        "verification": (
+            f"bash command fully matches {protocol.verification_pattern!r} while "
+            "feedback_tests.py is unchanged; passed iff status ok"
         ),
-        "verification": VERIFICATION_RULE,
     }
 
 
-PROTOCOL_SHA256 = hashlib.sha256(
-    json.dumps(_definition(), sort_keys=True).encode()
-).hexdigest()
+def fingerprint(payload: object) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
-def describe() -> dict[str, str]:
+def fingerprints(config: ExperimentConfig) -> dict[str, str]:
+    """Protocol, environment, and budget only. The model block is not included."""
+    return {
+        "protocol": fingerprint(definition(config.protocol)),
+        "environment": fingerprint(asdict(config.environment)),
+        "budget": fingerprint(asdict(config.budget)),
+    }
+
+
+def describe(protocol: ProtocolConfig) -> dict[str, str]:
     """The protocol as recorded in every run, with its fingerprint."""
-    return _definition() | {"sha256": PROTOCOL_SHA256}
+    recorded = definition(protocol)
+    return recorded | {"sha256": fingerprint(recorded)}
+
+
+PROTOCOL_SHA256 = fingerprint(definition(_DEFAULT.protocol))

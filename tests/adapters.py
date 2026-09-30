@@ -3,7 +3,13 @@
 from collections.abc import Callable, Sequence
 from typing import Literal
 
-from bashlet import Generation, ReplayModel, SamplingParams
+from bashlet import (
+    Generation,
+    InteractionBudget,
+    Limits,
+    ReplayModel,
+    SamplingParams,
+)
 
 SYSTEM, USER, ASSISTANT, END = 256, 257, 258, 259
 # Whole-word tokens a model may sample. ByteEncoding never produces them when
@@ -126,3 +132,46 @@ def submit() -> str:
 
 def replay(replies: Sequence[str]) -> ReplayModel:
     return ReplayModel(replies, encoding=ByteEncoding())
+
+
+def condition_overrides(
+    *,
+    budget: InteractionBudget | None = None,
+    sampling: SamplingParams | None = None,
+    limits: Limits | None = None,
+    bwrap: str | None = None,
+) -> list[str]:
+    """key=value overlays that reproduce a budget, sampling condition, or limits."""
+    overrides: list[str] = []
+    if budget is not None:
+        overrides.extend(
+            [
+                f"budget.max_steps={budget.max_steps}",
+                f"budget.max_generated_tokens={budget.max_generated_tokens}",
+                f"budget.max_seconds={budget.max_seconds}",
+                f"budget.max_consecutive_invalid={budget.max_consecutive_invalid}",
+            ]
+        )
+    if sampling is not None:
+        seed = "null" if sampling.seed is None else str(sampling.seed)
+        overrides.extend(
+            [
+                f"model.sampling.max_tokens={sampling.max_tokens}",
+                f"model.sampling.temperature={sampling.temperature}",
+                f"model.sampling.top_p={sampling.top_p}",
+                f"model.sampling.seed={seed}",
+            ]
+        )
+    if limits is not None:
+        overrides.extend(
+            [
+                f"environment.timeout_seconds={limits.timeout_seconds}",
+                f"environment.output_bytes={limits.output_bytes}",
+                f"environment.submission_bytes={limits.submission_bytes}",
+                f"environment.memory_bytes={limits.memory_bytes}",
+                f"environment.file_bytes={limits.file_bytes}",
+            ]
+        )
+    if bwrap is not None:
+        overrides.append(f"environment.bwrap={bwrap}")
+    return overrides

@@ -14,12 +14,5 @@
     "Write the implementation.\n```bash\ncat > solution.py <<'PY'\ndef solve(numbers):\n    total = 0\n    for number in numbers:\n        total += number\n    return total\nPY\n```",
     "Run the feedback tests.\n```bash\npython3 feedback_tests.py\n```",
     "Submit the solution.\n```bash\nsubmit\n```"
-  ],
-  "limits": {
-    "timeout_seconds": 2.0,
-    "output_bytes": 16384,
-    "submission_bytes": 65536,
-    "memory_bytes": 536870912,
-    "file_bytes": 1048576
-  }
+  ]
 }

@@ -6,8 +6,6 @@ from pathlib import Path
 
 from . import (
     GradingCase,
-    InteractionBudget,
-    Limits,
     ReplayModel,
     Task,
     Utf8Encoding,
@@ -19,10 +17,29 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run one isolated bashlet experiment")
     parser.add_argument("request", type=Path, help="Trusted task/replies JSON file")
     parser.add_argument("--output-dir", type=Path, default=Path("runs"))
-    parser.add_argument("--bwrap", default="/usr/bin/bwrap")
+    parser.add_argument(
+        "--config",
+        action="append",
+        type=Path,
+        default=[],
+        help="YAML layered after the built-in default; later files win",
+    )
+    parser.add_argument(
+        "--set",
+        action="append",
+        dest="overrides",
+        default=[],
+        metavar="key=value",
+        help="Override one merged config value; applied after --config",
+    )
     options = parser.parse_args()
     try:
         request = json.loads(options.request.read_text())
+        if "limits" in request or "budget" in request:
+            raise ValueError(
+                "Put execution limits and the interaction budget in the experiment "
+                "config, not the request"
+            )
         task_data = request["task"]
         cases = tuple(
             GradingCase(args=tuple(case["args"]), expected=case["expected"])
@@ -40,9 +57,8 @@ def main() -> None:
             task=task,
             model=ReplayModel(replies, encoding=Utf8Encoding()),
             output_dir=options.output_dir,
-            limits=Limits(**request.get("limits", {})),
-            budget=InteractionBudget(**request.get("budget", {})),
-            bwrap=options.bwrap,
+            config=options.config,
+            overrides=options.overrides,
         )
     except (OSError, ValueError, TypeError, KeyError) as error:
         parser.error(str(error))

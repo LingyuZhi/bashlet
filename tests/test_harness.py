@@ -16,6 +16,7 @@ from adapters import (
     ByteEncoding,
     ScriptedModel,
     bash,
+    condition_overrides,
     latest_feedback,
     replay,
     submit,
@@ -162,8 +163,7 @@ def test_replay_obeys_generation_and_interaction_limits(
     result = run_experiment(
         task=sum_task(),
         model=replay([reply]),
-        budget=budget,
-        sampling=sampling,
+        overrides=condition_overrides(budget=budget, sampling=sampling),
         output_dir=tmp_path,
     )
 
@@ -187,7 +187,7 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     result = run_experiment(
         task=sum_task(),
         model=model,
-        sampling=sampling,
+        overrides=condition_overrides(sampling=sampling),
         output_dir=tmp_path,
     )
 
@@ -238,7 +238,7 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     assert "feedback passed" not in "".join(renders[:4])
 
     record = json.loads((result.run_dir / "run.json").read_text())
-    assert record["schema_version"] == 3
+    assert record["schema_version"] == 4
     assert record["protocol"]["name"] == "bash-block-v1"
     # Frozen before demonstrations: changing any agent-visible protocol text
     # must come with a new protocol version and an updated fingerprint here.
@@ -406,8 +406,7 @@ def test_terminations_are_distinct_and_budgets_are_audited(
     result = run_experiment(
         task=sum_task(),
         model=model,
-        budget=budget,
-        sampling=sampling,
+        overrides=condition_overrides(budget=budget, sampling=sampling),
         output_dir=tmp_path,
     )
 
@@ -442,7 +441,10 @@ def test_terminations_are_distinct_and_budgets_are_audited(
 def test_unavailable_isolation_stops_before_any_model_call(tmp_path: Path) -> None:
     model = ScriptedModel(repairing_policy)
     result = run_experiment(
-        task=sum_task(), model=model, output_dir=tmp_path, bwrap="/does-not-exist/bwrap"
+        task=sum_task(),
+        model=model,
+        output_dir=tmp_path,
+        overrides=condition_overrides(bwrap="/does-not-exist/bwrap"),
     )
     assert result.status == "infrastructure_error"
     assert model.prompts == [] and result.trajectory == []
@@ -547,7 +549,7 @@ def test_executor_failure_mid_episode_is_an_infrastructure_error(
         task=sum_task(),
         model=model,
         output_dir=tmp_path / "runs",
-        bwrap=str(launcher),
+        overrides=condition_overrides(bwrap=str(launcher)),
     )
     assert result.status == "infrastructure_error"
     assert "executor unavailable" in result.reason

@@ -11,23 +11,38 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from .config import EnvironmentConfig
 from .models import Limits, Observation
 
 
 class Sandbox:
-    def __init__(self, limits: Limits, bwrap: str) -> None:
-        self.limits = limits
-        self.bwrap = bwrap
+    def __init__(self, environment: EnvironmentConfig) -> None:
+        self.environment = environment
+
+    @property
+    def limits(self) -> Limits:
+        environment = self.environment
+        return Limits(
+            timeout_seconds=environment.timeout_seconds,
+            output_bytes=environment.output_bytes,
+            submission_bytes=environment.submission_bytes,
+            memory_bytes=environment.memory_bytes,
+            file_bytes=environment.file_bytes,
+        )
+
+    @property
+    def bwrap(self) -> str:
+        return self.environment.bwrap
 
     @property
     def resource_limits(self) -> dict[str, int]:
         """The prlimit settings used both for launching and for the run record."""
         return {
-            "as": self.limits.memory_bytes,
-            "fsize": self.limits.file_bytes,
-            "cpu": max(1, math.ceil(self.limits.timeout_seconds)),
+            "as": self.environment.memory_bytes,
+            "fsize": self.environment.file_bytes,
+            "cpu": max(1, math.ceil(self.environment.timeout_seconds)),
             "core": 0,
-            "nofile": 64,
+            "nofile": self.environment.nofile,
         }
 
     def execute(
@@ -60,52 +75,45 @@ class Sandbox:
                 "ALL",
                 "--json-status-fd",
                 str(status_file.fileno()),
-                "--ro-bind",
-                "/usr/bin",
-                "/usr/bin",
-                "--ro-bind",
-                "/usr/lib",
-                "/usr/lib",
-                "--ro-bind",
-                "/usr/lib64",
-                "/usr/lib64",
-                "--symlink",
-                "usr/bin",
-                "/bin",
-                "--symlink",
-                "usr/lib",
-                "/lib",
-                "--symlink",
-                "usr/lib64",
-                "/lib64",
-                "--proc",
-                "/proc",
-                "--dev",
-                "/dev",
-                "--tmpfs",
-                "/tmp",
-                "--ro-bind" if readonly else "--bind",
-                str(workspace),
-                "/workspace",
-                "--chdir",
-                "/workspace",
-                "--clearenv",
-                "--setenv",
-                "PATH",
-                "/usr/bin:/bin",
-                "--setenv",
-                "LANG",
-                "C.UTF-8",
-                "--",
-                *argv,
             ]
+            for bind in self.environment.ro_bind:
+                command.extend(["--ro-bind", bind.source, bind.target])
+            for link in self.environment.symlink:
+                command.extend(["--symlink", link.source, link.target])
+            command.extend(
+                [
+                    "--proc",
+                    "/proc",
+                    "--dev",
+                    "/dev",
+                    "--tmpfs",
+                    "/tmp",
+                    "--ro-bind" if readonly else "--bind",
+                    str(workspace),
+                    "/workspace",
+                    "--chdir",
+                    "/workspace",
+                    "--clearenv",
+                    "--setenv",
+                    "PATH",
+                    self.environment.path,
+                    "--setenv",
+                    "LANG",
+                    self.environment.lang,
+                    "--",
+                    *argv,
+                ]
+            )
             try:
                 process = subprocess.Popen(
                     command,
                     stdin=input_file,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+                    env={
+                        "PATH": self.environment.path,
+                        "LANG": self.environment.lang,
+                    },
                     pass_fds=(status_file.fileno(),),
                     start_new_session=True,
                 )

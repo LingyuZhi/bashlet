@@ -9,10 +9,12 @@ import stat
 import sys
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import asdict, replace
 from pathlib import Path
 
 from . import protocol
+from .config import load_config
 from .models import (
     Candidate,
     CaseResult,
@@ -46,9 +48,6 @@ with contextlib.redirect_stdout(sys.stderr):
 print(json.dumps(answer, allow_nan=False))
 """
 
-_DEFAULT_LIMITS = Limits()
-_DEFAULT_SAMPLING = SamplingParams()
-_DEFAULT_BUDGET = InteractionBudget()
 _PROBE_TIMEOUT_SECONDS = 5.0
 _PROBE_OUTPUT_BYTES = 16_384
 
@@ -88,11 +87,10 @@ print(json.dumps({{'checks': checks, 'python': sys.version}}))
     # Capability checks must not fail just because the episode has a tiny output budget.
     probe = Sandbox(
         replace(
-            sandbox.limits,
+            sandbox.environment,
             timeout_seconds=_PROBE_TIMEOUT_SECONDS,
             output_bytes=_PROBE_OUTPUT_BYTES,
-        ),
-        sandbox.bwrap,
+        )
     )
     observation = probe.execute(probe_dir, ["/usr/bin/python3", "-I", "-c", code])
     if observation.status != "ok":
@@ -300,34 +298,36 @@ def run_experiment(
     *,
     task: Task,
     model: Model,
-    sampling: SamplingParams = _DEFAULT_SAMPLING,
-    budget: InteractionBudget = _DEFAULT_BUDGET,
     output_dir: Path = Path("runs"),
-    limits: Limits = _DEFAULT_LIMITS,
-    bwrap: str = "/usr/bin/bwrap",
+    config: Sequence[Path] = (),
+    overrides: Sequence[str] = (),
 ) -> ExperimentResult:
     """Run one Episode from a sampling model or pre-written replay replies.
 
-    Both sources share the bash-block-v1 Harness: token context, budget,
-    execution, feedback text, candidate tracking and grading. A model only ever
-    receives the system prompt, task prompt and real feedback from earlier steps.
+    Protocol text, the execution environment, the interaction budget and sampling
+    parameters come from the versioned config. The caller still supplies the
+    model adapter. A model only ever receives the rendered system prompt, task
+    prompt and real feedback from earlier steps.
 
     The returned record is operator-only. It is not an agent observation.
     Grading v1 calls a named function with JSON positional arguments and compares
     its JSON result in the host; neither reference code nor expected values enter
     any student process. A submission always ends the episode.
     """
+    condition = load_config(config, overrides)
+    limits = Limits(
+        timeout_seconds=condition.environment.timeout_seconds,
+        output_bytes=condition.environment.output_bytes,
+        submission_bytes=condition.environment.submission_bytes,
+        memory_bytes=condition.environment.memory_bytes,
+        file_bytes=condition.environment.file_bytes,
+    )
+    budget = condition.budget
+    sampling = condition.model.sampling
     if not task.task_id or not task.grading_cases:
         raise ValueError("A task identity and at least one grading case are required")
     if not task.function_name.isidentifier() or keyword.iskeyword(task.function_name):
         raise ValueError("The task function must be a Python identifier")
-    if any(
-        not math.isfinite(value) or value <= 0
-        for value in (*asdict(limits).values(), *asdict(budget).values())
-    ):
-        raise ValueError("Execution limits and budgets must be finite and positive")
-    if sampling.max_tokens <= 0:
-        raise ValueError("max_tokens must be positive")
     task_json = json.dumps(asdict(task), ensure_ascii=False, allow_nan=False, indent=2)
     run_dir = output_dir.resolve() / uuid.uuid4().hex
     run_dir.mkdir(parents=True, mode=0o700)
@@ -344,12 +344,14 @@ def run_experiment(
         encoding=model.encoding.identity,
         budget=budget,
     )
-    sandbox = Sandbox(limits, bwrap)
+    sandbox = Sandbox(condition.environment)
 
     def save() -> None:
         record = asdict(result) | {
-            "schema_version": 3,
-            "protocol": protocol.describe(),
+            "schema_version": 4,
+            "config": asdict(condition),
+            "fingerprints": protocol.fingerprints(condition),
+            "protocol": protocol.describe(condition.protocol),
             "sampling": asdict(sampling),
             "grading_protocol": "json-function-v1",
             "isolation_policy": "linux-bwrap-v1",
@@ -359,7 +361,7 @@ def run_experiment(
                 "output_bytes": _PROBE_OUTPUT_BYTES,
             },
             "host_python": sys.version,
-            "bwrap": bwrap,
+            "bwrap": condition.environment.bwrap,
         }
         pending = run_dir / "run.json.tmp"
         pending.write_text(
@@ -383,7 +385,9 @@ def run_experiment(
         (workspace / "feedback_tests.py").write_text(task.feedback_tests)
         (run_dir / "candidates").mkdir()
         context = result.context_tokens
-        context.extend(model.encoding.prompt(protocol.SYSTEM_PROMPT, task.prompt))
+        context.extend(
+            model.encoding.prompt(condition.protocol.system_prompt, task.prompt)
+        )
         candidate: int | None = None
         consecutive_invalid = 0
         feedback_sha256 = hashlib.sha256(task.feedback_tests.encode()).hexdigest()
@@ -450,7 +454,9 @@ def run_experiment(
                         + action.reason
                     )
                     return result
-                feedback = protocol.render_invalid(action)
+                feedback = protocol.render_invalid(
+                    action, condition.protocol.invalid_action_format
+                )
                 result.trajectory.append(Step(action, None, call, feedback, candidate))
             else:
                 consecutive_invalid = 0
@@ -471,6 +477,7 @@ def run_experiment(
                 verification = protocol.is_verification(
                     action,
                     _file_sha256(workspace / "feedback_tests.py") == feedback_sha256,
+                    condition.protocol.verification_pattern,
                 )
                 if verification:
                     _track_repair(
@@ -479,7 +486,9 @@ def run_experiment(
                         index,
                         observation.status == "ok",
                     )
-                feedback = protocol.render_observation(observation)
+                feedback = protocol.render_observation(
+                    observation, condition.protocol.observation_template
+                )
                 result.trajectory.append(
                     Step(action, observation, call, feedback, candidate, verification)
                 )

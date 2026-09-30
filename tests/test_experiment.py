@@ -9,7 +9,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
-from adapters import bash, replay, submit, write_file
+from adapters import bash, condition_overrides, replay, submit, write_file
 
 from bashlet import (
     Bash,
@@ -45,23 +45,25 @@ def observed(result: ExperimentResult, index: int) -> Observation:
 
 
 def run_cli(
-    request: Path, output_dir: Path, *, bwrap: str = "/usr/bin/bwrap"
+    request: Path,
+    output_dir: Path,
+    *,
+    overrides: list[str] | None = None,
+    configs: list[Path] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "bashlet",
-            str(request),
-            "--output-dir",
-            str(output_dir),
-            "--bwrap",
-            bwrap,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
+    command = [
+        sys.executable,
+        "-m",
+        "bashlet",
+        str(request),
+        "--output-dir",
+        str(output_dir),
+    ]
+    for path in configs or []:
+        command.extend(["--config", str(path)])
+    for override in overrides or []:
+        command.extend(["--set", override])
+    return subprocess.run(command, capture_output=True, text=True, timeout=20)
 
 
 def test_experiment_rejects_scripted_actions(tmp_path: Path) -> None:
@@ -203,7 +205,7 @@ def test_unavailable_isolation_preserves_reason_without_executing_actions(
         task=sum_task(),
         model=replay([bash("touch SHOULD_NOT_RUN"), submit()]),
         output_dir=tmp_path,
-        bwrap="/does-not-exist/bwrap",
+        overrides=condition_overrides(bwrap="/does-not-exist/bwrap"),
     )
     assert result.status == "infrastructure_error"
     assert not result.isolation.passed
@@ -234,9 +236,10 @@ def test_execution_limits_produce_recorded_real_observations(
     result = run_experiment(
         task=sum_task(),
         model=replay([bash(command)]),
-        budget=InteractionBudget(max_steps=1),
         output_dir=tmp_path,
-        limits=limits,
+        overrides=condition_overrides(
+            budget=InteractionBudget(max_steps=1), limits=limits
+        ),
     )
     assert result.status == "budget_exhausted", result.reason
     observation = observed(result, 0)
@@ -274,7 +277,7 @@ def test_infrastructure_failure_during_grading_retains_its_diagnostic(
             ]
         ),
         output_dir=tmp_path / "runs",
-        bwrap=str(launcher),
+        overrides=condition_overrides(bwrap=str(launcher)),
     )
     assert result.isolation.passed
     assert result.status == "infrastructure_error"
@@ -348,6 +351,137 @@ def test_submission_ends_the_episode_and_runs_keep_independent_snapshots(
     assert not (first.run_dir / "workspace" / "grading_tests.py").exists()
 
 
+def test_run_records_one_merged_config_and_three_stable_fingerprints(
+    tmp_path: Path,
+) -> None:
+    first = run_experiment(
+        task=sum_task(), model=replay([submit()]), output_dir=tmp_path
+    )
+    second = run_experiment(
+        task=sum_task(), model=replay([submit()]), output_dir=tmp_path
+    )
+
+    record = json.loads((first.run_dir / "run.json").read_text())
+    again = json.loads((second.run_dir / "run.json").read_text())
+    assert set(record["config"]) == {"protocol", "environment", "budget", "model"}
+    assert record["fingerprints"] == again["fingerprints"]
+    assert set(record["fingerprints"]) == {"protocol", "environment", "budget"}
+    # v1 agent-visible text is unchanged: the protocol fingerprint stays frozen.
+    assert record["fingerprints"]["protocol"] == record["protocol"]["sha256"]
+    assert record["protocol"]["sha256"] == (
+        "e3212936cc2175b313e7f2036e13d3dc5b61be5dee0ea68236a7ccae8f865077"
+    )
+    assert record["config"]["protocol"]["name"] == "bash-block-v1"
+    assert record["config"]["budget"] == record["budget"]
+    assert record["config"]["model"]["sampling"]["max_tokens"] == 1024
+
+
+def _fingerprints(tmp_path: Path, config: list[Path] | None = None) -> dict[str, str]:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([submit()]),
+        output_dir=tmp_path,
+        config=config or [],
+    )
+    record = json.loads((result.run_dir / "run.json").read_text())
+    fingerprints = record["fingerprints"]
+    assert isinstance(fingerprints, dict)
+    return {str(name): str(digest) for name, digest in fingerprints.items()}
+
+
+def test_editing_one_block_changes_only_its_fingerprint(tmp_path: Path) -> None:
+    baseline = _fingerprints(tmp_path / "baseline")
+    overlays = {
+        "protocol": "protocol:\n  user_prompt: other\n",
+        "environment": "environment:\n  timeout_seconds: 1.5\n",
+        "budget": "budget:\n  max_steps: 4\n",
+    }
+    for name, text in overlays.items():
+        path = tmp_path / f"{name}.yaml"
+        path.write_text(text)
+        changed = _fingerprints(tmp_path / name, [path])
+        assert changed[name] != baseline[name]
+        for other in baseline:
+            if other != name:
+                assert changed[other] == baseline[other]
+
+
+def test_model_block_does_not_change_condition_fingerprints(tmp_path: Path) -> None:
+    baseline = _fingerprints(tmp_path / "baseline")
+    overlay = tmp_path / "model.yaml"
+    overlay.write_text(
+        "model:\n"
+        "  backend: other\n"
+        "  thinking: true\n"
+        "  sampling:\n"
+        "    temperature: 0.2\n"
+    )
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([submit()]),
+        output_dir=tmp_path / "runs",
+        config=[overlay],
+    )
+    record = json.loads((result.run_dir / "run.json").read_text())
+    assert record["fingerprints"] == baseline
+    assert record["config"]["model"]["backend"] == "other"
+    assert record["config"]["model"]["thinking"] is True
+    assert record["config"]["model"]["sampling"]["temperature"] == 0.2
+    assert record["config"]["model"]["sampling"]["max_tokens"] == 1024
+
+
+def test_later_config_file_and_key_override_replace_earlier_values(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "first.yaml"
+    second = tmp_path / "second.yaml"
+    first.write_text("budget:\n  max_steps: 4\n")
+    second.write_text("budget:\n  max_steps: 6\n")
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([submit()]),
+        output_dir=tmp_path / "runs",
+        config=[first, second],
+        overrides=["budget.max_steps=7"],
+    )
+    record = json.loads((result.run_dir / "run.json").read_text())
+    assert record["config"]["budget"]["max_steps"] == 7
+    assert record["budget"]["max_steps"] == 7
+
+
+@pytest.mark.parametrize(
+    ("text", "overrides", "match"),
+    [
+        ("budget:\n  max_turns: 1\n", [], "max_turns"),
+        ("budget:\n  max_steps: 1.5\n", [], "integer"),
+        (
+            "protocol:\n  system_prompt: 'Hello {{ missing_name }}'\n",
+            [],
+            "missing_name",
+        ),
+        ("", ["budget.nope=1"], "budget.nope"),
+        ("", ["budget.max_steps=0"], "positive"),
+    ],
+)
+def test_invalid_config_is_rejected_before_a_run(
+    tmp_path: Path, text: str, overrides: list[str], match: str
+) -> None:
+    configs: list[Path] = []
+    if text:
+        overlay = tmp_path / "overlay.yaml"
+        overlay.write_text(text)
+        configs.append(overlay)
+    with pytest.raises(ValueError, match=match):
+        run_experiment(
+            task=sum_task(),
+            model=replay([submit()]),
+            output_dir=tmp_path / "runs",
+            config=configs,
+            overrides=overrides,
+        )
+    assert not (tmp_path / "runs").exists()
+
+
 def test_cli_runs_the_same_small_experiment(tmp_path: Path) -> None:
     process = run_cli(Path("examples/sum.json"), tmp_path)
     assert process.returncode == 0, process.stderr
@@ -389,16 +523,12 @@ def test_cli_preserves_failure_and_infrastructure_exit_codes(
     passed: bool | None,
 ) -> None:
     request = tmp_path / "request.json"
-    request.write_text(
-        json.dumps(
-            {
-                "task": asdict(sum_task()),
-                "replies": replies,
-                "budget": {"max_steps": 2},
-            }
-        )
+    request.write_text(json.dumps({"task": asdict(sum_task()), "replies": replies}))
+    process = run_cli(
+        request,
+        tmp_path / "runs",
+        overrides=["budget.max_steps=2", f"environment.bwrap={bwrap}"],
     )
-    process = run_cli(request, tmp_path / "runs", bwrap=bwrap)
 
     assert process.returncode == exit_code, process.stderr
     report = json.loads(process.stdout)
@@ -416,8 +546,18 @@ def test_cli_preserves_failure_and_infrastructure_exit_codes(
         {"replies": None},
         {"actions": [{"kind": "submit"}]},
         {"actions": [], "replies": [submit()]},
+        {"replies": [submit()], "budget": {"max_steps": 1}},
+        {"replies": [submit()], "limits": {"timeout_seconds": 1}},
     ],
-    ids=["string", "non-text", "null", "old-actions", "mixed-inputs"],
+    ids=[
+        "string",
+        "non-text",
+        "null",
+        "old-actions",
+        "mixed-inputs",
+        "request-budget",
+        "request-limits",
+    ],
 )
 def test_cli_rejects_invalid_or_scripted_requests_as_configuration_errors(
     tmp_path: Path, invalid_request: dict[str, object]
@@ -443,8 +583,8 @@ def test_task_cannot_connect_to_a_host_service(tmp_path: Path) -> None:
         result = run_experiment(
             task=sum_task(),
             model=replay([bash("python3 -c " + shlex.quote(command))]),
-            budget=InteractionBudget(max_steps=1),
             output_dir=tmp_path,
+            overrides=condition_overrides(budget=InteractionBudget(max_steps=1)),
         )
     assert result.isolation.passed
     assert observed(result, 0).status == "command_failed"
@@ -466,9 +606,11 @@ def test_detached_processes_cannot_mutate_the_workspace_after_an_action(
                 )
             ]
         ),
-        budget=InteractionBudget(max_steps=1),
         output_dir=tmp_path,
-        limits=Limits(timeout_seconds=0.2),
+        overrides=condition_overrides(
+            budget=InteractionBudget(max_steps=1),
+            limits=Limits(timeout_seconds=0.2),
+        ),
     )
     assert result.status == "budget_exhausted", result.reason
     if wait_command == "sleep 10":

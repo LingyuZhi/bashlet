@@ -17,7 +17,26 @@ uv run bashlet examples/sum.json
 也可以用 `uv run python -m bashlet examples/sum.json`。终端返回状态和运行目录：退出码 0 表示提交通过，1 表示任务未通过或未提交，2 表示基础设施或配置错误。
 用 `--output-dir <目录>` 指定产物根目录，每次都会建立新的运行目录。
 
-JSON 请求是可信实验配置，包含 `task`、`replies` 和可选的 `limits`、`budget`，结构见示例。`replies` 是完整回复文本的列表，每条回复包含一个 bash 围栏块；块内容为 `submit` 时提交固定的 `solution.py` 并立即结束回合。命令失败、超时和超量输出保留真实观察，后续回复仍可继续执行。旧的 `actions` 请求会被视为配置错误。
+JSON 请求是可信任务输入，只包含 `task` 和 `replies`。协议、执行环境、交互预算和采样参数来自版本化配置，不写在请求里。`replies` 是完整回复文本的列表，每条回复包含一个 bash 围栏块；块内容为 `submit` 时提交固定的 `solution.py` 并立即结束回合。命令失败、超时和超量输出保留真实观察，后续回复仍可继续执行。旧的 `actions` 请求，以及写在请求里的 `limits` 或 `budget`，会被视为配置错误。
+
+## 实验配置
+
+默认条件在 `src/bashlet/configs/bash-block-v1.yaml`，分四块：
+
+- `protocol`：agent 可见的文本和协议规则。字符串是 Jinja2 模板，未定义变量在运行开始前报错。当前默认渲染结果就是 bash-block-v1，系统提示、观察和格式错误文本与原先逐字节相同。
+- `environment`：执行器路径、只读挂载、符号链接、`PATH`/`LANG`，以及单条命令的超时和资源限制。
+- `budget`：步数、生成 token 数、墙钟时间和连续格式错误上限。
+- `model`：采样参数、后端名称和 thinking 开关。本切片仍由调用方传入模型对象；thinking 只被记录，解析留到后续协议。
+
+可以叠加多个文件，后面的覆盖前面的；`--set key=value` 在所有文件之后覆盖单项，值按 YAML 解析。未知键、类型错误和非正的限额都会在建立运行目录之前失败。
+
+```bash
+uv run bashlet examples/sum.json --config tighter.yaml --set budget.max_steps=4
+```
+
+Python 调用使用同一套层叠：`run_experiment(..., config=[path], overrides=["budget.max_steps=4"])`。
+
+每次 `run.json` 写入合并后的完整 `config`，以及 `fingerprints.protocol`、`fingerprints.environment`、`fingerprints.budget`。指纹是对应块的稳定 SHA-256。同一配置得到相同指纹；只改一块时，只有那一块的指纹变化。`model` 不计入这三个指纹，所以更换采样参数或后端名称不会被当成更换了 Harness 或交互预算。协议指纹沿用 v1 的定义摘要，默认配置下仍是测试固定的那个值；修改任何 agent 可见的协议文本都会改变它，并需要新的协议名。
 
 请求文件 CLI 使用回放专用的 `Utf8Encoding`，以 UTF-8 字节作为 token，编码身份为 `replay/utf8-v1`。Python 调用者可以把学生的真实编码传给 `ReplayModel`，用于构造示范轨迹。
 
@@ -49,7 +68,7 @@ print(result.status, result.grade)
 
 ## 行动协议 bash-block-v1
 
-协议定义在 `src/bashlet/protocol.py`，是实验条件：SFT 示范、学生 rollout 和评测共用它。完整系统提示、观察模板、历史编码和验证判定连同指纹 `PROTOCOL_SHA256` 写入每次运行 `run.json` 的 `protocol` 字段；测试固定该指纹，修改任何协议文本都必须提升 `PROTOCOL_VERSION`、更新指纹并重建示范。
+协议文本定义在默认配置的 `protocol` 块，由 `src/bashlet/protocol.py` 渲染和解析。SFT 示范、学生 rollout 和评测共用它。完整系统提示、观察模板、历史编码和验证判定连同指纹写入每次运行 `run.json` 的 `protocol` 字段；测试固定该指纹，修改任何协议文本都必须更换协议名、更新指纹并重建示范。
 
 - 每条回复恰好包含一个 ```` ```bash ```` 围栏块，块外文本允许。块内容为 `submit` 时提交；否则以 bash 在隔离工作区执行。
 - 观察以 `<status>`、`<exit_code>`、`<stdout>`、`<stderr>` 标签作为下一条 user 消息返回；缺少末尾换行时补一个。标签内容不转义，原始输出另存于 `observation`。
@@ -64,19 +83,19 @@ print(result.status, result.grade)
 
 ## 隔离与评分边界
 
-每次实验先运行真实访问探针：验证 namespace 已分离、环境变量已清理、宿主私有文件和包含参考实现／评分材料的配置无法读取，以及任务目录可写。探针不通过时记录 `infrastructure_error`，不执行任何任务命令，也不退回宿主直接执行。缺少执行器可用 `--bwrap /does-not-exist/bwrap` 重现。
+每次实验先运行真实访问探针：验证 namespace 已分离、环境变量已清理、宿主私有文件和包含参考实现／评分材料的配置无法读取，以及任务目录可写。探针不通过时记录 `infrastructure_error`，不执行任何任务命令，也不退回宿主直接执行。缺少执行器可用 `--set environment.bwrap=/does-not-exist/bwrap` 重现。
 
 沙箱只挂载只读的 `/usr/bin`、`/usr/lib`、`/usr/lib64` 和当前任务目录，使用独立 `/proc`、`/dev`、`/tmp`，清理环境和继承的文件描述符，断开宿主网络，移除 capabilities 并建立新会话。实现依据 [Bubblewrap 0.6.1 的说明](https://github.com/containers/bubblewrap/blob/v0.6.1/README.md)及[参数文档](https://github.com/containers/bubblewrap/blob/v0.6.1/bwrap.xml)。节点内实际任务 Python 来自 `/usr/bin/python3`，与宿主 Python 分别记录；当前节点为 Python 3.10.12。首版任务仅使用该解释器的标准库。
 
 `json-function-v1` 评分调用 `Task.function_name`（默认 `solve`），接受 JSON 位置参数，返回值须可表示为 JSON。每个评分用例在新沙箱中执行只读的提交快照，宿主比较真实返回值与期望值。参考实现只用于可信材料记录，不执行、不做源码相等比较；评分期望值始终留在宿主。学生的退出码 0、自报通过或被修改的反馈测试均不能代替评分。此切片尚未实现任意 MBPP 测试程序的适配。
 
-限制覆盖墙钟超时、stdout 与 stderr 合计字节、提交大小、每进程地址空间、CPU 时间、单文件大小及打开文件数。超时或输出超限会终止整个沙箱及后代进程。限制值随运行记录保存；它们不是 cgroup 总量配额，不能视为完整的多租户资源隔离。安全边界依赖节点内核和系统运行库。
+限制来自配置的 `environment` 块，覆盖墙钟超时、stdout 与 stderr 合计字节、提交大小、每进程地址空间、CPU 时间、单文件大小及打开文件数。超时或输出超限会终止整个沙箱及后代进程。生效值随运行记录保存；它们不是 cgroup 总量配额，不能视为完整的多租户资源隔离。安全边界依赖节点内核和系统运行库。
 
 ## 运行产物
 
 `runs/<唯一运行 ID>/` 与源码分离，权限为当前用户私有：
 
-- `run.json`（schema version 3）：任务身份与材料摘要、协议、采样条件、模型与编码身份、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置及学生实际看到的反馈）、完整 token 上下文、候选、修复尝试、提交哈希和评分。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。
+- `run.json`（schema version 4）：任务身份与材料摘要、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置及学生实际看到的反馈）、完整 token 上下文、候选、修复尝试、提交哈希和评分。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。
 - `private/task.json`：完整可信任务配置，包括参考实现和评分材料。
 - `workspace/`：学生可见的需求、反馈测试和实际文件状态。
 - `candidates/NNN.py`：回合中各候选实现的只读快照。
