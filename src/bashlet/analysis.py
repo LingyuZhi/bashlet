@@ -33,7 +33,7 @@ def _track_candidate(
         size_bytes += entry.size_bytes
     if size_bytes > result.limits.submission_bytes:
         return current
-    payload = json.dumps(files, sort_keys=True, ensure_ascii=False, indent=2).encode()
+    payload = json.dumps(files, sort_keys=True, ensure_ascii=True, indent=2).encode()
     digest = (
         next(iter(files.values()))
         if len(files) == 1

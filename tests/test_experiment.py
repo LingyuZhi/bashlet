@@ -238,6 +238,47 @@ def test_unreadable_workspace_entries_are_recorded_and_can_be_repaired(
     assert not repaired["locked"].error and not repaired["locked_dir"].error
 
 
+@pytest.mark.parametrize("paths", [("solution.py",), ("solution.py", "\udcff")])
+def test_workspace_manifests_preserve_non_utf8_paths_and_symlink_targets(
+    tmp_path: Path,
+    paths: tuple[str, ...],
+) -> None:
+    result = run_experiment(
+        task=replace(sum_task(), implementation_paths=paths),
+        model=replay(
+            [
+                bash(
+                    "python3 -c "
+                    + shlex.quote(
+                        "import os; open(bytes([255]), 'wb').write(b'hello'); "
+                        "os.symlink(bytes([254]), b'link')"
+                    )
+                ),
+                write_file("def solve(numbers):\n    return sum(numbers)\n"),
+                submit(),
+            ]
+        ),
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "completed", result.reason
+    manifest = result.trajectory[0].workspace_manifest
+    assert manifest["\udcff"].sha256 == (
+        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    )
+    assert manifest["link"].target == "\udcfe"
+    record = json.loads((result.run_dir / "run.json").read_text())
+    saved = record["trajectory"][0]["workspace_manifest"]
+    assert saved["\udcff"] == asdict(manifest["\udcff"])
+    assert saved["link"]["target"] == "\udcfe"
+    task_record = json.loads((result.run_dir / "private" / "task.json").read_text())
+    assert task_record["implementation_paths"] == list(paths)
+    if len(paths) > 1:
+        [candidate] = result.candidates
+        snapshot = json.loads((result.run_dir / candidate.path).read_text())
+        assert snapshot["\udcff"] == manifest["\udcff"].sha256
+
+
 @pytest.mark.parametrize(
     ("source", "feedback_command"),
     [

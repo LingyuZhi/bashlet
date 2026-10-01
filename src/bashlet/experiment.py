@@ -275,7 +275,7 @@ def run_experiment(
         raise ValueError("A task identity and at least one grading case are required")
     if not task.function_name.isidentifier() or keyword.iskeyword(task.function_name):
         raise ValueError("The task function must be a Python identifier")
-    task_json = json.dumps(asdict(task), ensure_ascii=False, allow_nan=False, indent=2)
+    task_json = json.dumps(asdict(task), ensure_ascii=True, allow_nan=False, indent=2)
     run_dir = output_dir.resolve() / uuid.uuid4().hex
     run_dir.mkdir(parents=True, mode=0o700)
     private_dir = run_dir / "private"
@@ -311,9 +311,8 @@ def run_experiment(
             "bwrap": condition.environment.bwrap,
         }
         pending = run_dir / "run.json.tmp"
-        pending.write_text(
-            json.dumps(record, default=str, ensure_ascii=False, indent=2)
-        )
+        # Linux paths can contain surrogate-escaped bytes; JSON must escape them.
+        pending.write_text(json.dumps(record, default=str, ensure_ascii=True, indent=2))
         pending.replace(run_dir / "run.json")
 
     save()
