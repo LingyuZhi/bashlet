@@ -14,9 +14,9 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from . import protocol
+from .analysis import analyze_episode
 from .config import load_config
 from .models import (
-    Candidate,
     CaseResult,
     ExperimentResult,
     Generation,
@@ -27,15 +27,16 @@ from .models import (
     Limits,
     Model,
     ModelCall,
-    RepairAttempt,
     SamplingParams,
     Step,
     Submission,
     Submit,
     Task,
     Usage,
+    WorkspaceEntry,
 )
 from .sandbox import Sandbox
+from .workspace import capture_workspace
 
 _GRADING_DRIVER = """
 import contextlib, importlib.util, json, sys
@@ -240,60 +241,6 @@ def _grade(task: Task, sandbox: Sandbox, run_dir: Path) -> Grade:
     )
 
 
-def _file_sha256(path: Path) -> str:
-    try:
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        with os.fdopen(descriptor, "rb") as source:
-            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
-                return ""
-            return hashlib.file_digest(source, "sha256").hexdigest()
-    except OSError:
-        return ""
-
-
-def _track_candidate(
-    result: ExperimentResult,
-    workspace: Path,
-    run_dir: Path,
-    limits: Limits,
-    current: int | None,
-    step: int,
-) -> int | None:
-    """Index of the current solution.py state; unseen content is saved as a new
-    candidate. An unreadable file keeps the last candidate; a revert reuses it."""
-    try:
-        content = _read_solution(workspace, limits.submission_bytes)
-    except (OSError, ValueError):
-        return current
-    digest = hashlib.sha256(content).hexdigest()
-    for candidate in result.candidates:
-        if candidate.sha256 == digest:
-            return candidate.index
-    index = len(result.candidates)
-    target = run_dir / "candidates" / f"{index:03d}.py"
-    target.write_bytes(content)
-    target.chmod(0o400)
-    result.candidates.append(
-        Candidate(index, digest, str(target.relative_to(run_dir)), step)
-    )
-    return index
-
-
-def _track_repair(
-    attempts: list[RepairAttempt], candidate: int | None, step: int, passed: bool
-) -> None:
-    """A failed verification opens an attempt; verifying a changed candidate
-    closes it. Re-running tests on the same candidate is not a new attempt."""
-    open_attempt = attempts[-1] if attempts and attempts[-1].passed is None else None
-    if open_attempt is not None and candidate != open_attempt.from_candidate:
-        open_attempt.to_candidate = candidate
-        open_attempt.verified_at_step = step
-        open_attempt.passed = passed
-        open_attempt = None
-    if not passed and open_attempt is None:
-        attempts.append(RepairAttempt(len(attempts), step, candidate))
-
-
 def run_experiment(
     *,
     task: Task,
@@ -348,7 +295,7 @@ def run_experiment(
 
     def save() -> None:
         record = asdict(result) | {
-            "schema_version": 4,
+            "schema_version": 5,
             "config": asdict(condition),
             "fingerprints": protocol.fingerprints(condition),
             "protocol": protocol.describe(condition.protocol),
@@ -371,6 +318,7 @@ def run_experiment(
 
     save()
     started: float | None = None
+    feedback_materials: dict[str, WorkspaceEntry] = {}
     try:
         result.isolation = _verify_isolation(sandbox, run_dir)
         if not result.isolation.passed:
@@ -383,14 +331,21 @@ def run_experiment(
         workspace.mkdir()
         (workspace / "task.md").write_text(task.prompt)
         (workspace / "feedback_tests.py").write_text(task.feedback_tests)
-        (run_dir / "candidates").mkdir()
+        result.initial_workspace_manifest = capture_workspace(workspace, run_dir)
+        feedback_materials = {
+            "feedback_tests.py": result.initial_workspace_manifest["feedback_tests.py"]
+        }
+
+        def record_step(step: Step) -> None:
+            result.trajectory.append(
+                replace(step, workspace_manifest=capture_workspace(workspace, run_dir))
+            )
+
         context = result.context_tokens
         context.extend(
             model.encoding.prompt(condition.protocol.system_prompt, task.prompt)
         )
-        candidate: int | None = None
         consecutive_invalid = 0
-        feedback_sha256 = hashlib.sha256(task.feedback_tests.encode()).hexdigest()
         while True:
             result.usage.elapsed_seconds = time.monotonic() - started
             reason = _budget_exhausted_reason(budget, result.usage)
@@ -417,10 +372,9 @@ def run_experiment(
             action = protocol.parse_action(
                 call.text, call.generation.stop_reason == "length"
             )
-            index = len(result.trajectory)
             result.usage.steps += 1
             if isinstance(action, Submit):
-                result.trajectory.append(Step(action, None, call, None, candidate))
+                record_step(Step(action, None, call))
                 save()
                 try:
                     result.submission = _snapshot(
@@ -447,7 +401,7 @@ def run_experiment(
                 result.usage.invalid_actions += 1
                 consecutive_invalid += 1
                 if consecutive_invalid >= budget.max_consecutive_invalid:
-                    result.trajectory.append(Step(action, None, call, None, candidate))
+                    record_step(Step(action, None, call))
                     result.status = "invalid_action"
                     result.reason = (
                         f"{consecutive_invalid} consecutive invalid actions: "
@@ -457,7 +411,7 @@ def run_experiment(
                 feedback = protocol.render_invalid(
                     action, condition.protocol.invalid_action_format
                 )
-                result.trajectory.append(Step(action, None, call, feedback, candidate))
+                record_step(Step(action, None, call, feedback))
             else:
                 consecutive_invalid = 0
                 observation = sandbox.execute(
@@ -465,33 +419,14 @@ def run_experiment(
                     ["/bin/bash", "--noprofile", "--norc", "-c", action.command],
                 )
                 if observation.status == "infrastructure_error":
-                    result.trajectory.append(
-                        Step(action, observation, call, None, candidate)
-                    )
+                    record_step(Step(action, observation, call))
                     result.status = "infrastructure_error"
                     result.reason = observation.stderr
                     return result
-                candidate = _track_candidate(
-                    result, workspace, run_dir, limits, candidate, index
-                )
-                verification = protocol.is_verification(
-                    action,
-                    _file_sha256(workspace / "feedback_tests.py") == feedback_sha256,
-                    condition.protocol.verification_pattern,
-                )
-                if verification:
-                    _track_repair(
-                        result.repair_attempts,
-                        candidate,
-                        index,
-                        observation.status == "ok",
-                    )
                 feedback = protocol.render_observation(
                     observation, condition.protocol.observation_template
                 )
-                result.trajectory.append(
-                    Step(action, observation, call, feedback, candidate, verification)
-                )
+                record_step(Step(action, observation, call, feedback))
             # Feedback is appended only after its action has actually run.
             context.extend(
                 model.encoding.continuation(call.generation.tokens, feedback)
@@ -504,4 +439,5 @@ def run_experiment(
     finally:
         if started is not None:
             result.usage.elapsed_seconds = time.monotonic() - started
+        analyze_episode(result, task, feedback_materials)
         save()

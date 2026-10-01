@@ -54,10 +54,6 @@ def render_invalid(action: InvalidAction, template: str) -> str:
     return template.format(reason=action.reason)
 
 
-def is_verification(action: Bash, feedback_unchanged: bool, pattern: str) -> bool:
-    return feedback_unchanged and re.fullmatch(pattern, action.command) is not None
-
-
 def definition(protocol: ProtocolConfig) -> dict[str, str]:
     """The canonical protocol record. Its hash is the protocol fingerprint."""
     return {

@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01、02、12：一个小型实验入口 `bashlet.run_experiment`，贯通任务、隔离 bash、真实反馈、修复、提交快照、独立评分和运行记录。每个交互回合都由 `model=` 驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
+当前实现任务 01、02、12–14：一个小型实验入口 `bashlet.run_experiment`，贯通任务、隔离 bash、真实反馈、提交快照、独立评分和事后候选／修复分析。每个交互回合都由 `model=` 驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
 
 ## 运行
 
@@ -52,6 +52,8 @@ result = run_experiment(
         prompt="Write solution.py with solve(n), returning twice n.",
         feedback_tests="from solution import solve\nassert solve(2) == 4\n",
         grading_cases=(GradingCase(args=(-3,), expected=-6),),
+        implementation_paths=("solution.py",),
+        feedback_command="python3 feedback_tests.py",
     ),
     model=ReplayModel(
         [
@@ -79,7 +81,11 @@ print(result.status, result.grade)
 
 回合结果互斥：`completed`（显式提交并完成评分，成功与否看 `grade.passed`）、`invalid_submission`、`invalid_action`、`model_error`、`budget_exhausted`（`InteractionBudget` 的步数、生成 token 数或墙钟秒数）和 `infrastructure_error`。回放回复用尽后返回空回复，按连续格式错误上限或交互预算结束。每次请求的 `max_tokens` 裁剪到剩余生成额度；回放也按此裁剪 token，并将被截断的回复标记为 `length`。`usage` 记录实际步数、生成量、无效行动数与耗时。墙钟预算从隔离探针通过后开始计时，在步与步之间检查；单条命令另受 `Limits.timeout_seconds` 约束，单次模型调用的超时由接入的 Adapter 负责。
 
-候选实现：每次执行后 `solution.py` 出现未见过的内容就保存为新候选（`candidates/NNN.py`，记录形成的步号），恢复到先前内容时沿用原候选编号；第 0 个候选即首次实现。只有整条命令为 `python3 feedback_tests.py` 且反馈测试未被修改的 bash 步计为验证，其结果即反馈测试的退出状态。修复尝试从一次失败验证开始，到验证一个不同候选时结束；对同一候选重复测试不算新尝试。
+每个交互步（包括格式错误、提交和执行器故障）之后记录工作区清单：每条相对路径包含文件类型，普通文件另含 SHA-256 和字节数；符号链接只记录目标，FIFO、socket 等特殊文件只记录类型，不读取或跟随。相同字节只在 `blobs/<sha256>` 保存一份，删除或覆盖文件后仍可按历史清单取回原内容。不可读的路径保留类型和读取错误，供后续行动修复；初始化时也保存一份清单。
+
+候选实现、验证与修复尝试在回合结束后，由轨迹和清单计算。`Task.implementation_paths` 声明接受分析的文件，`Task.feedback_command` 声明反馈命令；MBPP 类任务在任务数据中填写 `("solution.py",)` 和 `"python3 feedback_tests.py"`。未声明实现路径时不做候选或修复分析；只声明实现路径时仍记录候选，但不判定验证。
+
+候选按全部声明文件的内容去重，回退时沿用原编号，第 0 个候选即首次实现。声明文件须都可读、为普通文件且合计不超过提交大小限制；缺失、特殊或过大的文件状态沿用最后一个候选，保持 v1 行为。单文件候选直接指向内容 blob；多文件候选的 `path` 指向路径到内容哈希的 JSON 清单，`files` 列出各文件哈希。只有整条命令与任务的反馈命令一致（忽略首尾空白），且当前反馈材料与初始清单相同，才算验证；成功与否取真实观察状态。修复尝试从失败验证开始，到验证一个不同候选时结束，重复验证同一候选不新开尝试。此切片的反馈材料仍由 v1 的 `feedback_tests` 准备；v1 配置中原有的验证描述保留用于兼容冻结指纹，实际分析使用 Task 的声明。
 
 ## 隔离与评分边界
 
@@ -95,10 +101,11 @@ print(result.status, result.grade)
 
 `runs/<唯一运行 ID>/` 与源码分离，权限为当前用户私有：
 
-- `run.json`（schema version 4）：任务身份与材料摘要、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置及学生实际看到的反馈）、完整 token 上下文、候选、修复尝试、提交哈希和评分。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。
+- `run.json`（schema version 5）：任务身份与材料摘要、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、学生实际看到的反馈和每步工作区清单）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、提交哈希和评分。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。
 - `private/task.json`：完整可信任务配置，包括参考实现和评分材料。
 - `workspace/`：学生可见的需求、反馈测试和实际文件状态。
-- `candidates/NNN.py`：回合中各候选实现的只读快照。
+- `blobs/<sha256>`：初始状态及各步中普通文件内容的只读存档；跨路径、跨步骤去重。
+- `candidates/NNN.json`：多文件候选的只读清单；单文件候选直接复用 blob。
 - `submission/solution.py`：只读提交快照；只接受受大小限制的普通文件，拒绝符号链接和 FIFO。
 - `probe/`：能力探针使用的临时工作区。
 

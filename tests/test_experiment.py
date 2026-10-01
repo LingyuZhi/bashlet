@@ -35,6 +35,8 @@ def sum_task() -> Task:
             GradingCase(args=([-5, 2],), expected=-3),
         ),
         reference_implementation="def solve(numbers):\n    return sum(numbers)\n",
+        implementation_paths=("solution.py",),
+        feedback_command="python3 feedback_tests.py",
     )
 
 
@@ -108,6 +110,132 @@ def test_experiment_executes_feedback_and_grades_a_distinct_correct_submission(
     assert record["task_id"] == "manual/sum-v1"
     assert record["grade"]["passed"] is True
     assert record["submission"]["sha256"] == result.submission.sha256
+
+
+def test_workspace_manifests_preserve_each_step_and_deduplicate_file_contents(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(
+            [
+                bash("mkdir nested; printf hello > nested/a; printf hello > copy"),
+                "No command block.",
+                bash("printf world > nested/a; rm copy; touch empty"),
+                write_file("def solve(numbers):\n    return sum(numbers)\n"),
+                submit(),
+            ]
+        ),
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "completed", result.reason
+    hello = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    world = "486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7"
+    empty = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    first = result.trajectory[0].workspace_manifest
+    assert first["nested"].kind == "directory"
+    assert first["nested/a"].kind == "file"
+    assert first["nested/a"].sha256 == first["copy"].sha256 == hello
+    assert first["nested/a"].size_bytes == 5
+    assert result.trajectory[1].workspace_manifest == first
+    changed = result.trajectory[2].workspace_manifest
+    assert "copy" not in changed
+    assert changed["nested/a"].sha256 == world
+    assert changed["empty"].sha256 == empty
+    assert result.trajectory[-1].workspace_manifest == (
+        result.trajectory[-2].workspace_manifest
+    )
+    blobs = result.run_dir / "blobs"
+    assert (blobs / hello).read_bytes() == b"hello"
+    assert (blobs / world).read_bytes() == b"world"
+    assert (blobs / empty).read_bytes() == b""
+    assert sum(path.read_bytes() == b"hello" for path in blobs.iterdir()) == 1
+    record = json.loads((result.run_dir / "run.json").read_text())
+    assert set(record["initial_workspace_manifest"]) == {"task.md", "feedback_tests.py"}
+    assert [step["workspace_manifest"] for step in record["trajectory"]] == [
+        {path: asdict(entry) for path, entry in step.workspace_manifest.items()}
+        for step in result.trajectory
+    ]
+
+
+def test_workspace_manifests_record_special_files_without_following_them(
+    tmp_path: Path,
+) -> None:
+    secret = b"host-only-content-48a1"
+    private = tmp_path / "private.txt"
+    private.write_bytes(secret)
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(
+            [
+                bash(
+                    f"ln -s {shlex.quote(str(private))} external; "
+                    "mkdir nested; printf hello > nested/a; "
+                    "ln -s nested linked_dir; ln -s . loop; "
+                    "ln -s missing dangling; mkfifo pipe; "
+                    'python3 -c "import socket; '
+                    "s = socket.socket(socket.AF_UNIX); s.bind('/workspace/socket')\""
+                ),
+                write_file("def solve(numbers):\n    return sum(numbers)\n"),
+                submit(),
+            ]
+        ),
+        output_dir=tmp_path / "runs",
+    )
+
+    assert result.status == "completed", result.reason
+    manifest = result.trajectory[0].workspace_manifest
+    assert manifest["external"].kind == "symlink"
+    assert manifest["external"].target == str(private)
+    assert manifest["linked_dir"].kind == manifest["loop"].kind == "symlink"
+    assert manifest["dangling"].kind == "symlink"
+    assert manifest["pipe"].kind == "fifo"
+    assert manifest["socket"].kind == "socket"
+    assert all(
+        manifest[path].sha256 is None
+        for path in ("external", "linked_dir", "loop", "dangling", "pipe", "socket")
+    )
+    assert "linked_dir/a" not in manifest and "loop/nested/a" not in manifest
+    assert all(
+        path.read_bytes() != secret for path in (result.run_dir / "blobs").iterdir()
+    )
+
+
+def test_unreadable_workspace_entries_are_recorded_and_can_be_repaired(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(
+            [
+                bash(
+                    "printf hello > locked; mkdir locked_dir; "
+                    "printf hello > locked_dir/a; chmod 000 locked locked_dir"
+                ),
+                bash("chmod 600 locked; chmod 700 locked_dir"),
+                write_file("def solve(numbers):\n    return sum(numbers)\n"),
+                submit(),
+            ]
+        ),
+        output_dir=tmp_path,
+    )
+    # Restore permissions even when the episode fails, so pytest can clean up.
+    for path in (result.run_dir / "workspace").glob("locked*"):
+        path.chmod(0o700)
+
+    assert result.status == "completed", result.reason
+    first = result.trajectory[0].workspace_manifest
+    assert first["locked"].kind == "file" and first["locked"].error
+    assert first["locked"].sha256 is None
+    assert first["locked_dir"].kind == "directory" and first["locked_dir"].error
+    repaired = result.trajectory[1].workspace_manifest
+    assert (
+        repaired["locked"].sha256
+        == repaired["locked_dir/a"].sha256
+        == ("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+    )
+    assert not repaired["locked"].error and not repaired["locked_dir"].error
 
 
 @pytest.mark.parametrize(
@@ -492,6 +620,10 @@ def test_cli_runs_the_same_small_experiment(tmp_path: Path) -> None:
     assert record["grade"]["passed_cases"] == 3
     assert record["encoding"] == "replay/utf8-v1"
     assert record["context_tokens"]
+    assert len(record["candidates"]) == 1
+    assert [step["verification"] for step in record["trajectory"]] == [
+        False, True, False
+    ]  # fmt: skip
     assert all(
         step["model_call"]["generation"]["source"] == "replayed"
         and step["model_call"]["generation"]["logprobs"] is None

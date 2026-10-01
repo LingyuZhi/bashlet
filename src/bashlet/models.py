@@ -25,6 +25,8 @@ class Task:
     grading_cases: tuple[GradingCase, ...]
     reference_implementation: str = ""
     function_name: str = "solve"
+    implementation_paths: tuple[str, ...] = ()
+    feedback_command: str | None = None
 
 
 @dataclass(frozen=True)
@@ -149,10 +151,33 @@ class ModelCall:
     duration_seconds: float
 
 
+type WorkspaceKind = Literal[
+    "file",
+    "directory",
+    "symlink",
+    "fifo",
+    "socket",
+    "block_device",
+    "character_device",
+    "unknown",
+]
+
+
+@dataclass(frozen=True)
+class WorkspaceEntry:
+    """One path in a recorded Task Workspace."""
+
+    kind: WorkspaceKind
+    sha256: str | None = None
+    size_bytes: int | None = None
+    target: str | None = None
+    error: str = ""
+
+
 @dataclass(frozen=True)
 class Step:
     """One Interaction Step. ``feedback`` is the exact text the policy sees next;
-    ``candidate`` indexes the candidate implementation after the step."""
+    ``candidate`` is derived after the episode from the workspace manifest."""
 
     action: Bash | Submit | InvalidAction
     observation: Observation | None = None
@@ -160,16 +185,18 @@ class Step:
     feedback: str | None = None
     candidate: int | None = None
     verification: bool = False
+    workspace_manifest: dict[str, WorkspaceEntry] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class Candidate:
-    """A distinct solution.py state, saved when an executed step formed it."""
+    """A distinct state of the task's declared implementation paths."""
 
     index: int
     sha256: str
     path: str
     formed_at_step: int
+    files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -228,6 +255,7 @@ class ExperimentResult:
     started_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: str = "running"
     trajectory: list[Step] = field(default_factory=list)
+    initial_workspace_manifest: dict[str, WorkspaceEntry] = field(default_factory=dict)
     context_tokens: list[int] = field(default_factory=list)
     candidates: list[Candidate] = field(default_factory=list)
     repair_attempts: list[RepairAttempt] = field(default_factory=list)

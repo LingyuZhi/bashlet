@@ -62,6 +62,8 @@ def sum_task() -> Task:
             GradingCase(args=([-5, 2],), expected=-3),
         ),
         reference_implementation=FIXED,
+        implementation_paths=("solution.py",),
+        feedback_command="python3 feedback_tests.py",
     )
 
 
@@ -238,7 +240,7 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     assert "feedback passed" not in "".join(renders[:4])
 
     record = json.loads((result.run_dir / "run.json").read_text())
-    assert record["schema_version"] == 4
+    assert record["schema_version"] == 5
     assert record["protocol"]["name"] == "bash-block-v1"
     # Frozen before demonstrations: changing any agent-visible protocol text
     # must come with a new protocol version and an updated fingerprint here.
@@ -436,6 +438,7 @@ def test_terminations_are_distinct_and_budgets_are_audited(
     assert record["status"] == status
     assert record["budget"] == asdict(budget)
     assert record["usage"]["steps"] == result.usage.steps
+    assert all(step.workspace_manifest for step in result.trajectory)
 
 
 def test_unavailable_isolation_stops_before_any_model_call(tmp_path: Path) -> None:
@@ -555,6 +558,10 @@ def test_executor_failure_mid_episode_is_an_infrastructure_error(
     assert "executor unavailable" in result.reason
     assert len(model.prompts) == 2 and len(result.trajectory) == 2
     assert result.grade is None
+    assert result.trajectory[0].workspace_manifest == (
+        result.trajectory[1].workspace_manifest
+    )
+    assert [step.candidate for step in result.trajectory] == [0, 0]
 
 
 def test_only_unmodified_feedback_runs_verify_and_reverts_reuse_candidates(
@@ -585,3 +592,184 @@ def test_only_unmodified_feedback_runs_verify_and_reverts_reuse_candidates(
     [attempt] = result.repair_attempts
     assert (attempt.failed_step, attempt.passed) == (2, None)
     assert result.grade is not None and not result.grade.passed
+
+
+def test_candidate_analysis_uses_task_declarations_after_the_episode(
+    tmp_path: Path,
+) -> None:
+    task = replace(
+        sum_task(),
+        implementation_paths=("answer.py",),
+        feedback_command="python3 -B feedback_tests.py",
+        feedback_tests="from answer import solve\nassert solve([4]) == 4\n",
+    )
+    replies = [
+        bash(f"cat > answer.py <<'PY'\n{WRONG}PY"),
+        bash("python3 feedback_tests.py"),  # Not the task's feedback command.
+        bash("python3 -B feedback_tests.py"),
+        bash(f"cat > answer.py <<'PY'\n{FIXED}PY"),
+        bash("python3 -B feedback_tests.py"),
+        write_file(FIXED),  # v1 grading still reads solution.py.
+        submit(),
+    ]
+
+    def policy(context: str) -> str:
+        record = json.loads(next(tmp_path.glob("*/run.json")).read_text())
+        # Operator-visible records contain evidence during the episode; analysis
+        # only appears after termination and never influences the next action.
+        assert record["candidates"] == record["repair_attempts"] == []
+        assert all(
+            step["candidate"] is None and not step["verification"]
+            for step in record["trajectory"]
+        )
+        return replies[turn_number(context) - 1]
+
+    result = run_experiment(task=task, model=ScriptedModel(policy), output_dir=tmp_path)
+
+    assert result.status == "completed", result.reason
+    assert result.grade is not None and result.grade.passed
+    assert [(c.index, c.formed_at_step) for c in result.candidates] == [(0, 0), (1, 3)]
+    assert [step.candidate for step in result.trajectory] == [0, 0, 0, 1, 1, 1, 1]
+    assert [step.verification for step in result.trajectory] == [
+        False, False, True, False, True, False, False
+    ]  # fmt: skip
+    [attempt] = result.repair_attempts
+    assert (
+        attempt.failed_step, attempt.from_candidate, attempt.to_candidate,
+        attempt.verified_at_step, attempt.passed,
+    ) == (2, 0, 1, 4, True)  # fmt: skip
+    assert (result.run_dir / result.candidates[0].path).read_text() == WRONG
+    record = json.loads((result.run_dir / "run.json").read_text())
+    assert len(record["candidates"]) == 2 and len(record["repair_attempts"]) == 1
+
+
+def test_candidates_deduplicate_the_complete_declared_implementation(
+    tmp_path: Path,
+) -> None:
+    source = "from helpers import total\ndef solve(numbers): return total(numbers)\n"
+    wrong = "def total(numbers): return 3\n"
+    fixed = "def total(numbers): return sum(numbers)\n"
+    result = run_experiment(
+        task=replace(sum_task(), implementation_paths=("solution.py", "helpers.py")),
+        model=replay(
+            [
+                bash(
+                    f"cat > solution.py <<'PY'\n{source}PY\n"
+                    f"cat > helpers.py <<'PY'\n{wrong}PY"
+                ),
+                bash("python3 feedback_tests.py"),
+                bash(f"cat > helpers.py <<'PY'\n{fixed}PY"),
+                bash("python3 feedback_tests.py"),
+                bash(f"cat > helpers.py <<'PY'\n{wrong}PY"),
+                bash(f"cat > helpers.py <<'PY'\n{fixed}PY"),
+            ]
+        ),
+        overrides=condition_overrides(budget=InteractionBudget(max_steps=6)),
+        output_dir=tmp_path,
+    )
+
+    # v1 only submits a single file; this episode tests multi-file analysis on a
+    # budget termination without changing the grading contract of task 15.
+    assert result.status == "budget_exhausted", result.reason
+    assert [step.candidate for step in result.trajectory] == [0, 0, 1, 1, 0, 1]
+    first, second = result.candidates
+    assert first.sha256 != second.sha256
+    assert first.files["solution.py"] == second.files["solution.py"]
+    blobs = result.run_dir / "blobs"
+    assert (blobs / first.files["helpers.py"]).read_text() == wrong
+    assert (blobs / second.files["helpers.py"]).read_text() == fixed
+    assert json.loads((result.run_dir / first.path).read_text()) == first.files
+    [attempt] = result.repair_attempts
+    assert (attempt.from_candidate, attempt.to_candidate, attempt.passed) == (
+        0,
+        1,
+        True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("paths", "expected_candidates"),
+    [((), 0), (("solution.py",), 2)],
+)
+def test_optional_analysis_declarations_do_not_prevent_an_episode(
+    tmp_path: Path, paths: tuple[str, ...], expected_candidates: int
+) -> None:
+    result = run_experiment(
+        task=replace(sum_task(), implementation_paths=paths, feedback_command=None),
+        model=replay(
+            [
+                write_file(WRONG),
+                bash("python3 feedback_tests.py"),
+                write_file(FIXED),
+                bash("python3 feedback_tests.py"),
+                submit(),
+            ]
+        ),
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "completed", result.reason
+    assert result.grade is not None and result.grade.passed
+    assert len(result.candidates) == expected_candidates
+    assert result.repair_attempts == []
+    assert not any(step.verification for step in result.trajectory)
+    if not paths:
+        assert all(step.candidate is None for step in result.trajectory)
+
+
+def test_feedback_symlinks_do_not_verify_and_restoring_materials_enables_verification(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(
+            [
+                write_file(WRONG),
+                bash(
+                    "cp feedback_tests.py copy.py; rm feedback_tests.py; "
+                    "ln -s copy.py feedback_tests.py"
+                ),
+                bash("python3 feedback_tests.py"),
+                bash("rm feedback_tests.py; cp copy.py feedback_tests.py"),
+                bash("python3 feedback_tests.py"),
+                write_file(FIXED),
+                bash("python3 feedback_tests.py"),
+                submit(),
+            ]
+        ),
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "completed", result.reason
+    assert [step.verification for step in result.trajectory] == [
+        False, False, False, False, True, False, True, False
+    ]  # fmt: skip
+    [attempt] = result.repair_attempts
+    assert (attempt.failed_step, attempt.verified_at_step, attempt.passed) == (
+        4,
+        6,
+        True,
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rm solution.py",
+        "rm solution.py; mkfifo solution.py",
+        "head -c 65537 /dev/zero > solution.py",
+    ],
+)
+def test_unavailable_or_oversized_implementation_keeps_the_last_candidate(
+    tmp_path: Path, command: str
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([write_file(WRONG), bash(command), submit()]),
+        output_dir=tmp_path,
+    )
+
+    assert result.status == "invalid_submission", result.reason
+    assert [step.candidate for step in result.trajectory] == [0, 0, 0]
+    [candidate] = result.candidates
+    assert (result.run_dir / candidate.path).read_text() == WRONG

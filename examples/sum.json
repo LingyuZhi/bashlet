@@ -8,7 +8,9 @@
       {"args": [[]], "expected": 0},
       {"args": [[-5, 2]], "expected": -3}
     ],
-    "reference_implementation": "def solve(numbers):\n    return sum(numbers)\n"
+    "reference_implementation": "def solve(numbers):\n    return sum(numbers)\n",
+    "implementation_paths": ["solution.py"],
+    "feedback_command": "python3 feedback_tests.py"
   },
   "replies": [
     "Write the implementation.\n```bash\ncat > solution.py <<'PY'\ndef solve(numbers):\n    total = 0\n    for number in numbers:\n        total += number\n    return total\nPY\n```",
