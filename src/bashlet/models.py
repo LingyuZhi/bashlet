@@ -18,13 +18,22 @@ class GradingCase:
 
 
 @dataclass(frozen=True)
+class FunctionGrader:
+    """Host-held function entry point and grading cases."""
+
+    module_path: str
+    function_name: str
+    cases: tuple[GradingCase, ...]
+
+
+@dataclass(frozen=True)
 class Task:
     task_id: str
     prompt: str
-    feedback_tests: str
-    grading_cases: tuple[GradingCase, ...]
+    initial_files: dict[str, str]
+    grader: FunctionGrader
+    environment_id: str = "linux-bwrap-v1"
     reference_implementation: str = ""
-    function_name: str = "solve"
     implementation_paths: tuple[str, ...] = ()
     feedback_command: str | None = None
 
@@ -37,7 +46,7 @@ class Bash:
 
 @dataclass(frozen=True)
 class Submit:
-    """Submit the current solution.py and end the experiment's episode."""
+    """Submit the current Task Workspace and end the Episode."""
 
     kind: Literal["submit"] = field(default="submit", init=False)
 
@@ -116,6 +125,7 @@ class Limits:
     timeout_seconds: float = 2.0
     output_bytes: int = 16_384
     submission_bytes: int = 65_536
+    submission_files: int = 1024
     memory_bytes: int = 536_870_912
     file_bytes: int = 1_048_576
 
@@ -225,6 +235,8 @@ class Submission:
     path: str
     sha256: str
     size_bytes: int
+    file_count: int
+    manifest: dict[str, WorkspaceEntry]
 
 
 @dataclass(frozen=True)
@@ -242,11 +254,12 @@ class Grade:
     cases: tuple[CaseResult, ...]
 
 
-@dataclass
-class ExperimentResult:
+@dataclass(kw_only=True)
+class EpisodeResult:
+    """Task-independent interaction evidence and the final workspace."""
+
     run_dir: Path
-    task_id: str
-    task_sha256: str
+    workspace: Path
     limits: Limits
     isolation: Isolation
     policy: str = ""
@@ -257,10 +270,24 @@ class ExperimentResult:
     trajectory: list[Step] = field(default_factory=list)
     initial_workspace_manifest: dict[str, WorkspaceEntry] = field(default_factory=dict)
     context_tokens: list[int] = field(default_factory=list)
-    candidates: list[Candidate] = field(default_factory=list)
-    repair_attempts: list[RepairAttempt] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     rejected_generation: Generation | None = None
+    submission_text: str | None = None
+    reason: str = ""
+
+
+@dataclass(kw_only=True)
+class ExperimentResult(EpisodeResult):
+    task_id: str
+    task_sha256: str
+    environment_id: str
+    episode_status: str
+    candidates: list[Candidate] = field(default_factory=list)
+    repair_attempts: list[RepairAttempt] = field(default_factory=list)
     submission: Submission | None = None
     grade: Grade | None = None
-    reason: str = ""
+
+    @property
+    def passed(self) -> bool:
+        """Unsubmitted episodes are failures, even if feedback passed."""
+        return self.grade is not None and self.grade.passed

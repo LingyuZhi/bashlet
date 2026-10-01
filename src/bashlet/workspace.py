@@ -1,12 +1,14 @@
 """Record Task Workspace states with shared, content-addressed file blobs."""
 
 import hashlib
+import json
 import os
+import shutil
 import stat
 from dataclasses import replace
 from pathlib import Path
 
-from .models import WorkspaceEntry, WorkspaceKind
+from .models import Limits, Submission, WorkspaceEntry, WorkspaceKind
 
 _KINDS: dict[int, WorkspaceKind] = {
     stat.S_IFREG: "file",
@@ -87,3 +89,60 @@ def capture_workspace(workspace: Path, run_dir: Path) -> dict[str, WorkspaceEntr
     finally:
         os.close(descriptor)
     return manifest
+
+
+def validate_workspace_path(path: str) -> None:
+    """Trusted task paths must remain inside the workspace."""
+    if (
+        not path
+        or "\x00" in path
+        or path.startswith("/")
+        or any(part in {"", ".", ".."} for part in path.split("/"))
+    ):
+        raise ValueError(f"Invalid workspace path {path!r}")
+
+
+def snapshot_workspace(
+    manifest: dict[str, WorkspaceEntry], run_dir: Path, limits: Limits
+) -> Submission:
+    """Materialize the recorded submission, independently of the live workspace."""
+    if len(manifest) > limits.submission_files:
+        raise ValueError("Workspace exceeds the submission file count limit")
+    size_bytes = 0
+    for path, entry in manifest.items():
+        validate_workspace_path(path)
+        if entry.error:
+            raise ValueError(f"Cannot snapshot {path!r}: {entry.error}")
+        if entry.kind not in {"file", "directory"}:
+            raise ValueError(f"{path!r} must be a regular file or directory")
+        if entry.kind == "file":
+            if entry.sha256 is None or entry.size_bytes is None:
+                raise ValueError(f"Cannot snapshot unreadable file {path!r}")
+            size_bytes += entry.size_bytes
+    if size_bytes > limits.submission_bytes:
+        raise ValueError("Workspace exceeds the submission size limit")
+    target = run_dir / "submission"
+    target.mkdir()
+    for path, entry in sorted(manifest.items()):
+        destination = target / path
+        if entry.kind == "directory":
+            destination.mkdir(parents=True, exist_ok=True)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(run_dir / "blobs" / str(entry.sha256), destination)
+            destination.chmod(0o400)
+    payload = json.dumps(
+        {
+            path: {"kind": entry.kind, "sha256": entry.sha256}
+            for path, entry in manifest.items()
+        },
+        sort_keys=True,
+        ensure_ascii=True,
+    ).encode()
+    return Submission(
+        str(target.relative_to(run_dir)),
+        hashlib.sha256(payload).hexdigest(),
+        size_bytes,
+        len(manifest),
+        dict(manifest),
+    )

@@ -27,6 +27,7 @@ from adapters import (
 from bashlet import (
     PROTOCOL_SHA256,
     Bash,
+    FunctionGrader,
     Generation,
     GradingCase,
     InteractionBudget,
@@ -47,19 +48,27 @@ FIXED = "def solve(numbers):\n    return sum(numbers)\n"
 
 
 def sum_task() -> Task:
+    prompt = "Write solution.py with solve(numbers), returning the sum of integers."
     return Task(
         task_id="manual/sum-repair-v1",
-        prompt="Write solution.py with solve(numbers), returning the sum of integers.",
-        feedback_tests=(
-            "from solution import solve\n"
-            "assert solve([1, 2]) == 3\n"
-            "assert solve([4]) == 4, 'solve([4]) should be 4'\n"
-            "print('feedback passed')\n"
-        ),
-        grading_cases=(
-            GradingCase(args=([1, 2],), expected=3),
-            GradingCase(args=([],), expected=0),
-            GradingCase(args=([-5, 2],), expected=-3),
+        prompt=prompt,
+        initial_files={
+            "task.md": prompt,
+            "feedback_tests.py": (
+                "from solution import solve\n"
+                "assert solve([1, 2]) == 3\n"
+                "assert solve([4]) == 4, 'solve([4]) should be 4'\n"
+                "print('feedback passed')\n"
+            ),
+        },
+        grader=FunctionGrader(
+            module_path="solution.py",
+            function_name="solve",
+            cases=(
+                GradingCase(args=([1, 2],), expected=3),
+                GradingCase(args=([],), expected=0),
+                GradingCase(args=([-5, 2],), expected=-3),
+            ),
         ),
         reference_implementation=FIXED,
         implementation_paths=("solution.py",),
@@ -207,7 +216,9 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     assert passed is not None and passed.stdout == "feedback passed\n"
     assert result.grade is not None and result.grade.passed
     assert result.submission is not None
-    assert (result.run_dir / result.submission.path).read_text() == FIXED
+    assert (
+        result.run_dir / result.submission.path / "solution.py"
+    ).read_text() == FIXED
 
     # Each generation keeps its sampled tokens, logprobs, conditions and policy.
     for step, generation in zip(result.trajectory, model.generations, strict=True):
@@ -240,7 +251,7 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     assert "feedback passed" not in "".join(renders[:4])
 
     record = json.loads((result.run_dir / "run.json").read_text())
-    assert record["schema_version"] == 5
+    assert record["schema_version"] == 6
     assert record["protocol"]["name"] == "bash-block-v1"
     # Frozen before demonstrations: changing any agent-visible protocol text
     # must come with a new protocol version and an updated fingerprint here.
@@ -491,7 +502,9 @@ def test_repair_attempts_are_counted_apart_from_interaction_steps(
     assert [step.candidate for step in result.trajectory] == [0, 0, 0, 0, 1, 1, 2, 2, 2]
     assert (result.run_dir / result.candidates[0].path).read_text() == WRONG
     assert result.submission is not None
-    assert result.submission.sha256 == result.candidates[2].sha256
+    assert (
+        result.submission.manifest["solution.py"].sha256 == result.candidates[2].sha256
+    )
     record = json.loads((result.run_dir / "run.json").read_text())
     assert len(record["repair_attempts"]) == 2
     assert record["candidates"][1]["formed_at_step"] == 4
@@ -505,7 +518,10 @@ def test_student_never_sees_reference_grading_material_or_credentials(
     task = replace(
         sum_task(),
         reference_implementation="# reference-marker-8c41\n" + FIXED,
-        grading_cases=(GradingCase(args=([424242, 7],), expected=424249),),
+        grader=replace(
+            sum_task().grader,
+            cases=(GradingCase(args=([424242, 7],), expected=424249),),
+        ),
     )
     probes = [
         bash("env; cat task.md feedback_tests.py; ls -la . .."),
@@ -601,7 +617,10 @@ def test_candidate_analysis_uses_task_declarations_after_the_episode(
         sum_task(),
         implementation_paths=("answer.py",),
         feedback_command="python3 -B feedback_tests.py",
-        feedback_tests="from answer import solve\nassert solve([4]) == 4\n",
+        initial_files={
+            "feedback_tests.py": "from answer import solve\nassert solve([4]) == 4\n",
+        },
+        grader=replace(sum_task().grader, module_path="answer.py"),
     )
     replies = [
         bash(f"cat > answer.py <<'PY'\n{WRONG}PY"),
@@ -609,7 +628,7 @@ def test_candidate_analysis_uses_task_declarations_after_the_episode(
         bash("python3 -B feedback_tests.py"),
         bash(f"cat > answer.py <<'PY'\n{FIXED}PY"),
         bash("python3 -B feedback_tests.py"),
-        write_file(FIXED),  # v1 grading still reads solution.py.
+        write_file(FIXED),  # An extra file does not change the declared candidate.
         submit(),
     ]
 
@@ -668,8 +687,7 @@ def test_candidates_deduplicate_the_complete_declared_implementation(
         output_dir=tmp_path,
     )
 
-    # v1 only submits a single file; this episode tests multi-file analysis on a
-    # budget termination without changing the grading contract of task 15.
+    # Analysis remains available when the episode ends without submitting.
     assert result.status == "budget_exhausted", result.reason
     assert [step.candidate for step in result.trajectory] == [0, 0, 1, 1, 0, 1]
     first, second = result.candidates
@@ -769,7 +787,10 @@ def test_unavailable_or_oversized_implementation_keeps_the_last_candidate(
         output_dir=tmp_path,
     )
 
-    assert result.status == "invalid_submission", result.reason
+    assert result.status == (
+        "completed" if command == "rm solution.py" else "invalid_submission"
+    ), result.reason
+    assert not result.passed
     assert [step.candidate for step in result.trajectory] == [0, 0, 0]
     [candidate] = result.candidates
     assert (result.run_dir / candidate.path).read_text() == WRONG

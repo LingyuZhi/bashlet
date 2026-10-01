@@ -40,10 +40,12 @@ class ProtocolConfig:
 class EnvironmentConfig:
     """Executor, mounts, environment, and per-command resource limits."""
 
+    id: str
     bwrap: str
     timeout_seconds: float
     output_bytes: int
     submission_bytes: int
+    submission_files: int
     memory_bytes: int
     file_bytes: int
     nofile: int
@@ -219,6 +221,7 @@ def _require_positive_numbers(config: ExperimentConfig) -> None:
         "environment.timeout_seconds": config.environment.timeout_seconds,
         "environment.output_bytes": config.environment.output_bytes,
         "environment.submission_bytes": config.environment.submission_bytes,
+        "environment.submission_files": config.environment.submission_files,
         "environment.memory_bytes": config.environment.memory_bytes,
         "environment.file_bytes": config.environment.file_bytes,
         "environment.nofile": config.environment.nofile,

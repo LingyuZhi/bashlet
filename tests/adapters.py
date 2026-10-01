@@ -168,6 +168,7 @@ def condition_overrides(
                 f"environment.timeout_seconds={limits.timeout_seconds}",
                 f"environment.output_bytes={limits.output_bytes}",
                 f"environment.submission_bytes={limits.submission_bytes}",
+                f"environment.submission_files={limits.submission_files}",
                 f"environment.memory_bytes={limits.memory_bytes}",
                 f"environment.file_bytes={limits.file_bytes}",
             ]

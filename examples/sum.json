@@ -2,15 +2,46 @@
   "task": {
     "task_id": "manual/sum-v1",
     "prompt": "Write solution.py with solve(numbers), returning the sum of the integers, including an empty list and negative integers.",
-    "feedback_tests": "from solution import solve\nassert solve([1, 2]) == 3\nprint('feedback passed')\n",
-    "grading_cases": [
-      {"args": [[1, 2]], "expected": 3},
-      {"args": [[]], "expected": 0},
-      {"args": [[-5, 2]], "expected": -3}
-    ],
     "reference_implementation": "def solve(numbers):\n    return sum(numbers)\n",
-    "implementation_paths": ["solution.py"],
-    "feedback_command": "python3 feedback_tests.py"
+    "implementation_paths": [
+      "solution.py"
+    ],
+    "feedback_command": "python3 feedback_tests.py",
+    "initial_files": {
+      "task.md": "Write solution.py with solve(numbers), returning the sum of the integers, including an empty list and negative integers.",
+      "feedback_tests.py": "from solution import solve\nassert solve([1, 2]) == 3\nprint('feedback passed')\n"
+    },
+    "environment_id": "linux-bwrap-v1",
+    "grader": {
+      "module_path": "solution.py",
+      "function_name": "solve",
+      "cases": [
+        {
+          "args": [
+            [
+              1,
+              2
+            ]
+          ],
+          "expected": 3
+        },
+        {
+          "args": [
+            []
+          ],
+          "expected": 0
+        },
+        {
+          "args": [
+            [
+              -5,
+              2
+            ]
+          ],
+          "expected": -3
+        }
+      ]
+    }
   },
   "replies": [
     "Write the implementation.\n```bash\ncat > solution.py <<'PY'\ndef solve(numbers):\n    total = 0\n    for number in numbers:\n        total += number\n    return total\nPY\n```",

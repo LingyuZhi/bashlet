@@ -26,6 +26,7 @@ class Sandbox:
             timeout_seconds=environment.timeout_seconds,
             output_bytes=environment.output_bytes,
             submission_bytes=environment.submission_bytes,
+            submission_files=environment.submission_files,
             memory_bytes=environment.memory_bytes,
             file_bytes=environment.file_bytes,
         )

@@ -1,10 +1,13 @@
 """The shared small-experiment interface for bashlet."""
 
+from .episode import run_episode
 from .experiment import run_experiment
 from .models import (
     Bash,
     Encoding,
+    EpisodeResult,
     ExperimentResult,
+    FunctionGrader,
     Generation,
     GradingCase,
     InteractionBudget,
@@ -24,7 +27,9 @@ __all__ = [
     "PROTOCOL_VERSION",
     "Bash",
     "Encoding",
+    "EpisodeResult",
     "ExperimentResult",
+    "FunctionGrader",
     "Generation",
     "GradingCase",
     "InteractionBudget",
@@ -38,4 +43,5 @@ __all__ = [
     "Task",
     "Utf8Encoding",
     "run_experiment",
+    "run_episode",
 ]

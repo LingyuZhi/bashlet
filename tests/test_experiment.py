@@ -14,6 +14,7 @@ from adapters import bash, condition_overrides, replay, submit, write_file
 from bashlet import (
     Bash,
     ExperimentResult,
+    FunctionGrader,
     GradingCase,
     InteractionBudget,
     Limits,
@@ -25,14 +26,24 @@ from bashlet import (
 
 
 def sum_task() -> Task:
+    prompt = "Write solution.py with solve(numbers), returning the sum of integers."
     return Task(
         task_id="manual/sum-v1",
-        prompt="Write solution.py with solve(numbers), returning the sum of integers.",
-        feedback_tests="from solution import solve\nassert solve([1, 2]) == 3\n",
-        grading_cases=(
-            GradingCase(args=([1, 2],), expected=3),
-            GradingCase(args=([],), expected=0),
-            GradingCase(args=([-5, 2],), expected=-3),
+        prompt=prompt,
+        initial_files={
+            "task.md": prompt,
+            "feedback_tests.py": (
+                "from solution import solve\nassert solve([1, 2]) == 3\n"
+            ),
+        },
+        grader=FunctionGrader(
+            module_path="solution.py",
+            function_name="solve",
+            cases=(
+                GradingCase(args=([1, 2],), expected=3),
+                GradingCase(args=([],), expected=0),
+                GradingCase(args=([-5, 2],), expected=-3),
+            ),
         ),
         reference_implementation="def solve(numbers):\n    return sum(numbers)\n",
         implementation_paths=("solution.py",),
@@ -44,6 +55,169 @@ def observed(result: ExperimentResult, index: int) -> Observation:
     observation = result.trajectory[index].observation
     assert observation is not None, result.trajectory[index]
     return observation
+
+
+def test_task_files_and_named_grader_support_a_complete_multifile_submission(
+    tmp_path: Path,
+) -> None:
+    task = Task(
+        task_id="manual/package-sum-v2",
+        prompt="Submit the existing package and its data.",
+        initial_files={
+            "package/__init__.py": "",
+            "package/helpers.py": "def total(numbers): return sum(numbers)\n",
+            "package/answer.py": (
+                "from pathlib import Path\n"
+                "from .helpers import total\n"
+                "def calculate(numbers):\n"
+                "    assert Path('/workspace/data/offset').read_text() == '2'\n"
+                "    assert not Path('/tmp/case-marker').exists()\n"
+                "    Path('/tmp/case-marker').write_text('fresh process')\n"
+                "    try:\n"
+                "        Path('/workspace/data/offset').write_text('999')\n"
+                "    except OSError:\n"
+                "        return total(numbers) + 2\n"
+                "    raise AssertionError('grading workspace must be read-only')\n"
+            ),
+            "data/offset": "2",
+        },
+        environment_id="linux-bwrap-v1",
+        grader=FunctionGrader(
+            module_path="package/answer.py",
+            function_name="calculate",
+            cases=(
+                GradingCase(args=([],), expected=2),
+                GradingCase(args=([-5, 2],), expected=-1),
+            ),
+        ),
+    )
+    result = run_experiment(task=task, model=replay([submit()]), output_dir=tmp_path)
+
+    assert result.status == "completed", result.reason
+    assert result.grade is not None and result.grade.passed_cases == 2
+    assert [case.status for case in result.grade.cases] == ["passed", "passed"]
+    assert result.submission is not None
+    snapshot = result.run_dir / result.submission.path
+    assert (snapshot / "data/offset").read_text() == "2"
+    assert (snapshot / "package/helpers.py").read_text() == task.initial_files[
+        "package/helpers.py"
+    ]
+    assert not (snapshot / "solution.py").exists()
+    assert set(result.initial_workspace_manifest) == {
+        "package",
+        "package/__init__.py",
+        "package/helpers.py",
+        "package/answer.py",
+        "data",
+        "data/offset",
+    }
+    assert result.candidates == [] and result.repair_attempts == []
+
+
+@pytest.mark.parametrize(
+    ("override", "reason"),
+    [
+        ("environment.submission_bytes=40", "size limit"),
+        ("environment.submission_files=2", "file count limit"),
+    ],
+)
+def test_submission_limits_cover_all_workspace_files(
+    tmp_path: Path, override: str, reason: str
+) -> None:
+    result = run_experiment(
+        task=Task(
+            task_id="manual/whole-workspace-limit",
+            prompt="Submit the existing files.",
+            initial_files={
+                "main.py": "def run(): return 7\n",
+                "a": "abcdefghijklmnop",
+                "b": "abcdefghijklmnop",
+            },
+            grader=FunctionGrader("main.py", "run", (GradingCase((), 7),)),
+        ),
+        model=replay([submit()]),
+        output_dir=tmp_path,
+        overrides=[override],
+    )
+    assert result.status == "invalid_submission"
+    assert reason in result.reason
+    assert result.episode_status == "submitted"
+    assert result.submission is None and result.grade is None
+    assert not result.passed
+    assert (result.workspace / "b").read_text() == "abcdefghijklmnop"
+
+
+def test_submission_preserves_binary_files_empty_directories_and_independent_contents(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(
+            [
+                write_file("def solve(numbers):\n    return sum(numbers)\n"),
+                bash("mkdir empty; printf '\\000\\377' > binary; touch blank"),
+                submit(),
+            ]
+        ),
+        output_dir=tmp_path,
+    )
+    assert result.passed
+    assert result.submission is not None
+    snapshot = result.run_dir / result.submission.path
+    assert (snapshot / "empty").is_dir()
+    assert list((snapshot / "empty").iterdir()) == []
+    assert (snapshot / "binary").read_bytes() == b"\x00\xff"
+    assert (snapshot / "blank").read_bytes() == b""
+    (result.workspace / "binary").write_bytes(b"later mutation")
+    (result.workspace / "empty").rmdir()
+    assert (snapshot / "binary").read_bytes() == b"\x00\xff"
+    assert (snapshot / "empty").is_dir()
+
+
+def test_unsubmitted_workspace_is_retained_and_counted_as_a_failure(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([write_file("def solve(numbers):\n    return sum(numbers)\n")]),
+        output_dir=tmp_path,
+        overrides=["budget.max_steps=1"],
+    )
+    assert result.status == result.episode_status == "budget_exhausted"
+    assert result.submission is None and result.grade is None
+    assert not result.passed
+    assert (
+        (result.workspace / "solution.py").read_text().endswith("return sum(numbers)\n")
+    )
+    assert not (result.run_dir / "private/grading-workspace").exists()
+    record = json.loads((result.run_dir / "run.json").read_text())
+    assert record["passed"] is False
+
+
+@pytest.mark.parametrize(
+    "path", ["../outside", "/tmp/outside", "a/../outside", "a//b", "a/./b", ""]
+)
+def test_initial_task_files_cannot_escape_the_workspace(
+    tmp_path: Path, path: str
+) -> None:
+    task = replace(sum_task(), initial_files={path: "must not be written"})
+    with pytest.raises(ValueError, match="workspace path"):
+        run_experiment(
+            task=task, model=replay([submit()]), output_dir=tmp_path / "runs"
+        )
+    assert not (tmp_path / "runs").exists()
+
+
+def test_task_environment_must_match_the_selected_execution_environment(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="Task environment"):
+        run_experiment(
+            task=replace(sum_task(), environment_id="other-environment"),
+            model=replay([submit()]),
+            output_dir=tmp_path / "runs",
+        )
+    assert not (tmp_path / "runs").exists()
 
 
 def run_cli(
@@ -105,7 +279,9 @@ def test_experiment_executes_feedback_and_grades_a_distinct_correct_submission(
     assert result.grade is not None and result.grade.passed
     assert result.grade.passed_cases == 3
     assert result.submission is not None
-    assert (result.run_dir / result.submission.path).read_text() == implementation
+    assert (
+        result.run_dir / result.submission.path / "solution.py"
+    ).read_text() == implementation
     record = json.loads((result.run_dir / "run.json").read_text())
     assert record["task_id"] == "manual/sum-v1"
     assert record["grade"]["passed"] is True
@@ -184,7 +360,8 @@ def test_workspace_manifests_record_special_files_without_following_them(
         output_dir=tmp_path / "runs",
     )
 
-    assert result.status == "completed", result.reason
+    assert result.status == "invalid_submission", result.reason
+    assert result.grade is None
     manifest = result.trajectory[0].workspace_manifest
     assert manifest["external"].kind == "symlink"
     assert manifest["external"].target == str(private)
@@ -261,7 +438,7 @@ def test_workspace_manifests_preserve_non_utf8_paths_and_symlink_targets(
         output_dir=tmp_path,
     )
 
-    assert result.status == "completed", result.reason
+    assert result.status == "invalid_submission", result.reason
     manifest = result.trajectory[0].workspace_manifest
     assert manifest["\udcff"].sha256 == (
         "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
@@ -344,7 +521,7 @@ def test_task_and_grading_processes_cannot_read_host_secrets(
                         "def solve(numbers):\n"
                         "    assert 'SERVICE_API_TOKEN' not in os.environ\n"
                         f"    assert not Path({str(host_private)!r}).exists()\n"
-                        "    assert not Path('/workspace/feedback_tests.py').exists()\n"
+                        "    assert Path('/workspace/feedback_tests.py').exists()\n"
                         "    assert not "
                         "Path('/workspace/../private/task.json').exists()\n"
                         "    return sum(numbers)\n"
@@ -508,7 +685,7 @@ def test_submission_ends_the_episode_and_runs_keep_independent_snapshots(
     first = run_experiment(task=sum_task(), model=replay(replies), output_dir=tmp_path)
     first_record = (first.run_dir / "run.json").read_bytes()
     assert first.submission is not None
-    snapshot = (first.run_dir / first.submission.path).read_bytes()
+    snapshot = (first.run_dir / first.submission.path / "solution.py").read_bytes()
     (first.run_dir / "workspace" / "solution.py").write_text("later mutation")
     second = run_experiment(task=sum_task(), model=replay(replies), output_dir=tmp_path)
     assert first.run_dir != second.run_dir
@@ -516,7 +693,9 @@ def test_submission_ends_the_episode_and_runs_keep_independent_snapshots(
     assert second.grade is not None and second.grade.passed
     assert [type(step.action) for step in first.trajectory] == [Bash, Submit]
     assert (first.run_dir / "run.json").read_bytes() == first_record
-    assert (first.run_dir / first.submission.path).read_bytes() == snapshot
+    assert (
+        first.run_dir / first.submission.path / "solution.py"
+    ).read_bytes() == snapshot
     assert not (first.run_dir / "workspace" / "grading_tests.py").exists()
 
 

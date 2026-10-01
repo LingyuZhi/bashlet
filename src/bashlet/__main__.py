@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from . import (
+    FunctionGrader,
     GradingCase,
     ReplayModel,
     Task,
@@ -41,11 +42,12 @@ def main() -> None:
                 "config, not the request"
             )
         task_data = request["task"]
+        grader_data = task_data.pop("grader")
         cases = tuple(
             GradingCase(args=tuple(case["args"]), expected=case["expected"])
-            for case in task_data.pop("grading_cases")
+            for case in grader_data.pop("cases")
         )
-        task = Task(**task_data, grading_cases=cases)
+        task = Task(**task_data, grader=FunctionGrader(**grader_data, cases=cases))
         if "actions" in request:
             raise ValueError("Use replay replies instead of actions")
         replies = request["replies"]

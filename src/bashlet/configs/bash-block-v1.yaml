@@ -35,10 +35,12 @@ protocol:
   history: 'append-only token context: encoding.prompt(system, user), then per step the raw sampled tokens followed by encoding.continuation(tokens, feedback); earlier tokens are never decoded and re-encoded'
   verification_pattern: '\s*python3 feedback_tests\.py\s*'
 environment:
+  id: linux-bwrap-v1
   bwrap: /usr/bin/bwrap
   timeout_seconds: 2.0
   output_bytes: 16384
   submission_bytes: 65536
+  submission_files: 1024
   memory_bytes: 536870912
   file_bytes: 1048576
   nofile: 64
