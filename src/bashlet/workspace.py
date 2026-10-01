@@ -43,7 +43,7 @@ def capture_workspace(workspace: Path, run_dir: Path) -> dict[str, WorkspaceEntr
             try:
                 mode = entry.stat(follow_symlinks=False).st_mode
                 kind = _KINDS.get(stat.S_IFMT(mode), "unknown")
-                manifest[relative] = WorkspaceEntry(kind)
+                manifest[relative] = WorkspaceEntry(kind, mode=stat.S_IMODE(mode))
                 if kind == "directory":
                     subdirectory = os.open(
                         entry.name,
@@ -52,7 +52,9 @@ def capture_workspace(workspace: Path, run_dir: Path) -> dict[str, WorkspaceEntr
                     )
                 elif kind == "symlink":
                     manifest[relative] = WorkspaceEntry(
-                        kind, target=os.readlink(entry.name, dir_fd=directory)
+                        kind,
+                        target=os.readlink(entry.name, dir_fd=directory),
+                        mode=stat.S_IMODE(mode),
                     )
                 elif kind == "file":
                     descriptor = os.open(
@@ -78,7 +80,9 @@ def capture_workspace(workspace: Path, run_dir: Path) -> dict[str, WorkspaceEntr
                 if not target.exists():
                     target.write_bytes(content)
                     target.chmod(0o400)
-                manifest[relative] = WorkspaceEntry("file", digest, len(content))
+                manifest[relative] = WorkspaceEntry(
+                    "file", digest, len(content), mode=manifest[relative].mode
+                )
 
     try:
         descriptor = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -130,10 +134,10 @@ def snapshot_workspace(
         else:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(run_dir / "blobs" / str(entry.sha256), destination)
-            destination.chmod(0o400)
+            destination.chmod(0o400 | ((entry.mode or 0) & 0o111))
     payload = json.dumps(
         {
-            path: {"kind": entry.kind, "sha256": entry.sha256}
+            path: {"kind": entry.kind, "sha256": entry.sha256, "mode": entry.mode}
             for path, entry in manifest.items()
         },
         sort_keys=True,

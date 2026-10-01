@@ -114,6 +114,65 @@ def test_task_files_and_named_grader_support_a_complete_multifile_submission(
     assert result.candidates == [] and result.repair_attempts == []
 
 
+def test_grading_a_package_initializer_preserves_relative_imports(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=Task(
+            task_id="manual/package-initializer",
+            prompt="Submit the nested package.",
+            initial_files={
+                "outer/__init__.py": "",
+                "outer/helpers.py": "def total(numbers): return sum(numbers)\n",
+                "outer/inner/__init__.py": (
+                    "from ..helpers import total\n"
+                    "def calculate(numbers): return total(numbers)\n"
+                ),
+            },
+            grader=FunctionGrader(
+                "outer/inner/__init__.py", "calculate", (GradingCase(([2, 5],), 7),)
+            ),
+        ),
+        model=replay([submit()]),
+        output_dir=tmp_path,
+    )
+    assert result.passed, result.grade
+
+
+def test_submission_preserves_executable_helpers_used_by_the_graded_function(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=Task(
+            task_id="manual/executable-helper",
+            prompt="Make helper.sh executable and submit the program.",
+            initial_files={
+                "helper.sh": "#!/bin/sh\nprintf 42\n",
+                "main.py": (
+                    "import subprocess\n"
+                    "def answer():\n"
+                    "    return int(subprocess.check_output("
+                    "['/workspace/helper.sh']))\n"
+                ),
+            },
+            grader=FunctionGrader("main.py", "answer", (GradingCase((), 42),)),
+        ),
+        model=replay(
+            [
+                bash(
+                    "chmod +x helper.sh; "
+                    "python3 -B -c 'from main import answer; print(answer())'"
+                ),
+                submit(),
+            ]
+        ),
+        output_dir=tmp_path,
+    )
+    assert observed(result, 0).status == "ok"
+    assert observed(result, 0).stdout == "42\n"
+    assert result.passed, result.grade
+
+
 @pytest.mark.parametrize(
     ("override", "reason"),
     [

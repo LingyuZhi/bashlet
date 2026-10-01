@@ -182,6 +182,7 @@ class WorkspaceEntry:
     size_bytes: int | None = None
     target: str | None = None
     error: str = ""
+    mode: int | None = None
 
 
 @dataclass(frozen=True)
