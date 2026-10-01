@@ -14,7 +14,7 @@ from jinja2 import Environment, StrictUndefined, TemplateError
 from .models import Encoding, InteractionBudget, Model, SamplingParams
 from .replay import ReplayModel
 
-_DEFAULT_PATH = Path(__file__).with_name("configs") / "bash-block-v2.yaml"
+_DEFAULT_PATH = Path(__file__).with_name("configs") / "bash-block-v3.yaml"
 _SOURCE_DEFAULT = Path(__file__).resolve().parents[2] / "configs" / _DEFAULT_PATH.name
 if _SOURCE_DEFAULT.is_file():
     _DEFAULT_PATH = _SOURCE_DEFAULT

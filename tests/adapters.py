@@ -4,12 +4,14 @@ from collections.abc import Callable, Sequence
 from typing import Literal
 
 from bashlet import (
+    DecodedReply,
     Generation,
     InteractionBudget,
     Limits,
     ReplayModel,
     SamplingParams,
 )
+from bashlet.models import JSONValue
 
 SYSTEM, USER, ASSISTANT, END = 256, 257, 258, 259
 # Whole-word tokens a model may sample. ByteEncoding never produces them when
@@ -22,6 +24,13 @@ class ByteEncoding:
     """A reversible toy chat template: bytes, four special tokens, two words."""
 
     identity = "test/byte-chat-v1"
+    stop_tokens = (END,)
+
+    def describe(self) -> dict[str, JSONValue]:
+        return {"format": self.identity, "thinking": False, "stop_tokens": [END]}
+
+    def reply(self, tokens: Sequence[int]) -> DecodedReply:
+        return DecodedReply(self.decode(tokens))
 
     def encode(self, text: str) -> list[int]:
         return list(text.encode())
@@ -119,7 +128,7 @@ def latest_feedback(context: str) -> str:
 
 
 def bash(command: str) -> str:
-    return f"THOUGHT: Run the next command.\n```bash\n{command}\n```"
+    return f"Run the next command.\n```bash\n{command}\n```"
 
 
 def write_file(source: str) -> str:

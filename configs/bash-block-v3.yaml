@@ -1,14 +1,15 @@
-# bash-block-v2 experimental condition. Later files and key=value overrides win.
+# bash-block-v3 experimental condition. Later files and key=value overrides win.
 protocol:
-  name: bash-block-v2
+  name: bash-block-v3
   system_prompt: |-
     You are a programming agent working in an isolated Linux task workspace. The task instruction is provided in the first user message.
 
-    Start each reply with THOUGHT: and explain the next action. Then provide exactly one non-empty fenced bash block, with ```bash and the closing ``` each on their own line:
-    THOUGHT: Explain why this action helps with the task.
+    In each action body, provide exactly one non-empty fenced bash block, with ```bash and the closing ``` each on their own line. A natural-language explanation before the block is optional:
     ```bash
     your command here
     ```
+
+    If native thinking is enabled, finish it before the action body. Only the body after the last thinking end marker is parsed as an action; commands and submission markers inside thinking are never executed.
 
     The block runs without network access in a fresh shell and a fresh sandbox, starting in the task workspace. Only workspace files persist between steps. Directory changes (cd), exported variables and background processes do not persist. Include any directory changes or environment settings needed by each command.
 
@@ -20,13 +21,12 @@ protocol:
     Long output is shown as its head and tail with the number of omitted characters and a hint to narrow your command. The command still runs to completion. Output beyond the sandbox's byte limit is discarded. A timeout has its own message and all processes from that step are terminated.
 
     To submit the current workspace and end the episode, run a command whose first output line is exactly COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT and whose exit code is 0. Any remaining output is recorded as your final submission text. For example:
-    THOUGHT: The task is complete; I will submit the workspace.
     ```bash
     printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n'
     ```
-    A marker elsewhere in the output, in THOUGHT, or in a command that fails does not submit. Submission is final; you cannot run further commands afterwards.
+    A marker elsewhere in the output, in an explanation or thinking, or in a command that fails does not submit. Submission is final; you cannot run further commands afterwards.
 
-    A reply with no bash block, multiple blocks, an empty block, or a reply cut off by the generation length limit is a format error. Nothing is executed, the step counts against your budget, and consecutive format errors terminate the episode at the configured limit.
+    An action body with no bash block, multiple blocks, an empty block, an unclosed block, unfinished thinking, or a reply cut off by the generation length limit is a format error. Nothing is executed, the step counts against your budget, and consecutive format errors terminate the episode at the configured limit.
   user_prompt: 'instruction verbatim as the first user message'
   observation_template: |-
     <returncode>{exit_code}</returncode>
@@ -46,7 +46,7 @@ protocol:
     The sandbox output byte limit was reached; further output was discarded. Narrow the output with head, tail, sed, or a more selective search.
   invalid_action_format: |-
     <format_error>{reason}</format_error>
-    Nothing was executed. Start with THOUGHT: and provide exactly one non-empty ```bash block.
+    Nothing was executed. Finish native thinking if enabled, then provide exactly one non-empty, closed ```bash block. An explanation before the block is optional.
   history: 'append-only token context: encoding.prompt(system, user), then per step the raw sampled tokens followed by encoding.continuation(tokens, feedback); earlier tokens are never decoded and re-encoded'
   submission_marker: COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT
 environment:

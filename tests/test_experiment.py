@@ -749,7 +749,7 @@ def test_run_records_one_merged_config_and_three_stable_fingerprints(
     assert record["fingerprints"] == again["fingerprints"]
     assert set(record["fingerprints"]) == {"protocol", "environment", "budget"}
     assert record["fingerprints"]["protocol"] == record["protocol"]["sha256"]
-    assert record["config"]["protocol"]["name"] == "bash-block-v2"
+    assert record["config"]["protocol"]["name"] == "bash-block-v3"
     assert record["config"]["budget"] == record["budget"]
     assert record["config"]["model"]["sampling"]["max_tokens"] == 1024
 

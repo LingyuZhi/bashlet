@@ -22,14 +22,16 @@ def replay_config(tmp_path: Path, replies: list[str]) -> Path:
     return path
 
 
-def cli(*arguments: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+def cli(
+    *arguments: str, cwd: Path, timeout: float = 20
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "bashlet", *arguments],
         cwd=cwd,
         env=os.environ | {"NO_COLOR": "1"},
         capture_output=True,
         text=True,
-        timeout=20,
+        timeout=timeout,
     )
 
 
@@ -133,6 +135,68 @@ def test_task_displays_grading_and_show_replays_the_same_steps(tmp_path: Path) -
     replayed = cli("show", str(run_dir), cwd=tmp_path)
     assert replayed.returncode == 0, replayed.stderr
     assert replayed.stdout == live.stdout
+
+
+@pytest.mark.parametrize("thinking", [False, True])
+@pytest.mark.parametrize("explanation", ["", "Run the visible action.\n"])
+def test_qwen_cli_executes_optional_explanations_and_collapses_thinking(
+    tmp_path: Path,
+    thinking: bool,
+    explanation: str,
+) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    reasoning = (
+        "Hidden reasoning.\n```bash\ntouch MUST_NOT_RUN\n```\n</think>\n"
+        if thinking
+        else ""
+    )
+    config = tmp_path / "qwen.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "model": {
+                    "class": "ReplayModel",
+                    "thinking": thinking,
+                    "tokenizer": "Qwen/Qwen3-1.7B",
+                    "tokenizer_revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+                    "replies": [
+                        reasoning
+                        + explanation
+                        + "```bash\nprintf 'visible observation\\n'\n```",
+                        ("Submit now.</think>\n" if thinking else "")
+                        + "```bash\n"
+                        + "printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```",
+                    ],
+                }
+            }
+        )
+    )
+    live = cli(
+        "agent",
+        "Run and submit.",
+        "--workdir",
+        str(workspace),
+        "-c",
+        str(config),
+        cwd=tmp_path,
+        timeout=60,
+    )
+
+    assert live.returncode == 0, live.stdout + live.stderr
+    run_dir, record = saved_run(tmp_path / "runs")
+    assert not (run_dir / "workspace/MUST_NOT_RUN").exists()
+    assert "visible observation" in live.stdout
+    assert "Hidden reasoning" not in live.stdout
+    assert ("Thinking: collapsed" in live.stdout) == thinking
+    assert ("Explanation:" in live.stdout) == bool(explanation)
+    assert record["encoding_details"]["thinking"] == thinking
+    replayed = cli("show", str(run_dir), cwd=tmp_path)
+    assert replayed.returncode == 0 and replayed.stdout == live.stdout
+    if thinking:
+        expanded = cli("show", str(run_dir), "--show-thinking", cwd=tmp_path)
+        assert expanded.returncode == 0, expanded.stderr
+        assert "Hidden reasoning." in expanded.stdout
 
 
 def test_task_accepts_a_hidden_test_command_and_show_preserves_its_grade(
@@ -243,18 +307,17 @@ def test_ctrl_c_keeps_the_inflight_action_output_and_workspace(
 
 
 def test_show_accepts_steps_with_optional_untagged_explanations(tmp_path: Path) -> None:
-    config = replay_config(tmp_path, [bash("printf 'visible\\n'"), submit()])
+    config = replay_config(
+        tmp_path,
+        [
+            "```bash\nprintf 'visible\\n'\n```",
+            "The files are ready.\n```bash\n"
+            "printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```",
+        ],
+    )
     live = cli("agent", "Submit", "-c", str(config), cwd=tmp_path)
     assert live.returncode == 0, live.stdout + live.stderr
-    run_dir, record = saved_run(tmp_path / "runs")
-    # v2 requires THOUGHT; recorded fixtures exercise the renderer's v3 input
-    # without changing the action protocol before task 19.
-    record["trajectory"][0]["model_call"]["text"] = "```bash\nprintf 'visible\\n'\n```"
-    record["trajectory"][1]["model_call"]["text"] = (
-        "The files are ready.\n```bash\n"
-        "printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```"
-    )
-    (run_dir / "run.json").write_text(json.dumps(record))
+    run_dir, _ = saved_run(tmp_path / "runs")
     replayed = cli("show", str(run_dir), cwd=tmp_path)
     assert replayed.returncode == 0, replayed.stderr
     first, second = replayed.stdout.split("Step 2", 1)

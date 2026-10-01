@@ -15,8 +15,9 @@ _BLOCK_START = re.compile(r"^```bash[ \t]*$", re.MULTILINE)
 class RunView:
     """Render only newly completed steps; never read input or modify a run."""
 
-    def __init__(self, console: Console) -> None:
+    def __init__(self, console: Console, *, show_thinking: bool = False) -> None:
         self.console = console
+        self.show_thinking = show_thinking
         self.steps = 0
         self.tokens = 0
         self.invalid = 0
@@ -64,7 +65,20 @@ class RunView:
                 ),
                 soft_wrap=True,
             )
-            text = call.get("text", "")
+            reply = call.get("reply") or {}
+            text = reply.get("action_text", call.get("text", ""))
+            thinking = reply.get("thinking")
+            if thinking:
+                if self.show_thinking:
+                    self.console.print(Text("Thinking:", style="bold"))
+                    self.console.print(Text(thinking), soft_wrap=True)
+                else:
+                    self.console.print(
+                        Text(
+                            f"Thinking: collapsed ({len(thinking)} characters)",
+                            style="dim",
+                        )
+                    )
             if step["action"]["kind"] == "bash":
                 explanation = _BLOCK_START.split(text, maxsplit=1)[0].strip()
                 if explanation:

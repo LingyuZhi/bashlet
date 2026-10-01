@@ -33,11 +33,6 @@ def parse_action(text: str, truncated: bool) -> Bash | InvalidAction:
     command = blocks[0].group(1)
     if not command.strip():
         return InvalidAction("The ```bash block is empty")
-    thought = text[: blocks[0].start()]
-    if not re.match(r"\s*THOUGHT:\s*\S", thought):
-        return InvalidAction(
-            "Expected a non-empty THOUGHT: section before the bash block"
-        )
     return Bash(command)
 
 
@@ -86,8 +81,15 @@ def definition(protocol: ProtocolConfig) -> dict[str, str | int]:
     return {
         "name": protocol.name,
         "action_format": (
-            "a non-empty THOUGHT: section followed by exactly one non-empty bash "
-            "fenced block; length-truncated replies are never executed"
+            "exactly one non-empty, closed bash fenced block in the action body; "
+            "a natural-language explanation before the block is optional; "
+            "length-truncated replies are never executed"
+        ),
+        "thinking": (
+            "when enabled, parse only the body after the last tokenizer thinking "
+            "end marker; unfinished thinking is a format error; thinking blocks "
+            "and submission markers never execute; raw thinking tokens remain "
+            "in the append-only context, including a prompt-prefilled start marker"
         ),
         "system_prompt": protocol.system_prompt,
         "user_prompt": protocol.user_prompt,

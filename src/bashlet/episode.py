@@ -185,11 +185,14 @@ def _sample(model: Model, context: list[int], sampling: SamplingParams) -> Model
         raise _ModelError(problem, generation)
     try:
         text = model.encoding.decode(tokens)
+        reply = model.encoding.reply(tokens)
     except Exception as error:
         raise _ModelError(
             f"Decoding failed: {type(error).__name__}: {error}", generation
         ) from error
-    return ModelCall(model.identity, sampling, len(context), generation, text, duration)
+    return ModelCall(
+        model.identity, sampling, len(context), generation, text, duration, reply
+    )
 
 
 def _budget_exhausted_reason(budget: InteractionBudget, usage: Usage) -> str:
@@ -212,7 +215,7 @@ def save_record(
     record = (
         asdict(result)
         | {
-            "schema_version": 8,
+            "schema_version": 9,
             "config": config_record(condition),
             "fingerprints": protocol.fingerprints(condition),
             "protocol": protocol.describe(condition.protocol),
@@ -263,6 +266,7 @@ def run_episode(
         isolation=Isolation(False, reason="Not yet checked"),
         policy=model.identity,
         encoding=model.encoding.identity,
+        encoding_details=model.encoding.describe(),
         budget=budget,
     )
 
@@ -325,8 +329,13 @@ def run_episode(
                 return result
             context.extend(call.generation.tokens)
             result.usage.generated_tokens += len(call.generation.tokens)
-            action = protocol.parse_action(
-                call.text, call.generation.stop_reason == "length"
+            assert call.reply is not None
+            action = (
+                protocol.parse_action(
+                    call.reply.action_text, call.generation.stop_reason == "length"
+                )
+                if call.reply.thinking_complete
+                else InvalidAction("Native thinking did not reach its end marker")
             )
             result.usage.steps += 1
             if isinstance(action, InvalidAction):

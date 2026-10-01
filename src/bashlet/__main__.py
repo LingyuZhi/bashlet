@@ -35,6 +35,7 @@ def _interrupt(signum: int, frame: FrameType | None) -> None:
 
 
 def _execution_options(parser: argparse.ArgumentParser) -> None:
+    _view_options(parser)
     parser.add_argument("--output-dir", type=Path, default=Path("runs"))
     parser.add_argument(
         "-c",
@@ -51,6 +52,14 @@ def _execution_options(parser: argparse.ArgumentParser) -> None:
         default=[],
         metavar="key=value",
         help="Override a config value after all --config files",
+    )
+
+
+def _view_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--show-thinking",
+        action="store_true",
+        help="Display recorded thinking, which is collapsed by default",
     )
 
 
@@ -86,6 +95,7 @@ def _run_agent(options: argparse.Namespace, view: RunView) -> EpisodeResult:
             isolation=Isolation(False, reason="Workspace preparation did not finish"),
             policy=model.identity,
             encoding=model.encoding.identity,
+            encoding_details=model.encoding.describe(),
             budget=condition.budget,
             status="interrupted"
             if isinstance(error, KeyboardInterrupt)
@@ -179,8 +189,9 @@ def main() -> None:
     _execution_options(task)
     show = commands.add_parser("show", help="Replay a saved run without executing it")
     show.add_argument("run_dir", type=Path)
+    _view_options(show)
     options = parser.parse_args()
-    view = RunView(Console())
+    view = RunView(Console(), show_thinking=options.show_thinking)
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
         if options.command == "show":

@@ -93,7 +93,7 @@ def test_successful_first_line_marker_submits_workspace_and_remaining_output(
         task=replace(task, initial_files=task.initial_files | {"solution.py": FIXED}),
         model=replay(
             [
-                "THOUGHT: The workspace is ready to submit.\n"
+                "The workspace is ready to submit.\n"
                 "```bash\n"
                 "printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\nReady.\\n雪\\n'\n"
                 "```",
@@ -222,21 +222,22 @@ def test_timeout_has_its_own_feedback_and_kills_detached_writers(
     assert not (result.workspace / "delayed-write").exists()
 
 
-def test_reply_requires_a_thought_before_executing_its_bash_block(
+@pytest.mark.parametrize("explanation", ["", "Run the command.\n"])
+def test_reply_executes_a_bash_block_with_an_optional_explanation(
     tmp_path: Path,
+    explanation: str,
 ) -> None:
     result = run_experiment(
         task=sum_task(),
-        model=replay(["```bash\ntouch MUST_NOT_RUN\n```"]),
+        model=replay([explanation + "```bash\nprintf 'action ran\\n'\n```"]),
         output_dir=tmp_path,
         overrides=["budget.max_steps=1"],
     )
 
     step = result.trajectory[0]
-    assert isinstance(step.action, InvalidAction)
-    assert step.observation is None
-    assert step.feedback is not None and "THOUGHT:" in step.feedback
-    assert not (result.workspace / "MUST_NOT_RUN").exists()
+    assert isinstance(step.action, Bash)
+    assert step.observation is not None
+    assert step.observation.output == "action ran\n"
 
 
 def test_output_cutoff_cannot_turn_a_longer_first_line_into_a_submission(
@@ -273,14 +274,12 @@ def test_an_extra_unclosed_bash_block_prevents_execution(tmp_path: Path) -> None
 @pytest.mark.parametrize(
     "reply",
     [
-        "THOUGHT: There is no command.",
+        "There is no command.",
         bash("touch MUST_NOT_RUN") + "\n" + bash("true"),
         bash(" \t"),
-        "THOUGHT: The block is incomplete.\n```bash\ntouch MUST_NOT_RUN",
-        "```bash\ntouch MUST_NOT_RUN\n```",
-        "THOUGHT: \n```bash\ntouch MUST_NOT_RUN\n```",
+        "The block is incomplete.\n```bash\ntouch MUST_NOT_RUN",
     ],
-    ids=["missing", "multiple", "empty", "unclosed", "no-thought", "empty-thought"],
+    ids=["missing", "multiple", "empty", "unclosed"],
 )
 def test_format_errors_count_steps_and_stop_at_the_configured_limit(
     tmp_path: Path,
@@ -323,7 +322,7 @@ def test_a_valid_command_resets_consecutive_format_errors(tmp_path: Path) -> Non
     [
         bash("printf 'prefix\\nCOMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'"),
         bash("printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'; exit 7"),
-        "THOUGHT: COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```bash\ntrue\n```",
+        "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```bash\ntrue\n```",
         bash("printf '\\nCOMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'"),
         bash("printf ' COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'"),
         bash("submit"),
@@ -569,9 +568,13 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     assert "feedback passed" not in "".join(renders[:4])
 
     record = json.loads((result.run_dir / "run.json").read_text())
-    assert record["schema_version"] == 8
-    assert record["protocol"]["name"] == "bash-block-v2"
-    assert record["protocol"]["sha256"] == PROTOCOL_SHA256
+    assert record["schema_version"] == 9
+    assert record["protocol"]["name"] == "bash-block-v3"
+    assert (
+        record["protocol"]["sha256"]
+        == PROTOCOL_SHA256
+        == ("90720d09056f51501e9c5761577733296ecaf1c0f6792d8a7f00f1e0f070cb13")
+    )
     assert record["trajectory"][0]["model_call"]["generation"]["tokens"] == list(
         model.generations[0].tokens
     )

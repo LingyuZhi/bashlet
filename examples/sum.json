@@ -44,8 +44,8 @@
     }
   },
   "replies": [
-    "THOUGHT: Write the implementation.\n```bash\ncat > solution.py <<'PY'\ndef solve(numbers):\n    total = 0\n    for number in numbers:\n        total += number\n    return total\nPY\n```",
-    "THOUGHT: Run the feedback tests.\n```bash\npython3 feedback_tests.py\n```",
-    "THOUGHT: Submit the workspace.\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```"
+    "Write the implementation.\n```bash\ncat > solution.py <<'PY'\ndef solve(numbers):\n    total = 0\n    for number in numbers:\n        total += number\n    return total\nPY\n```",
+    "Run the feedback tests.\n```bash\npython3 feedback_tests.py\n```",
+    "Submit the workspace.\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```"
   ]
 }

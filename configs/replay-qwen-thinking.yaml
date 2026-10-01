@@ -1,0 +1,30 @@
+# A real cached Qwen tokenizer and replayed replies; no GPU or sampling service.
+model:
+  class: ReplayModel
+  tokenizer: Qwen/Qwen3-1.7B
+  tokenizer_revision: 70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+  thinking: true
+  replies:
+    - |-
+      <think>
+      I can consider this command without executing it:
+      ```bash
+      touch MUST_NOT_RUN
+      printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n'
+      ```
+      I will instead create and run a small program.
+      </think>
+      Create hello.py and check its output.
+      ```bash
+      cat > hello.py <<'PY'
+      print('Hello from Qwen ChatML!')
+      PY
+      python3 hello.py
+      ```
+    - |-
+      <think>
+      The observation confirms the program ran; submit the workspace.
+      </think>
+      ```bash
+      printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\nCreated hello.py.\n'
+      ```

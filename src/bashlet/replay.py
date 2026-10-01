@@ -2,13 +2,20 @@
 
 from collections.abc import Sequence
 
-from .models import Encoding, Generation, SamplingParams
+from .models import DecodedReply, Encoding, Generation, JSONValue, SamplingParams
 
 
 class Utf8Encoding:
     """A byte encoding for replay-only CLI demonstrations, without a model."""
 
     identity = "replay/utf8-v1"
+    stop_tokens: tuple[int, ...] = ()
+
+    def describe(self) -> dict[str, JSONValue]:
+        return {"format": self.identity, "thinking": False, "stop_tokens": []}
+
+    def reply(self, tokens: Sequence[int]) -> DecodedReply:
+        return DecodedReply(self.decode(tokens))
 
     def encode(self, text: str) -> list[int]:
         return list(text.encode("utf-8"))
@@ -37,11 +44,33 @@ class ReplayModel:
         encoding: Encoding | None = None,
         identity: str = "replay/prewritten-v1",
         thinking: bool = False,
+        tokenizer: str | None = None,
+        tokenizer_revision: str | None = None,
+        tokenizer_cache_dir: str | None = None,
     ) -> None:
         if isinstance(replies, str) or not all(
             isinstance(reply, str) for reply in replies
         ):
             raise ValueError("Replay replies must be a list of strings")
+        if encoding is not None and tokenizer is not None:
+            raise ValueError("Supply either encoding or tokenizer")
+        if tokenizer is not None:
+            if tokenizer_revision is None:
+                raise ValueError("tokenizer_revision is required with tokenizer")
+            from .encoding import QwenChatMLEncoding
+
+            encoding = QwenChatMLEncoding(
+                tokenizer,
+                revision=tokenizer_revision,
+                thinking=thinking,
+                cache_dir=tokenizer_cache_dir,
+            )
+        elif tokenizer_revision is not None or tokenizer_cache_dir is not None:
+            raise ValueError("Tokenizer options require tokenizer")
+        if thinking and encoding is None:
+            raise ValueError(
+                "Native thinking requires a tokenizer or explicit encoding"
+            )
         self.identity = identity
         self.encoding = encoding if encoding is not None else Utf8Encoding()
         self.thinking = thinking

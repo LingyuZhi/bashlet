@@ -18,9 +18,9 @@
     "feedback_command": "pytest -q tests/test_public.py"
   },
   "replies": [
-    "THOUGHT: Run the public test to locate the bug.\n```bash\npytest -q tests/test_public.py\n```",
-    "THOUGHT: The function returns n instead of twice n.\n```bash\nsed -i 's/return n$/return 2 * n/' package/math.py\n```",
-    "THOUGHT: Verify the repaired implementation.\n```bash\npytest -q tests/test_public.py\n```",
-    "THOUGHT: Submit the repaired package.\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\nFixed doubled(n).\\n'\n```"
+    "Run the public test to locate the bug.\n```bash\npytest -q tests/test_public.py\n```",
+    "The function returns n instead of twice n.\n```bash\nsed -i 's/return n$/return 2 * n/' package/math.py\n```",
+    "Verify the repaired implementation.\n```bash\npytest -q tests/test_public.py\n```",
+    "Submit the repaired package.\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\nFixed doubled(n).\\n'\n```"
   ]
 }

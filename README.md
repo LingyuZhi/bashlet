@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01、02、12–18：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
+当前实现任务 01、02、12–19：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
 
 ## 运行
 
@@ -30,20 +30,20 @@ uv run bashlet show runs/<运行 ID>
 
 `agent` 将工作目录复制到本次运行的 `workspace/`，保留文件内容、权限和符号链接，再让 agent 操作副本；源文件不受修改。若产物根目录位于源目录中，复制时排除该产物目录，避免递归复制运行记录。`agent` 退出码 0 表示显式提交，不做评分。两个执行命令都支持 `--output-dir <目录>`，每次建立独立的运行目录。
 
-实时视图和 `show` 共用一个 rich 滚动渲染器，展示每步的预算、可选行动说明、命令、模型实际看到的观察与格式错误，以及最终状态和评分。观察使用轨迹中保存的 `feedback`，保留原有截断和字面文本。提交或中断时没有后续模型观察，单独展示命令结果。视图只提供观察，不接受人工干预；Ctrl-C 会停止沙箱进程，保存已完成步骤、当前行动、捕获到的输出和工作区，再以 `interrupted` 结束。`show` 只读取运行记录，不重新执行命令。行动说明的展示不依赖 `THOUGHT:`；当前 v2 协议仍要求这个前缀，任务 19 再升级协议并接入原生 thinking。
+实时视图和 `show` 共用一个 rich 滚动渲染器，展示每步的预算、可选行动说明、命令、模型实际看到的观察与格式错误，以及最终状态和评分。观察使用轨迹中保存的 `feedback`，保留原有截断和字面文本。提交或中断时没有后续模型观察，单独展示命令结果。视图只提供观察，不接受人工干预；Ctrl-C 会停止沙箱进程，保存已完成步骤、当前行动、捕获到的输出和工作区，再以 `interrupted` 结束。`show` 只读取运行记录，不重新执行命令。行动说明不依赖 `THOUGHT:`；原生 thinking 默认折叠，`agent`、`task` 和 `show` 都可加 `--show-thinking` 显示完整思考。
 
 目录复制或工作区快照期间也可以中断：复制尚未完成时记录 `Workspace copy interrupted`，不调用模型；命令已完成但快照被打断时，先保留该步的行动和观察，再完成工作区证据的保存。
 
-`task` 接受可信的 Task JSON 对象（字段见下文），模型在 YAML 配置中选择。也支持原有的 `{"task": ..., "replies": [...]}` 请求文件，将 `replies` 作为所选模型的构造参数并写进合并配置；同一次运行只从请求或 `model.replies` 中选一个来源。协议、执行环境、交互预算和采样参数来自版本化配置，不写在请求里。`replies` 是完整回复文本的列表，每条回复先写 `THOUGHT:`，再给出一个 bash 围栏块。命令返回码为 0 且合并输出首行恰好是 `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` 时提交整个工作区，立即结束回合。命令失败、超时和超量输出保留真实观察，后续回复仍可继续执行。旧的 `actions` 请求，以及写在请求里的 `limits` 或 `budget`，会被视为配置错误。
+`task` 接受可信的 Task JSON 对象（字段见下文），模型在 YAML 配置中选择。也支持原有的 `{"task": ..., "replies": [...]}` 请求文件，将 `replies` 作为所选模型的构造参数并写进合并配置；同一次运行只从请求或 `model.replies` 中选一个来源。协议、执行环境、交互预算和采样参数来自版本化配置，不写在请求里。`replies` 是完整回复文本的列表，行动正文只要求一个非空 bash 围栏块，块前说明可选。命令返回码为 0 且合并输出首行恰好是 `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` 时提交整个工作区，立即结束回合。命令失败、超时和超量输出保留真实观察，后续回复仍可继续执行。旧的 `actions` 请求，以及写在请求里的 `limits` 或 `budget`，会被视为配置错误。
 
 ## 实验配置
 
-默认条件在 `configs/bash-block-v2.yaml`，打包时作为内置配置随包安装，分四块：
+默认条件在 `configs/bash-block-v3.yaml`，打包时作为内置配置随包安装，分四块：
 
 - `protocol`：agent 可见的文本、提交标记、观察首尾字符数，以及正常观察、超时、截断和格式错误的模板。字符串是 Jinja2 模板，未定义变量在运行开始前报错。
 - `environment`：执行环境标识 `id`、执行器路径、只读挂载、符号链接、生成的最小 `/etc`、独立 Python 环境和版本、HOME、环境变量，以及单条命令的超时和资源限制。命令默认超时 30 秒，实验层通过配置按任务集统一设置。
 - `budget`：步数、生成 token 数、墙钟时间和连续格式错误上限。
-- `model`：`class` 选择后端类，`sampling` 由 Harness 在每步采样时传入，其余字段作为模型构造参数（包括 `thinking`）。目前 thinking 只被记录，解析由任务 19 实施。
+- `model`：`class` 选择后端类，`sampling` 由 Harness 在每步采样时传入，其余字段作为模型构造参数。回放可用 `tokenizer`、`tokenizer_revision` 和 `thinking` 选择真实 Qwen 编码及思考模式，默认关闭 thinking。
 
 `class` 可写内置类名 `ReplayModel`，或者完整导入路径，例如 `bashlet.replay.ReplayModel` / `bashlet.replay:ReplayModel`。回放模型默认使用 `Utf8Encoding`；`replies` 为预写回复列表，`identity` 可选。自定义类须满足同一个 token 模型和编码接口，采样输出仍接受 Harness 的 token / logprob 校验；构造失败时在创建运行目录前报配置错误。Python 调用者仍可以直接传入 `model=` 对象。
 
@@ -53,7 +53,6 @@ model:
   identity: replay/manual-demo
   replies:
     - |-
-      THOUGHT: Submit the existing workspace.
       ```bash
       printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n'
       ```
@@ -69,7 +68,27 @@ Python 调用使用同一套层叠：`run_experiment(..., config=[path], overrid
 
 每次 `run.json` 写入合并后的完整 `config`，以及 `fingerprints.protocol`、`fingerprints.environment`、`fingerprints.budget`。指纹是对应块的稳定 SHA-256。同一配置得到相同指纹；只改一块时，只有那一块的指纹变化。`model` 不计入这三个指纹，所以更换采样参数或后端名称不会被当成更换了 Harness 或交互预算。协议指纹包含文本、行动与提交规则和观察截断配置，不包含候选、验证或修复分析。修改 agent 可见的协议文本会改变指纹，需要新的协议名。
 
-默认回放模型使用回放专用的 `Utf8Encoding`，以 UTF-8 字节作为 token，编码身份为 `replay/utf8-v1`。Python 调用者可以把学生的真实编码传给 `ReplayModel`，用于构造示范轨迹。
+默认回放模型使用回放专用的 `Utf8Encoding`，以 UTF-8 字节作为 token，编码身份为 `replay/utf8-v1`。使用真实 Qwen tokenizer 时，YAML 可设置：
+
+```yaml
+model:
+  class: ReplayModel
+  tokenizer: Qwen/Qwen3-1.7B
+  tokenizer_revision: 70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+  thinking: false
+```
+
+`tokenizer_revision` 必填，支持 Hub commit、tag 或 branch；运行记录保存实际解析到的 snapshot commit 和文件 SHA-256。`tokenizer` 也可指向本地 tokenizer 目录，此时 revision 由调用者指定，文件哈希仍参与身份。默认先读本地 Hugging Face 缓存，缺少资产时从 HF-Mirror 下载 tokenizer 文件，不下载模型权重；可用 `tokenizer_cache_dir` 指定缓存位置。依赖精确锁定为 transformers 4.57.1、tokenizers 0.22.1 和 huggingface-hub 0.36.0。
+
+`QwenChatMLEncoding` 用官方 `apply_chat_template` 构造首个 prompt，thinking 开关对应 `enable_thinking`；后续只追加 ChatML 观察与同一生成提示。编码提供 `stop_tokens`、真实思考标记的 token ID，以及 `reply(tokens)` 返回的行动正文、思考内容和结束状态。原始 token 不改写；即使官方多轮模板会移除早先的思考，本项目也保留它。调用方式依据 [Qwen 官方说明](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html)和 [Transformers 聊天模板文档](https://huggingface.co/docs/transformers/v4.57.1/chat_templating)。Qwen3.5-4B 的模板与边界校验由任务 04 完成（H-11）。
+
+Python 调用者可传入 `ReplayModel(replies, encoding=QwenChatMLEncoding(name, revision=revision, thinking=True))`，用学生编码构造示范；每步仍标注 `replayed`。原生 thinking 需要真实 tokenizer 或调用者提供的编码。以下演示使用本地缓存的 Qwen3-1.7B，思考里的命令不会执行，第二步行动没有说明：
+
+```bash
+uv run bashlet agent "创建并运行 hello.py，然后提交" --workdir runs/demo-input -c configs/replay-qwen-thinking.yaml
+uv run bashlet show runs/<运行 ID>
+uv run bashlet show runs/<运行 ID> --show-thinking
+```
 
 ## 两层入口与 Task v2
 
@@ -77,7 +96,7 @@ Python 调用使用同一套层叠：`run_experiment(..., config=[path], overrid
 
 `run_experiment` 接收 Task，将 `initial_files` 中的相对路径和文本复制进本次运行的工作区，再调用同一个 Harness。Task 还包含稳定的 `task_id`、指令 `prompt`、执行环境标识 `environment_id`、宿主持有的 `FunctionGrader` 或 `CommandGrader`，以及可选的参考实现、反馈命令和实现路径。默认环境标识为 `linux-bwrap-v1`，须与配置的 `environment.id` 一致。初始文件可以放在任意子目录；文件名、反馈测试和评分方式都由任务数据声明。
 
-bash-block-v2 的系统提示只说明行动格式、shell 规则和提交方式，不含任务集的文件名或格式。任务指令原样成为第一条 user 消息；文件和反馈命令由 Task 声明。MBPP 类 Task 可以在 `initial_files` 中提供 `task.md` 和 `feedback_tests.py`，另一种任务可以使用完全不同的文件布局，协议指纹保持相同。
+bash-block-v3 的系统提示只说明行动格式、shell 规则和提交方式，不含任务集的文件名或格式。任务指令原样成为第一条 user 消息；文件和反馈命令由 Task 声明。MBPP 类 Task 可以在 `initial_files` 中提供 `task.md` 和 `feedback_tests.py`，另一种任务可以使用完全不同的文件布局，协议指纹保持相同。
 
 Python 调用者使用实验入口：
 
@@ -109,9 +128,9 @@ result = run_experiment(
     ),
     model=ReplayModel(
         [
-            "THOUGHT: Implement the function.\n```bash\nprintf 'def solve(n): return n * 2\\n' > solution.py\n```",
-            "THOUGHT: Check the implementation.\n```bash\npython3 feedback_tests.py\n```",
-            "THOUGHT: Submit the workspace.\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```",
+            "Implement the function.\n```bash\nprintf 'def solve(n): return n * 2\\n' > solution.py\n```",
+            "Check the implementation.\n```bash\npython3 feedback_tests.py\n```",
+            "```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```",
         ],
         encoding=Utf8Encoding(),
     ),
@@ -120,15 +139,16 @@ result = run_experiment(
 print(result.status, result.grade)
 ```
 
-## 行动协议 bash-block-v2
+## 行动协议 bash-block-v3
 
-协议完整文本定义在[默认配置](configs/bash-block-v2.yaml)的 `protocol` 块，由 `src/bashlet/protocol.py` 渲染和解析。SFT 示范、学生 rollout 和评测共用它。系统提示、观察模板、历史编码和提交规则连同指纹写入每次运行 `run.json` 的 `protocol` 字段。v2 文本待用户审阅后冻结指纹；冻结后修改协议必须更换版本、更新测试中的指纹并重建示范。
+协议完整文本定义在[默认配置](configs/bash-block-v3.yaml)的 `protocol` 块，由 `src/bashlet/protocol.py` 渲染和解析。SFT 示范、学生 rollout 和评测共用它。系统提示、观察模板、历史编码和提交规则连同指纹写入每次运行 `run.json` 的 `protocol` 字段。v3 文本已交用户审阅，指纹固定为 `90720d09056f51501e9c5761577733296ecaf1c0f6792d8a7f00f1e0f070cb13`；修改协议必须更换版本、更新测试中的指纹并重建示范。v2 的交付记录保留在任务 16，已有示例已迁移；仓库尚无需要重建的 SFT 示范数据。
 
-- 每条回复以非空 `THOUGHT:` 开始，随后恰好一个非空 ```` ```bash ```` 围栏块；命令在隔离工作区执行。每一步都启动新的 shell，`cd`、`export` 和后台进程不跨步保留，工作区文件保留。
-- 只有成功命令的合并输出首行恰好为 `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` 时才提交，其余行原样记为 `submission_text`。标记在 THOUGHT 中、位于后续行或命令返回非零均不提交；硬截断造成的不完整首行也不能作为标记。提交步仍记录实际 bash 命令、观察和工作区变化。
+- 行动正文恰好包含一个非空、闭合的 ```` ```bash ```` 围栏块，块前说明可选，不要求 `THOUGHT:`。命令在隔离工作区执行。每一步都启动新的 shell，`cd`、`export` 和后台进程不跨步保留，工作区文件保留。
+- 开启 thinking 时，只解析最后一个思考结束 token 之后的正文；起始标记可以已经在 prompt 中，采样无需重复。思考里的块不参与行动块计数，原始思考 token 和 logprob 保留在轨迹与上下文中。关闭时，正文可直接给出 bash 块。
+- 只有成功命令的合并输出首行恰好为 `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` 时才提交，其余行原样记为 `submission_text`。标记在行动说明或思考中、位于后续行或命令返回非零均不提交；硬截断造成的不完整首行也不能作为标记。提交步仍记录实际 bash 命令、观察和工作区变化。
 - 观察以 `<returncode>` 和 `<output>` 标签作为下一条 user 消息返回，stdout/stderr 在同一管道中合并以保持写入顺序。输出缺少末尾换行时补一个，标签内容不转义。原始捕获输出另存于 `observation.output`。
 - 超过 `protocol.observation_head_chars + protocol.observation_tail_chars` 时，观察保留首尾（默认各 2000 字符），注明省略的字符数并提示缩小输出范围。`environment.output_bytes` 是捕获字节硬上限，超出部分直接丢弃并标记 `output_truncated`；命令继续执行，回合也继续。超时有独立文案，并终止该步全部进程。
-- 格式错误（没有块、多个块、空块、块未闭合、缺少非空 THOUGHT、因长度上限被截断）不执行，返回 `<format_error>` 说明并计入步数；连续 `max_consecutive_invalid` 次后以 `format_error` 终止，合法命令重置连续计数。
+- 格式错误（没有块、多个块、空块、块未闭合、思考未结束、因长度上限被截断）不执行，返回 `<format_error>` 说明并计入步数；连续 `max_consecutive_invalid` 次后以 `format_error` 终止，合法命令重置连续计数。
 - 历史是只追加的 token 序列：先 `encoding.prompt(system, task.prompt)`，之后每步追加原始生成 token 和 `encoding.continuation(tokens, feedback)`。采样和回放的 token 都不会 decode 后重新 tokenize；观察只在对应行动实际执行后追加。
 
 模型通过 `Model` Adapter 接入（`identity`、`encoding`、`sample(prompt, sampling) -> Generation`）；编码还提供 `encode(text)`，供回放使用。每次 `Generation` 标注 `source`：默认 `sampled`，必须带等长、有限、非正的逐 token `logprobs`；`replayed` 的 `logprobs` 为 `None`。回放 token 不属于 on-policy 样本。返回内容违反约定或无法解码时以 `model_error` 结束，被拒输出保存在 `rejected_generation`，不进入上下文；模型调用本身抛错（服务、网络、Adapter）记为 `infrastructure_error`。测试用可控采样 Adapter 位于 `tests/adapters.py`。
@@ -170,7 +190,7 @@ Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`fo
 
 `runs/<唯一运行 ID>/` 与源码分离，权限为当前用户私有。以下是实验运行的完整产物；`agent` 只保存 Harness 证据和工作区，没有 Task、候选分析或评分：
 
-- `run.json`（schema version 8）：任务身份与材料摘要、执行环境标识、Harness 终止状态、提交文本、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、学生实际看到的反馈、每步工作区清单和当时的预算用量）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、整个提交的内容哈希、清单和评分。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。`show` 也支持没有逐步用量快照的历史记录，以已存的 token 与耗时恢复展示。
+- `run.json`（schema version 9）：任务身份与材料摘要、执行环境标识、Harness 终止状态、提交文本、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份（`encoding_details` 保存 tokenizer 名称、实际 revision、文件和模板哈希、库版本、thinking 与停止标记）、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、原文 `text`、分离后的 `reply`、学生实际看到的反馈、每步工作区清单和当时的预算用量）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、整个提交的内容哈希、清单和评分。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。`show` 也支持没有逐步用量快照或分离后正文的历史记录，以已存的 token、耗时和原文恢复展示。
 - `private/task.json`：完整可信任务配置，包括参考实现和评分材料。
 - `workspace/`：Task 的初始文件及学生操作后的实际文件状态。
 - `blobs/<sha256>`：初始状态及各步中普通文件内容的只读存档；跨路径、跨步骤去重。

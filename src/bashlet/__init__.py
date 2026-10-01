@@ -1,10 +1,12 @@
 """The shared small-experiment interface for bashlet."""
 
+from .encoding import QwenChatMLEncoding
 from .episode import run_episode
 from .experiment import run_experiment
 from .models import (
     Bash,
     CommandGrader,
+    DecodedReply,
     Encoding,
     EpisodeResult,
     ExperimentResult,
@@ -27,6 +29,7 @@ __all__ = [
     "PROTOCOL_VERSION",
     "Bash",
     "CommandGrader",
+    "DecodedReply",
     "Encoding",
     "EpisodeResult",
     "ExperimentResult",
@@ -38,6 +41,7 @@ __all__ = [
     "Limits",
     "Model",
     "Observation",
+    "QwenChatMLEncoding",
     "ReplayModel",
     "SamplingParams",
     "Task",

@@ -86,6 +86,13 @@ class Encoding(Protocol):
     @property
     def identity(self) -> str: ...
 
+    @property
+    def stop_tokens(self) -> tuple[int, ...]: ...
+
+    def describe(self) -> dict[str, JSONValue]:
+        """Recorded tokenizer identity and chat framing conditions."""
+        ...
+
     def encode(self, text: str) -> list[int]:
         """Encode a pre-written reply using this tokenizer."""
         ...
@@ -100,6 +107,17 @@ class Encoding(Protocol):
         ...
 
     def decode(self, tokens: Sequence[int]) -> str: ...
+
+    def reply(self, tokens: Sequence[int]) -> "DecodedReply":
+        """Separate the action body from native thinking and terminal tokens."""
+        ...
+
+
+@dataclass(frozen=True)
+class DecodedReply:
+    action_text: str
+    thinking: str | None = None
+    thinking_complete: bool = True
 
 
 @runtime_checkable
@@ -164,6 +182,7 @@ class ModelCall:
     generation: Generation
     text: str
     duration_seconds: float
+    reply: DecodedReply | None = None
 
 
 type WorkspaceKind = Literal[
@@ -271,6 +290,7 @@ class EpisodeResult:
     isolation: Isolation
     policy: str = ""
     encoding: str = ""
+    encoding_details: dict[str, JSONValue] = field(default_factory=dict)
     budget: InteractionBudget = field(default_factory=InteractionBudget)
     started_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: str = "running"
