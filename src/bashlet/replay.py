@@ -32,13 +32,19 @@ class ReplayModel:
 
     def __init__(
         self,
-        replies: Sequence[str],
+        replies: Sequence[str] = (),
         *,
-        encoding: Encoding,
+        encoding: Encoding | None = None,
         identity: str = "replay/prewritten-v1",
+        thinking: bool = False,
     ) -> None:
+        if isinstance(replies, str) or not all(
+            isinstance(reply, str) for reply in replies
+        ):
+            raise ValueError("Replay replies must be a list of strings")
         self.identity = identity
-        self.encoding = encoding
+        self.encoding = encoding if encoding is not None else Utf8Encoding()
+        self.thinking = thinking
         self._replies = iter(tuple(replies))
 
     def sample(self, prompt: Sequence[int], sampling: SamplingParams) -> Generation:

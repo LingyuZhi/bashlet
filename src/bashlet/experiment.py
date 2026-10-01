@@ -5,12 +5,12 @@ import json
 import keyword
 import shutil
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, fields
 from pathlib import Path
 
 from .analysis import analyze_episode
-from .config import load_config
+from .config import ExperimentConfig, load_config
 from .episode import run_episode, save_record
 from .models import (
     CaseResult,
@@ -82,6 +82,8 @@ def _grade(grader: FunctionGrader, sandbox: Sandbox, run_dir: Path) -> Grade:
             ).encode(),
             readonly=True,
         )
+        if observation.status == "interrupted":
+            raise KeyboardInterrupt
         if observation.status == "infrastructure_error":
             results.append(CaseResult(False, observation.status, observation.stderr))
             break
@@ -111,8 +113,9 @@ def run_experiment(
     task: Task,
     model: Model,
     output_dir: Path = Path("runs"),
-    config: Sequence[Path] = (),
+    config: ExperimentConfig | Sequence[Path] = (),
     overrides: Sequence[str] = (),
+    on_update: Callable[[EpisodeResult], None] | None = None,
 ) -> ExperimentResult:
     """Prepare a Task, run its Episode, and grade only an explicit Submission.
 
@@ -121,7 +124,12 @@ def run_experiment(
     case and compares its JSON result on the host. The returned record and run
     directory are operator-only and never become student observations.
     """
-    condition = load_config(config, overrides)
+    if isinstance(config, ExperimentConfig):
+        if overrides:
+            raise ValueError("Apply overrides before passing a resolved config")
+        condition = config
+    else:
+        condition = load_config(config, overrides)
     _validate_task(task, condition.environment.id)
     task_json = json.dumps(asdict(task), ensure_ascii=True, allow_nan=False, indent=2)
     run_dir = output_dir.resolve() / uuid.uuid4().hex
@@ -149,6 +157,8 @@ def run_experiment(
 
     def save_progress(episode: EpisodeResult) -> None:
         save_record(episode, condition, metadata | {"episode_status": episode.status})
+        if on_update is not None:
+            on_update(episode)
 
     episode = run_episode(
         instruction=task.prompt,
@@ -187,6 +197,9 @@ def run_experiment(
     except OSError as error:
         result.status, result.reason = "infrastructure_error", str(error)
         return result
+    except KeyboardInterrupt:
+        result.status, result.reason = "interrupted", "Grading interrupted"
+        return result
     finally:
         feedback_materials = {
             path: result.initial_workspace_manifest[path]
@@ -203,3 +216,5 @@ def run_experiment(
                 "passed": result.passed,
             },
         )
+        if on_update is not None:
+            on_update(result)

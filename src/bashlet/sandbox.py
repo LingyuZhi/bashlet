@@ -157,6 +157,9 @@ class Sandbox:
                             key.data.extend(chunk[:available])
                             if len(chunk) > available:
                                 output_truncated = True
+            except KeyboardInterrupt:
+                # Keep captured output while the finally block stops all children.
+                outcome = Observation("interrupted")
             finally:
                 # Killing bwrap also kills the namespace's init and detached children.
                 if process.poll() is None:

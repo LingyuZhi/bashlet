@@ -78,8 +78,13 @@ def capture_workspace(workspace: Path, run_dir: Path) -> dict[str, WorkspaceEntr
                 digest = hashlib.sha256(content).hexdigest()
                 target = blobs / digest
                 if not target.exists():
-                    target.write_bytes(content)
-                    target.chmod(0o400)
+                    pending = blobs / f"{digest}.tmp"
+                    try:
+                        pending.write_bytes(content)
+                        pending.chmod(0o400)
+                        pending.replace(target)
+                    finally:
+                        pending.unlink(missing_ok=True)
                 manifest[relative] = WorkspaceEntry(
                     "file", digest, len(content), mode=manifest[relative].mode
                 )

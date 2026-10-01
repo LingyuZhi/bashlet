@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01、02、12–16：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。每个交互回合都由 `model=` 驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
+当前实现任务 01、02、12–16、18：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
 
 ## 运行
 
@@ -11,13 +11,26 @@ A Tiny Coding Agent with On-Policy Self-Distillation。
 
 ```bash
 uv sync --locked
-uv run bashlet examples/sum.json
+uv run bashlet task examples/sum.json
 ```
 
-也可以用 `uv run python -m bashlet examples/sum.json`。终端返回状态和运行目录：退出码 0 表示提交通过，1 表示任务未通过或未提交，2 表示基础设施或配置错误。
-用 `--output-dir <目录>` 指定产物根目录，每次都会建立新的运行目录。
+也可以用 `uv run python -m bashlet task examples/sum.json`。`task` 经过实验层，结束时显示可信评分；退出码 0 表示评分通过，1 表示未通过或未提交，2 表示基础设施或配置错误，130 表示中断。原来的请求文件入口已合并进 `task`，不再直接用文件名作为 CLI 命令。
 
-JSON 请求是可信任务输入，只包含 `task` 和 `replies`。协议、执行环境、交互预算和采样参数来自版本化配置，不写在请求里。`replies` 是完整回复文本的列表，每条回复先写 `THOUGHT:`，再给出一个 bash 围栏块。命令返回码为 0 且合并输出首行恰好是 `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` 时提交整个工作区，立即结束回合。命令失败、超时和超量输出保留真实观察，后续回复仍可继续执行。旧的 `actions` 请求，以及写在请求里的 `limits` 或 `budget`，会被视为配置错误。
+不需要 Task 或评分器时，用一段指令和已有目录直接运行 Harness。下面的回放演示无需 GPU：
+
+```bash
+mkdir -p runs/demo-input
+uv run bashlet agent "创建并运行 hello.py，然后提交" --workdir runs/demo-input -c configs/replay-agent.yaml
+uv run bashlet show runs/<运行 ID>
+```
+
+`agent` 将工作目录复制到本次运行的 `workspace/`，保留文件内容、权限和符号链接，再让 agent 操作副本；源文件不受修改。若产物根目录位于源目录中，复制时排除该产物目录，避免递归复制运行记录。`agent` 退出码 0 表示显式提交，不做评分。两个执行命令都支持 `--output-dir <目录>`，每次建立独立的运行目录。
+
+实时视图和 `show` 共用一个 rich 滚动渲染器，展示每步的预算、可选行动说明、命令、模型实际看到的观察与格式错误，以及最终状态和评分。观察使用轨迹中保存的 `feedback`，保留原有截断和字面文本。提交或中断时没有后续模型观察，单独展示命令结果。视图只提供观察，不接受人工干预；Ctrl-C 会停止沙箱进程，保存已完成步骤、当前行动、捕获到的输出和工作区，再以 `interrupted` 结束。`show` 只读取运行记录，不重新执行命令。行动说明的展示不依赖 `THOUGHT:`；当前 v2 协议仍要求这个前缀，任务 19 再升级协议并接入原生 thinking。
+
+目录复制或工作区快照期间也可以中断：复制尚未完成时记录 `Workspace copy interrupted`，不调用模型；命令已完成但快照被打断时，先保留该步的行动和观察，再完成工作区证据的保存。
+
+`task` 接受可信的 Task JSON 对象（字段见下文），模型在 YAML 配置中选择。也支持原有的 `{"task": ..., "replies": [...]}` 请求文件，将 `replies` 作为所选模型的构造参数并写进合并配置；同一次运行只从请求或 `model.replies` 中选一个来源。协议、执行环境、交互预算和采样参数来自版本化配置，不写在请求里。`replies` 是完整回复文本的列表，每条回复先写 `THOUGHT:`，再给出一个 bash 围栏块。命令返回码为 0 且合并输出首行恰好是 `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` 时提交整个工作区，立即结束回合。命令失败、超时和超量输出保留真实观察，后续回复仍可继续执行。旧的 `actions` 请求，以及写在请求里的 `limits` 或 `budget`，会被视为配置错误。
 
 ## 实验配置
 
@@ -26,19 +39,33 @@ JSON 请求是可信任务输入，只包含 `task` 和 `replies`。协议、执
 - `protocol`：agent 可见的文本、提交标记、观察首尾字符数，以及正常观察、超时、截断和格式错误的模板。字符串是 Jinja2 模板，未定义变量在运行开始前报错。
 - `environment`：执行环境标识 `id`、执行器路径、只读挂载、符号链接、`PATH`/`LANG`，以及单条命令的超时和资源限制。
 - `budget`：步数、生成 token 数、墙钟时间和连续格式错误上限。
-- `model`：采样参数、后端名称和 thinking 开关。本切片仍由调用方传入模型对象；thinking 只被记录，解析留到后续协议。
+- `model`：`class` 选择后端类，`sampling` 由 Harness 在每步采样时传入，其余字段作为模型构造参数（包括 `thinking`）。目前 thinking 只被记录，解析由任务 19 实施。
+
+`class` 可写内置类名 `ReplayModel`，或者完整导入路径，例如 `bashlet.replay.ReplayModel` / `bashlet.replay:ReplayModel`。回放模型默认使用 `Utf8Encoding`；`replies` 为预写回复列表，`identity` 可选。自定义类须满足同一个 token 模型和编码接口，采样输出仍接受 Harness 的 token / logprob 校验；构造失败时在创建运行目录前报配置错误。Python 调用者仍可以直接传入 `model=` 对象。
+
+```yaml
+model:
+  class: ReplayModel
+  identity: replay/manual-demo
+  replies:
+    - |-
+      THOUGHT: Submit the existing workspace.
+      ```bash
+      printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n'
+      ```
+```
 
 可以叠加多个文件，后面的覆盖前面的；`--set key=value` 在所有文件之后覆盖单项，值按 YAML 解析。未知键、类型错误和非正的限额都会在建立运行目录之前失败。
 
 ```bash
-uv run bashlet examples/sum.json --config tighter.yaml --set budget.max_steps=4
+uv run bashlet task examples/sum.json -c tighter.yaml --set budget.max_steps=4
 ```
 
 Python 调用使用同一套层叠：`run_experiment(..., config=[path], overrides=["budget.max_steps=4"])`。
 
 每次 `run.json` 写入合并后的完整 `config`，以及 `fingerprints.protocol`、`fingerprints.environment`、`fingerprints.budget`。指纹是对应块的稳定 SHA-256。同一配置得到相同指纹；只改一块时，只有那一块的指纹变化。`model` 不计入这三个指纹，所以更换采样参数或后端名称不会被当成更换了 Harness 或交互预算。协议指纹包含文本、行动与提交规则和观察截断配置，不包含候选、验证或修复分析。修改 agent 可见的协议文本会改变指纹，需要新的协议名。
 
-请求文件 CLI 使用回放专用的 `Utf8Encoding`，以 UTF-8 字节作为 token，编码身份为 `replay/utf8-v1`。Python 调用者可以把学生的真实编码传给 `ReplayModel`，用于构造示范轨迹。
+默认回放模型使用回放专用的 `Utf8Encoding`，以 UTF-8 字节作为 token，编码身份为 `replay/utf8-v1`。Python 调用者可以把学生的真实编码传给 `ReplayModel`，用于构造示范轨迹。
 
 ## 两层入口与 Task v2
 
@@ -124,9 +151,9 @@ Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`fo
 
 ## 运行产物
 
-`runs/<唯一运行 ID>/` 与源码分离，权限为当前用户私有：
+`runs/<唯一运行 ID>/` 与源码分离，权限为当前用户私有。以下是实验运行的完整产物；`agent` 只保存 Harness 证据和工作区，没有 Task、候选分析或评分：
 
-- `run.json`（schema version 7）：任务身份与材料摘要、执行环境标识、Harness 终止状态、提交文本、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、学生实际看到的反馈和每步工作区清单）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、整个提交的内容哈希、清单和评分。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。
+- `run.json`（schema version 8）：任务身份与材料摘要、执行环境标识、Harness 终止状态、提交文本、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、学生实际看到的反馈、每步工作区清单和当时的预算用量）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、整个提交的内容哈希、清单和评分。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。`show` 也支持没有逐步用量快照的历史记录，以已存的 token 与耗时恢复展示。
 - `private/task.json`：完整可信任务配置，包括参考实现和评分材料。
 - `workspace/`：Task 的初始文件及学生操作后的实际文件状态。
 - `blobs/<sha256>`：初始状态及各步中普通文件内容的只读存档；跨路径、跨步骤去重。

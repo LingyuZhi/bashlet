@@ -1,0 +1,17 @@
+# No GPU or model service is needed; actions still execute in the real sandbox.
+model:
+  class: ReplayModel
+  replies:
+    - |-
+      THOUGHT: Create and run a small Python program.
+      ```bash
+      cat > hello.py <<'PY'
+      print('Hello from bashlet!')
+      PY
+      python3 hello.py
+      ```
+    - |-
+      THOUGHT: Submit the workspace.
+      ```bash
+      printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\nCreated hello.py.\n'
+      ```

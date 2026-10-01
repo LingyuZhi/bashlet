@@ -12,7 +12,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from . import protocol
-from .config import ExperimentConfig, load_config
+from .config import ExperimentConfig, config_record, load_config
 from .models import (
     EpisodeResult,
     Generation,
@@ -73,6 +73,8 @@ print(json.dumps({{'checks': checks, 'python': sys.version}}))
         )
     )
     observation = probe.execute(probe_dir, ["/usr/bin/python3", "-I", "-c", code])
+    if observation.status == "interrupted":
+        raise KeyboardInterrupt
     if observation.status != "ok":
         return Isolation(False, reason=f"{observation.status}: {observation.stderr}")
     try:
@@ -170,8 +172,8 @@ def save_record(
     record = (
         asdict(result)
         | {
-            "schema_version": 7,
-            "config": asdict(condition),
+            "schema_version": 8,
+            "config": config_record(condition),
             "fingerprints": protocol.fingerprints(condition),
             "protocol": protocol.describe(condition.protocol),
             "sampling": asdict(condition.model.sampling),
@@ -230,9 +232,10 @@ def run_episode(
         else:
             on_update(result)
 
-    save()
     started: float | None = None
+    recording_step: int | None = None
     try:
+        save()
         result.initial_workspace_manifest = capture_workspace(workspace, run_dir)
         result.isolation = _verify_isolation(sandbox, run_dir)
         if not result.isolation.passed:
@@ -242,9 +245,17 @@ def run_episode(
         started = time.monotonic()
 
         def record_step(step: Step) -> None:
-            result.trajectory.append(
-                replace(step, workspace_manifest=capture_workspace(workspace, run_dir))
+            nonlocal recording_step
+            result.usage.elapsed_seconds = time.monotonic() - started
+            recording_step = len(result.trajectory)
+            # Preserve action/model/output evidence before interruptible file I/O.
+            result.trajectory.append(replace(step, usage=replace(result.usage)))
+            manifest = capture_workspace(workspace, run_dir)
+            result.usage.elapsed_seconds = time.monotonic() - started
+            result.trajectory[recording_step] = replace(
+                step, workspace_manifest=manifest, usage=replace(result.usage)
             )
+            recording_step = None
 
         context = result.context_tokens
         context.extend(
@@ -299,6 +310,10 @@ def run_episode(
                     ["/bin/bash", "--noprofile", "--norc", "-c", action.command],
                     merge_output=True,
                 )
+                if observation.status == "interrupted":
+                    record_step(Step(action, observation, call))
+                    result.status, result.reason = "interrupted", "Episode interrupted"
+                    return result
                 if observation.status == "infrastructure_error":
                     record_step(Step(action, observation, call))
                     result.status = "infrastructure_error"
@@ -326,6 +341,17 @@ def run_episode(
     except KeyboardInterrupt:
         result.status = "interrupted"
         result.reason = "Episode interrupted"
+        if recording_step is not None:
+            manifest = capture_workspace(workspace, run_dir)
+            if started is not None:
+                result.usage.elapsed_seconds = time.monotonic() - started
+            result.trajectory[recording_step] = replace(
+                result.trajectory[recording_step],
+                workspace_manifest=manifest,
+                usage=replace(result.usage),
+            )
+        elif started is None:
+            result.initial_workspace_manifest = capture_workspace(workspace, run_dir)
         return result
     finally:
         if started is not None:

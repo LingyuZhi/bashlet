@@ -1,24 +1,42 @@
-"""Run a trusted replay experiment request through the shared interface."""
+"""Watch one isolated agent episode or experiment, or replay a saved run."""
 
 import argparse
 import json
+import shutil
+import signal
+import uuid
+from dataclasses import asdict, replace
 from pathlib import Path
+from types import FrameType
 
-from . import (
+from rich.console import Console
+
+from .config import load_config, load_model
+from .episode import run_episode, save_record
+from .experiment import run_experiment
+from .models import (
+    EpisodeResult,
+    ExperimentResult,
     FunctionGrader,
     GradingCase,
-    ReplayModel,
+    Isolation,
     Task,
-    Utf8Encoding,
-    run_experiment,
 )
+from .sandbox import Sandbox
+from .view import RunView
+from .workspace import capture_workspace
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run one isolated bashlet experiment")
-    parser.add_argument("request", type=Path, help="Trusted task/replies JSON file")
+def _interrupt(signum: int, frame: FrameType | None) -> None:
+    # The first Ctrl-C cancels work; allow cleanup and saving to finish.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    raise KeyboardInterrupt
+
+
+def _execution_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("runs"))
     parser.add_argument(
+        "-c",
         "--config",
         action="append",
         type=Path,
@@ -31,53 +49,160 @@ def main() -> None:
         dest="overrides",
         default=[],
         metavar="key=value",
-        help="Override one merged config value; applied after --config",
+        help="Override a config value after all --config files",
     )
-    options = parser.parse_args()
+
+
+def _run_agent(options: argparse.Namespace, view: RunView) -> EpisodeResult:
+    condition = load_config(options.config, options.overrides)
+    model = load_model(condition.model)
+    source = options.workdir.resolve()
+    if not source.is_dir():
+        raise ValueError(f"Work directory {source} must be a directory")
+    output_dir = options.output_dir.resolve()
+    run_dir = output_dir / uuid.uuid4().hex
+    run_dir.mkdir(parents=True, mode=0o700)
+    # A run under its source must never recursively copy itself.
+    excluded = output_dir if output_dir != source else run_dir
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        return {name for name in names if Path(directory) / name == excluded}
+
+    workspace = run_dir / "workspace"
+
+    def progress(result: EpisodeResult) -> None:
+        save_record(result, condition, {"instruction": options.instruction})
+        view.update(asdict(result))
+
     try:
-        request = json.loads(options.request.read_text())
-        if "limits" in request or "budget" in request:
-            raise ValueError(
-                "Put execution limits and the interaction budget in the experiment "
-                "config, not the request"
-            )
-        task_data = request["task"]
-        grader_data = task_data.pop("grader")
-        cases = tuple(
-            GradingCase(args=tuple(case["args"]), expected=case["expected"])
-            for case in grader_data.pop("cases")
+        shutil.copytree(source, workspace, symlinks=True, ignore=ignore)
+    except (KeyboardInterrupt, OSError) as error:
+        workspace.mkdir(exist_ok=True)
+        result = EpisodeResult(
+            run_dir=run_dir,
+            workspace=workspace,
+            limits=Sandbox(condition.environment).limits,
+            isolation=Isolation(False, reason="Workspace preparation did not finish"),
+            policy=model.identity,
+            encoding=model.encoding.identity,
+            budget=condition.budget,
+            status="interrupted"
+            if isinstance(error, KeyboardInterrupt)
+            else "infrastructure_error",
+            reason="Workspace copy interrupted"
+            if isinstance(error, KeyboardInterrupt)
+            else str(error),
+            initial_workspace_manifest=capture_workspace(workspace, run_dir),
         )
-        task = Task(**task_data, grader=FunctionGrader(**grader_data, cases=cases))
-        if "actions" in request:
-            raise ValueError("Use replay replies instead of actions")
-        replies = request["replies"]
-        if not isinstance(replies, list) or not all(
-            isinstance(reply, str) for reply in replies
-        ):
-            raise ValueError("Replay replies must be a list of strings")
-        result = run_experiment(
-            task=task,
-            model=ReplayModel(replies, encoding=Utf8Encoding()),
-            output_dir=options.output_dir,
-            config=options.config,
-            overrides=options.overrides,
+        progress(result)
+        return result
+
+    return run_episode(
+        instruction=options.instruction,
+        workspace=workspace,
+        model=model,
+        config=condition,
+        run_dir=run_dir,
+        on_update=progress,
+    )
+
+
+def _run_task(options: argparse.Namespace, view: RunView) -> ExperimentResult:
+    data = json.loads(options.task.read_text())
+    if not isinstance(data, dict):
+        raise ValueError("Task file must contain a JSON object")
+    condition = load_config(options.config, options.overrides)
+    if "task" in data:
+        unknown = set(data) - {"task", "replies"}
+        if unknown:
+            raise ValueError(f"Unknown request fields: {', '.join(sorted(unknown))}")
+        if "replies" in data:
+            replies = data["replies"]
+            if not isinstance(replies, list) or not all(
+                isinstance(reply, str) for reply in replies
+            ):
+                raise ValueError("Replay replies must be a list of strings")
+            if "replies" in condition.model.parameters:
+                raise ValueError(
+                    "Supply replies in either the request or model.replies"
+                )
+            condition = replace(
+                condition,
+                model=replace(
+                    condition.model,
+                    parameters=condition.model.parameters | {"replies": replies},
+                ),
+            )
+        data = data["task"]
+    if not isinstance(data, dict):
+        raise ValueError("task must be a JSON object")
+    task_data = dict(data)
+    grader_data = dict(task_data.pop("grader"))
+    cases = tuple(
+        GradingCase(args=tuple(case["args"]), expected=case["expected"])
+        for case in grader_data.pop("cases")
+    )
+    if "implementation_paths" in task_data:
+        task_data["implementation_paths"] = tuple(task_data["implementation_paths"])
+    task = Task(**task_data, grader=FunctionGrader(**grader_data, cases=cases))
+    model = load_model(condition.model)
+    return run_experiment(
+        task=task,
+        model=model,
+        output_dir=options.output_dir,
+        config=condition,
+        on_update=lambda result: view.update(asdict(result)),
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Watch an isolated bashlet agent")
+    commands = parser.add_subparsers(dest="command", required=True)
+    agent = commands.add_parser(
+        "agent", help="Run the Harness on a copy of a directory"
+    )
+    agent.add_argument("instruction")
+    agent.add_argument("--workdir", type=Path, default=Path.cwd())
+    _execution_options(agent)
+    task = commands.add_parser(
+        "task", help="Run one trusted task and display its grade"
+    )
+    task.add_argument(
+        "task", type=Path, help="Task JSON or a legacy task/replies request"
+    )
+    _execution_options(task)
+    show = commands.add_parser("show", help="Replay a saved run without executing it")
+    show.add_argument("run_dir", type=Path)
+    options = parser.parse_args()
+    view = RunView(Console())
+    previous_handler = signal.signal(signal.SIGINT, _interrupt)
+    try:
+        if options.command == "show":
+            record = json.loads((options.run_dir / "run.json").read_text())
+            if not isinstance(record, dict):
+                raise ValueError("run.json must contain a JSON object")
+            view.finish(record)
+            return
+        result = (
+            _run_agent(options, view)
+            if options.command == "agent"
+            else _run_task(options, view)
         )
     except (OSError, ValueError, TypeError, KeyError) as error:
         parser.error(str(error))
-    print(
-        json.dumps(
-            {
-                "run_dir": str(result.run_dir),
-                "status": result.status,
-                "passed": result.grade.passed if result.grade is not None else None,
-                "reason": result.reason,
-            },
-            ensure_ascii=False,
-        )
-    )
+    except KeyboardInterrupt:
+        raise SystemExit(130) from None
+    finally:
+        signal.signal(signal.SIGINT, previous_handler)
+    view.finish(asdict(result))
+    if result.status == "interrupted":
+        raise SystemExit(130)
     if result.status == "infrastructure_error":
         raise SystemExit(2)
-    if result.grade is None or not result.grade.passed:
+    if isinstance(result, ExperimentResult):
+        if not result.passed:
+            raise SystemExit(1)
+    elif result.status != "submitted":
         raise SystemExit(1)
 
 

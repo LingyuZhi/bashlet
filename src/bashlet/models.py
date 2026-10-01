@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 type JSONValue = (
     None | bool | int | float | str | list[JSONValue] | dict[str, JSONValue]
@@ -71,6 +71,7 @@ class Generation:
     source: Literal["sampled", "replayed"] = "sampled"
 
 
+@runtime_checkable
 class Encoding(Protocol):
     """Tokenizer and chat template that frame the student's context."""
 
@@ -93,6 +94,7 @@ class Encoding(Protocol):
     def decode(self, tokens: Sequence[int]) -> str: ...
 
 
+@runtime_checkable
 class Model(Protocol):
     """A sampling or replay model behind a token-based Adapter."""
 
@@ -125,7 +127,9 @@ class Limits:
 
 @dataclass(frozen=True)
 class Observation:
-    status: Literal["ok", "command_failed", "timeout", "infrastructure_error"]
+    status: Literal[
+        "ok", "command_failed", "timeout", "interrupted", "infrastructure_error"
+    ]
     stdout: str = ""
     stderr: str = ""
     output: str = ""
@@ -190,6 +194,7 @@ class Step:
     candidate: int | None = None
     verification: bool = False
     workspace_manifest: dict[str, WorkspaceEntry] = field(default_factory=dict)
+    usage: "Usage | None" = None
 
 
 @dataclass(frozen=True)

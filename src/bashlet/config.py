@@ -1,8 +1,9 @@
 """Versioned experimental conditions: protocol, environment, budget, and model."""
 
+import importlib
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import asdict, dataclass, fields, is_dataclass
 from pathlib import Path
 from types import UnionType
 from typing import Any, cast, get_args, get_origin, get_type_hints
@@ -10,7 +11,8 @@ from typing import Any, cast, get_args, get_origin, get_type_hints
 import yaml
 from jinja2 import Environment, StrictUndefined, TemplateError
 
-from .models import InteractionBudget, SamplingParams
+from .models import Encoding, InteractionBudget, Model, SamplingParams
+from .replay import ReplayModel
 
 _DEFAULT_PATH = Path(__file__).with_name("configs") / "bash-block-v2.yaml"
 _JINJA = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
@@ -61,11 +63,11 @@ class EnvironmentConfig:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Sampling condition recorded with a run. The caller still supplies the model."""
+    """Model class and constructor arguments, separate from Harness sampling."""
 
-    backend: str
+    class_name: str
     sampling: SamplingParams
-    thinking: bool
+    parameters: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,38 @@ class ExperimentConfig:
     environment: EnvironmentConfig
     budget: InteractionBudget
     model: ModelConfig
+
+
+def config_record(config: ExperimentConfig) -> dict[str, Any]:
+    """Record the resolved condition using the same keys as its YAML input."""
+    return asdict(config) | {
+        "model": {
+            "class": config.model.class_name,
+            "sampling": asdict(config.model.sampling),
+            **config.model.parameters,
+        }
+    }
+
+
+def load_model(config: ModelConfig) -> Model:
+    """Instantiate a configured class without coupling the Harness to backends."""
+    name = config.class_name
+    try:
+        if name == "ReplayModel":
+            factory = ReplayModel
+        else:
+            module_name, separator, class_name = name.replace(":", ".").rpartition(".")
+            if not separator:
+                raise ValueError("Use ReplayModel or a fully qualified model class")
+            factory = getattr(importlib.import_module(module_name), class_name)
+        if not isinstance(factory, type):
+            raise ValueError(f"{name!r} is not a model class")
+        model = factory(**config.parameters)
+        if not isinstance(model, Model) or not isinstance(model.encoding, Encoding):
+            raise ValueError("The model must provide identity, encoding and sample")
+        return model
+    except Exception as error:
+        raise ValueError(f"Cannot construct model {name!r}: {error}") from error
 
 
 def load_config(
@@ -138,7 +172,8 @@ def _apply_override(config: dict[str, Any], expression: str) -> None:
         if not isinstance(node, dict) or not isinstance(node.get(part), dict):
             raise ValueError(f"Unknown configuration key {key!r}")
         node = node[part]
-    if not isinstance(node, dict) or parts[-1] not in node:
+    constructor_key = len(parts) >= 2 and parts[0] == "model" and parts[1] != "sampling"
+    if not isinstance(node, dict) or (parts[-1] not in node and not constructor_key):
         raise ValueError(f"Unknown configuration key {key!r}")
     node[parts[-1]] = value
 
@@ -146,6 +181,17 @@ def _apply_override(config: dict[str, Any], expression: str) -> None:
 def _bind(cls: type[Any], data: object, path: str) -> Any:
     if not isinstance(data, dict):
         raise ValueError(f"{path} must be a mapping")
+    if cls is ModelConfig:
+        parameters = dict(data)
+        name = _convert(str, parameters.pop("class", None), "model.class")
+        if not name.strip():
+            raise ValueError("model.class must not be empty")
+        sampling = _bind(
+            SamplingParams, parameters.pop("sampling", None), "model.sampling"
+        )
+        if "thinking" in parameters:
+            _convert(bool, parameters["thinking"], "model.thinking")
+        return ModelConfig(name, sampling, parameters)
     hints = get_type_hints(cls)
     known = set(hints)
     unknown = sorted(set(data) - known)

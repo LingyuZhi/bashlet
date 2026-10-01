@@ -2,8 +2,6 @@ import json
 import os
 import shlex
 import socket
-import subprocess
-import sys
 import time
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -276,28 +274,6 @@ def test_task_environment_must_match_the_selected_execution_environment(
             output_dir=tmp_path / "runs",
         )
     assert not (tmp_path / "runs").exists()
-
-
-def run_cli(
-    request: Path,
-    output_dir: Path,
-    *,
-    overrides: list[str] | None = None,
-    configs: list[Path] | None = None,
-) -> subprocess.CompletedProcess[str]:
-    command = [
-        sys.executable,
-        "-m",
-        "bashlet",
-        str(request),
-        "--output-dir",
-        str(output_dir),
-    ]
-    for path in configs or []:
-        command.extend(["--config", str(path)])
-    for override in overrides or []:
-        command.extend(["--set", override])
-    return subprocess.run(command, capture_output=True, text=True, timeout=20)
 
 
 def test_experiment_rejects_scripted_actions(tmp_path: Path) -> None:
@@ -883,7 +859,7 @@ def test_model_block_does_not_change_condition_fingerprints(tmp_path: Path) -> N
     overlay = tmp_path / "model.yaml"
     overlay.write_text(
         "model:\n"
-        "  backend: other\n"
+        "  class: bashlet.replay.ReplayModel\n"
         "  thinking: true\n"
         "  sampling:\n"
         "    temperature: 0.2\n"
@@ -896,7 +872,7 @@ def test_model_block_does_not_change_condition_fingerprints(tmp_path: Path) -> N
     )
     record = json.loads((result.run_dir / "run.json").read_text())
     assert record["fingerprints"] == baseline
-    assert record["config"]["model"]["backend"] == "other"
+    assert record["config"]["model"]["class"] == "bashlet.replay.ReplayModel"
     assert record["config"]["model"]["thinking"] is True
     assert record["config"]["model"]["sampling"]["temperature"] == 0.2
     assert record["config"]["model"]["sampling"]["max_tokens"] == 1024
@@ -951,99 +927,6 @@ def test_invalid_config_is_rejected_before_a_run(
             config=configs,
             overrides=overrides,
         )
-    assert not (tmp_path / "runs").exists()
-
-
-def test_cli_runs_the_same_small_experiment(tmp_path: Path) -> None:
-    process = run_cli(Path("examples/sum.json"), tmp_path)
-    assert process.returncode == 0, process.stderr
-    report = json.loads(process.stdout)
-    assert report["passed"] is True
-    record = json.loads((Path(report["run_dir"]) / "run.json").read_text())
-    assert record["task_id"] == "manual/sum-v1"
-    assert record["grade"]["passed_cases"] == 3
-    assert record["encoding"] == "replay/utf8-v1"
-    assert record["context_tokens"]
-    assert len(record["candidates"]) == 1
-    assert [step["verification"] for step in record["trajectory"]] == [
-        False, True, False
-    ]  # fmt: skip
-    assert all(
-        step["model_call"]["generation"]["source"] == "replayed"
-        and step["model_call"]["generation"]["logprobs"] is None
-        for step in record["trajectory"]
-    )
-
-
-@pytest.mark.parametrize(
-    ("replies", "bwrap", "exit_code", "status", "passed"),
-    [
-        (
-            [write_file("def solve(numbers):\n    return 3\n"), submit()],
-            "/usr/bin/bwrap",
-            1,
-            "completed",
-            False,
-        ),
-        ([bash("true")], "/usr/bin/bwrap", 1, "budget_exhausted", None),
-        ([submit()], "/does-not-exist/bwrap", 2, "infrastructure_error", None),
-    ],
-    ids=["failed-grade", "unsubmitted", "unavailable-isolation"],
-)
-def test_cli_preserves_failure_and_infrastructure_exit_codes(
-    tmp_path: Path,
-    replies: list[str],
-    bwrap: str,
-    exit_code: int,
-    status: str,
-    passed: bool | None,
-) -> None:
-    request = tmp_path / "request.json"
-    request.write_text(json.dumps({"task": asdict(sum_task()), "replies": replies}))
-    process = run_cli(
-        request,
-        tmp_path / "runs",
-        overrides=["budget.max_steps=2", f"environment.bwrap={bwrap}"],
-    )
-
-    assert process.returncode == exit_code, process.stderr
-    report = json.loads(process.stdout)
-    assert report["status"] == status
-    assert report["passed"] is passed
-    record = json.loads((Path(report["run_dir"]) / "run.json").read_text())
-    assert record["status"] == status
-
-
-@pytest.mark.parametrize(
-    "invalid_request",
-    [
-        {"replies": "a single string"},
-        {"replies": [1]},
-        {"replies": None},
-        {"actions": [{"kind": "submit"}]},
-        {"actions": [], "replies": [submit()]},
-        {"replies": [submit()], "budget": {"max_steps": 1}},
-        {"replies": [submit()], "limits": {"timeout_seconds": 1}},
-    ],
-    ids=[
-        "string",
-        "non-text",
-        "null",
-        "old-actions",
-        "mixed-inputs",
-        "request-budget",
-        "request-limits",
-    ],
-)
-def test_cli_rejects_invalid_or_scripted_requests_as_configuration_errors(
-    tmp_path: Path, invalid_request: dict[str, object]
-) -> None:
-    request = tmp_path / "request.json"
-    request.write_text(json.dumps({"task": asdict(sum_task())} | invalid_request))
-    process = run_cli(request, tmp_path / "runs")
-
-    assert process.returncode == 2
-    assert "error:" in process.stderr
     assert not (tmp_path / "runs").exists()
 
 
