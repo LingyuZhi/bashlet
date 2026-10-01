@@ -831,11 +831,13 @@ def test_student_never_sees_reference_grading_material_or_credentials(
 ) -> None:
     credential = "svc-credential-5d2e91"
     monkeypatch.setenv("PYTRIO_API_KEY", credential)
+    base = sum_task()
+    assert isinstance(base.grader, FunctionGrader)
     task = replace(
-        sum_task(),
+        base,
         reference_implementation="# reference-marker-8c41\n" + FIXED,
         grader=replace(
-            sum_task().grader,
+            base.grader,
             cases=(GradingCase(args=([424242, 7],), expected=424249),),
         ),
     )
@@ -929,14 +931,16 @@ def test_only_unmodified_feedback_runs_verify_and_reverts_reuse_candidates(
 def test_candidate_analysis_uses_task_declarations_after_the_episode(
     tmp_path: Path,
 ) -> None:
+    base = sum_task()
+    assert isinstance(base.grader, FunctionGrader)
     task = replace(
-        sum_task(),
+        base,
         implementation_paths=("answer.py",),
         feedback_command="python3 -B feedback_tests.py",
         initial_files={
             "feedback_tests.py": "from answer import solve\nassert solve([4]) == 4\n",
         },
-        grader=replace(sum_task().grader, module_path="answer.py"),
+        grader=replace(base.grader, module_path="answer.py"),
     )
     replies = [
         bash(f"cat > answer.py <<'PY'\n{WRONG}PY"),

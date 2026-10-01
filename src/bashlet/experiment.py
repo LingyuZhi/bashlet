@@ -14,6 +14,7 @@ from .config import ExperimentConfig, load_config
 from .episode import run_episode, save_record
 from .models import (
     CaseResult,
+    CommandGrader,
     EpisodeResult,
     ExperimentResult,
     FunctionGrader,
@@ -41,38 +42,77 @@ print(json.dumps(answer, allow_nan=False))
 
 
 def _validate_task(task: Task, environment_id: str) -> None:
-    if not task.task_id or not task.grader.cases:
-        raise ValueError("A task identity and at least one grading case are required")
+    if not task.task_id:
+        raise ValueError("A task identity is required")
     if task.environment_id != environment_id:
         raise ValueError(
             f"Task environment {task.environment_id!r} "
             f"does not match {environment_id!r}"
         )
-    validate_workspace_path(task.grader.module_path)
-    if not task.grader.module_path.endswith(".py"):
-        raise ValueError("The grading module must be a Python file")
-    function = task.grader.function_name
-    if not function.isidentifier() or keyword.iskeyword(function):
-        raise ValueError("The task function must be a Python identifier")
-    for path, content in task.initial_files.items():
-        validate_workspace_path(path)
-        if not isinstance(content, str):
-            raise ValueError(f"Initial file {path!r} must contain text")
-        parents = Path(path).parents
-        if any(str(parent) in task.initial_files for parent in parents):
-            raise ValueError(f"Conflicting initial file path {path!r}")
+    grader = task.grader
+    if isinstance(grader, FunctionGrader):
+        if not grader.cases:
+            raise ValueError("At least one grading case is required")
+        validate_workspace_path(grader.module_path)
+        if not grader.module_path.endswith(".py"):
+            raise ValueError("The grading module must be a Python file")
+        function = grader.function_name
+        if not function.isidentifier() or keyword.iskeyword(function):
+            raise ValueError("The task function must be a Python identifier")
+    else:
+        if not grader.command.strip() or "\x00" in grader.command:
+            raise ValueError("The grading command must be non-empty and contain no NUL")
+        _validate_files(grader.hidden_files)
+    _validate_files(task.initial_files)
     for path in task.implementation_paths:
         validate_workspace_path(path)
 
 
-def _grade(grader: FunctionGrader, sandbox: Sandbox, run_dir: Path) -> Grade:
+def _validate_files(files: dict[str, str]) -> None:
+    for path, content in files.items():
+        validate_workspace_path(path)
+        if not isinstance(content, str):
+            raise ValueError(f"Task file {path!r} must contain text")
+        parents = Path(path).parents
+        if any(str(parent) in files for parent in parents):
+            raise ValueError(f"Conflicting task file path {path!r}")
+
+
+def _grade(
+    grader: FunctionGrader | CommandGrader, sandbox: Sandbox, run_dir: Path
+) -> Grade:
     workspace = run_dir / "private" / "grading-workspace"
     shutil.copytree(run_dir / "submission", workspace)
+    if isinstance(grader, CommandGrader):
+        try:
+            for path, content in grader.hidden_files.items():
+                destination = workspace / path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.unlink(missing_ok=True)
+                destination.write_text(content)
+        except (FileExistsError, IsADirectoryError, NotADirectoryError) as error:
+            return Grade(
+                False, 0, 1, (CaseResult(False, "grading_path_conflict", str(error)),)
+            )
+        observation = sandbox.execute(
+            workspace,
+            ["/bin/bash", "--noprofile", "--norc", "-c", grader.command],
+            readonly=True,
+        )
+        if observation.status == "interrupted":
+            raise KeyboardInterrupt
+        passed = observation.status == "ok"
+        command_result = CaseResult(
+            passed,
+            "passed" if passed else observation.status,
+            observation.stderr if observation.status == "infrastructure_error" else "",
+        )
+        return Grade(passed, int(passed), 1, (command_result,))
     results: list[CaseResult] = []
     for case in grader.cases:
         observation = sandbox.execute(
             workspace,
-            ["/usr/bin/python3", "-I", "-B", "-c", _GRADING_DRIVER],
+            [sandbox.python, "-I", "-B", "-c", _GRADING_DRIVER],
             stdin=json.dumps(
                 {
                     "module": grader.module_path,
@@ -120,8 +160,9 @@ def run_experiment(
     """Prepare a Task, run its Episode, and grade only an explicit Submission.
 
     Initial files and instruction are public; the grader and reference remain
-    host-only. Grading executes a read-only snapshot copy in a fresh sandbox per
-    case and compares its JSON result on the host. The returned record and run
+    host-only. Grading uses a read-only snapshot copy in fresh sandboxes. Function
+    results are compared on the host; test commands pass on exit code zero and
+    share a process with untrusted student code. The returned record and run
     directory are operator-only and never become student observations.
     """
     if isinstance(config, ExperimentConfig):
@@ -131,6 +172,11 @@ def run_experiment(
     else:
         condition = load_config(config, overrides)
     _validate_task(task, condition.environment.id)
+    grading_protocol = (
+        "test-command-v1"
+        if isinstance(task.grader, CommandGrader)
+        else "json-function-v1"
+    )
     task_json = json.dumps(asdict(task), ensure_ascii=True, allow_nan=False, indent=2)
     run_dir = output_dir.resolve() / uuid.uuid4().hex
     run_dir.mkdir(parents=True, mode=0o700)
@@ -147,7 +193,7 @@ def run_experiment(
         "task_id": task.task_id,
         "task_sha256": hashlib.sha256(task_json.encode()).hexdigest(),
         "environment_id": task.environment_id,
-        "grading_protocol": "json-function-v1",
+        "grading_protocol": grading_protocol,
         "candidates": [],
         "repair_attempts": [],
         "submission": None,
@@ -212,7 +258,7 @@ def run_experiment(
             result,
             condition,
             {
-                "grading_protocol": "json-function-v1",
+                "grading_protocol": grading_protocol,
                 "passed": result.passed,
             },
         )

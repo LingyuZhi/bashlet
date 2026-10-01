@@ -27,11 +27,19 @@ class FunctionGrader:
 
 
 @dataclass(frozen=True)
+class CommandGrader:
+    """Host-held test command and files injected only into the grading copy."""
+
+    command: str
+    hidden_files: dict[str, str]
+
+
+@dataclass(frozen=True)
 class Task:
     task_id: str
     prompt: str
     initial_files: dict[str, str]
-    grader: FunctionGrader
+    grader: FunctionGrader | CommandGrader
     environment_id: str = "linux-bwrap-v1"
     reference_implementation: str = ""
     implementation_paths: tuple[str, ...] = ()
@@ -117,7 +125,7 @@ class InteractionBudget:
 
 @dataclass(frozen=True)
 class Limits:
-    timeout_seconds: float = 2.0
+    timeout_seconds: float = 30.0
     output_bytes: int = 16_384
     submission_bytes: int = 65_536
     submission_files: int = 1024

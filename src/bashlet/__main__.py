@@ -15,6 +15,7 @@ from .config import load_config, load_model
 from .episode import run_episode, save_record
 from .experiment import run_experiment
 from .models import (
+    CommandGrader,
     EpisodeResult,
     ExperimentResult,
     FunctionGrader,
@@ -138,13 +139,18 @@ def _run_task(options: argparse.Namespace, view: RunView) -> ExperimentResult:
         raise ValueError("task must be a JSON object")
     task_data = dict(data)
     grader_data = dict(task_data.pop("grader"))
-    cases = tuple(
-        GradingCase(args=tuple(case["args"]), expected=case["expected"])
-        for case in grader_data.pop("cases")
-    )
+    grader: FunctionGrader | CommandGrader
+    if "command" in grader_data:
+        grader = CommandGrader(**grader_data)
+    else:
+        cases = tuple(
+            GradingCase(args=tuple(case["args"]), expected=case["expected"])
+            for case in grader_data.pop("cases")
+        )
+        grader = FunctionGrader(**grader_data, cases=cases)
     if "implementation_paths" in task_data:
         task_data["implementation_paths"] = tuple(task_data["implementation_paths"])
-    task = Task(**task_data, grader=FunctionGrader(**grader_data, cases=cases))
+    task = Task(**task_data, grader=grader)
     model = load_model(condition.model)
     return run_experiment(
         task=task,

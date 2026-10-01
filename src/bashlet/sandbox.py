@@ -4,6 +4,7 @@ import json
 import math
 import os
 import selectors
+import shlex
 import signal
 import subprocess
 import tempfile
@@ -36,6 +37,41 @@ class Sandbox:
         return self.environment.bwrap
 
     @property
+    def python(self) -> str:
+        return f"{self.environment.python.target}/bin/python3"
+
+    @property
+    def variables(self) -> dict[str, str]:
+        return {
+            "PATH": self.environment.path,
+            "LANG": self.environment.lang,
+            "HOME": self.environment.home,
+            **self.environment.variables,
+        }
+
+    def _prepare_runtime(self, directory: Path) -> None:
+        etc = directory / "etc"
+        etc.mkdir()
+        (etc / "alternatives").mkdir()
+        for name, content in self.environment.etc_files.items():
+            if not name or Path(name).name != name or name in {".", ".."}:
+                raise ValueError(f"Invalid generated /etc file name {name!r}")
+            (etc / name).write_text(
+                content.format(
+                    uid=os.getuid(), gid=os.getgid(), home=self.variables["HOME"]
+                )
+            )
+        bin_dir = directory / "bin"
+        bin_dir.mkdir()
+        # venv console scripts have host-absolute shebangs. This wrapper uses
+        # the same interpreter at its sandbox mount point.
+        pytest = bin_dir / "pytest"
+        pytest.write_text(
+            f'#!/bin/sh\nexec {shlex.quote(self.python)} -m pytest "$@"\n'
+        )
+        pytest.chmod(0o755)
+
+    @property
     def resource_limits(self) -> dict[str, int]:
         """The prlimit settings used both for launching and for the run record."""
         return {
@@ -66,7 +102,10 @@ class Sandbox:
         with (
             tempfile.TemporaryFile() as status_file,
             tempfile.TemporaryFile() as input_file,
+            tempfile.TemporaryDirectory(prefix="bashlet-runtime-") as runtime_dir,
         ):
+            runtime = Path(runtime_dir)
+            self._prepare_runtime(runtime)
             input_file.write(stdin)
             input_file.seek(0)
             command = [
@@ -82,6 +121,15 @@ class Sandbox:
                 "ALL",
                 "--json-status-fd",
                 str(status_file.fileno()),
+                "--ro-bind",
+                str(runtime / "etc"),
+                "/etc",
+                "--ro-bind",
+                str(runtime / "bin"),
+                "/opt/bin",
+                "--ro-bind",
+                self.environment.python.source,
+                self.environment.python.target,
             ]
             for bind in self.environment.ro_bind:
                 command.extend(["--ro-bind", bind.source, bind.target])
@@ -95,22 +143,19 @@ class Sandbox:
                     "/dev",
                     "--tmpfs",
                     "/tmp",
+                    "--tmpfs",
+                    self.variables["HOME"],
                     "--ro-bind" if readonly else "--bind",
                     str(workspace),
                     "/workspace",
                     "--chdir",
                     "/workspace",
                     "--clearenv",
-                    "--setenv",
-                    "PATH",
-                    self.environment.path,
-                    "--setenv",
-                    "LANG",
-                    self.environment.lang,
-                    "--",
-                    *argv,
                 ]
             )
+            for name, value in self.variables.items():
+                command.extend(["--setenv", name, value])
+            command.extend(["--", *argv])
             try:
                 process = subprocess.Popen(
                     command,

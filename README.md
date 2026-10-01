@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01、02、12–16、18：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
+当前实现任务 01、02、12–18：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
 
 ## 运行
 
@@ -11,10 +11,14 @@ A Tiny Coding Agent with On-Policy Self-Distillation。
 
 ```bash
 uv sync --locked
+uv sync --project configs/sandbox-python --python /usr/bin/python3 --locked
 uv run bashlet task examples/sum.json
+uv run bashlet task examples/package-repair.json
 ```
 
-也可以用 `uv run python -m bashlet task examples/sum.json`。`task` 经过实验层，结束时显示可信评分；退出码 0 表示评分通过，1 表示未通过或未提交，2 表示基础设施或配置错误，130 表示中断。原来的请求文件入口已合并进 `task`，不再直接用文件名作为 CLI 命令。
+沙箱 Python 环境独立于宿主开发环境：`configs/sandbox-python/uv.lock` 锁定 pytest 9.1.1 及其依赖，解释器固定为本节点的 Python 3.10.12。第二条命令准备这个环境，运行时只读挂载。缺少环境或版本不符时，能力探针会停止回合。使用安装后的包或另一个环境位置时，可用 `--set environment.python.source=/绝对路径/venv` 指定已按该锁文件准备的环境；YAML 中的相对 source 路径以该 YAML 所在目录为基准。
+
+也可以用 `uv run python -m bashlet task examples/sum.json`。`task` 经过实验层，结束时显示评分；退出码 0 表示评分通过，1 表示未通过或未提交，2 表示基础设施或配置错误，130 表示中断。原来的请求文件入口已合并进 `task`，不再直接用文件名作为 CLI 命令。`package-repair.json` 演示多模块预置 bug、公开 pytest 反馈、修复和隐藏测试评分。
 
 不需要 Task 或评分器时，用一段指令和已有目录直接运行 Harness。下面的回放演示无需 GPU：
 
@@ -34,10 +38,10 @@ uv run bashlet show runs/<运行 ID>
 
 ## 实验配置
 
-默认条件在 `src/bashlet/configs/bash-block-v2.yaml`，分四块：
+默认条件在 `configs/bash-block-v2.yaml`，打包时作为内置配置随包安装，分四块：
 
 - `protocol`：agent 可见的文本、提交标记、观察首尾字符数，以及正常观察、超时、截断和格式错误的模板。字符串是 Jinja2 模板，未定义变量在运行开始前报错。
-- `environment`：执行环境标识 `id`、执行器路径、只读挂载、符号链接、`PATH`/`LANG`，以及单条命令的超时和资源限制。
+- `environment`：执行环境标识 `id`、执行器路径、只读挂载、符号链接、生成的最小 `/etc`、独立 Python 环境和版本、HOME、环境变量，以及单条命令的超时和资源限制。命令默认超时 30 秒，实验层通过配置按任务集统一设置。
 - `budget`：步数、生成 token 数、墙钟时间和连续格式错误上限。
 - `model`：`class` 选择后端类，`sampling` 由 Harness 在每步采样时传入，其余字段作为模型构造参数（包括 `thinking`）。目前 thinking 只被记录，解析由任务 19 实施。
 
@@ -71,7 +75,7 @@ Python 调用使用同一套层叠：`run_experiment(..., config=[path], overrid
 
 `run_episode(instruction=..., workspace=..., model=..., config=...)` 在已有工作区中运行一个回合，不接收 Task 或评分器。`config` 是 `bashlet.config.load_config()` 返回的完整配置；默认加载内置配置。返回 `EpisodeResult`，包含轨迹、终止状态、最终工作区路径 `workspace`、预算用量和可选的 `submission_text`。此入口直接修改指定工作区，运行记录默认保存在唯一的 `runs/<ID>/` 中；调用者也可指定独立的 `run_dir`，通过 `on_update` 接收进度。每个回合的状态都属于调用实例。
 
-`run_experiment` 接收 Task，将 `initial_files` 中的相对路径和文本复制进本次运行的工作区，再调用同一个 Harness。Task 还包含稳定的 `task_id`、指令 `prompt`、执行环境标识 `environment_id`、宿主持有的 `FunctionGrader`，以及可选的参考实现、反馈命令和实现路径。默认环境标识为 `linux-bwrap-v1`，须与配置的 `environment.id` 一致。初始文件可以放在任意子目录；文件名、反馈测试和入口函数都由任务数据声明。
+`run_experiment` 接收 Task，将 `initial_files` 中的相对路径和文本复制进本次运行的工作区，再调用同一个 Harness。Task 还包含稳定的 `task_id`、指令 `prompt`、执行环境标识 `environment_id`、宿主持有的 `FunctionGrader` 或 `CommandGrader`，以及可选的参考实现、反馈命令和实现路径。默认环境标识为 `linux-bwrap-v1`，须与配置的 `environment.id` 一致。初始文件可以放在任意子目录；文件名、反馈测试和评分方式都由任务数据声明。
 
 bash-block-v2 的系统提示只说明行动格式、shell 规则和提交方式，不含任务集的文件名或格式。任务指令原样成为第一条 user 消息；文件和反馈命令由 Task 声明。MBPP 类 Task 可以在 `initial_files` 中提供 `task.md` 和 `feedback_tests.py`，另一种任务可以使用完全不同的文件布局，协议指纹保持相同。
 
@@ -118,7 +122,7 @@ print(result.status, result.grade)
 
 ## 行动协议 bash-block-v2
 
-协议完整文本定义在[默认配置](src/bashlet/configs/bash-block-v2.yaml)的 `protocol` 块，由 `src/bashlet/protocol.py` 渲染和解析。SFT 示范、学生 rollout 和评测共用它。系统提示、观察模板、历史编码和提交规则连同指纹写入每次运行 `run.json` 的 `protocol` 字段。v2 文本待用户审阅后冻结指纹；冻结后修改协议必须更换版本、更新测试中的指纹并重建示范。
+协议完整文本定义在[默认配置](configs/bash-block-v2.yaml)的 `protocol` 块，由 `src/bashlet/protocol.py` 渲染和解析。SFT 示范、学生 rollout 和评测共用它。系统提示、观察模板、历史编码和提交规则连同指纹写入每次运行 `run.json` 的 `protocol` 字段。v2 文本待用户审阅后冻结指纹；冻结后修改协议必须更换版本、更新测试中的指纹并重建示范。
 
 - 每条回复以非空 `THOUGHT:` 开始，随后恰好一个非空 ```` ```bash ```` 围栏块；命令在隔离工作区执行。每一步都启动新的 shell，`cd`、`export` 和后台进程不跨步保留，工作区文件保留。
 - 只有成功命令的合并输出首行恰好为 `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` 时才提交，其余行原样记为 `submission_text`。标记在 THOUGHT 中、位于后续行或命令返回非零均不提交；硬截断造成的不完整首行也不能作为标记。提交步仍记录实际 bash 命令、观察和工作区变化。
@@ -139,11 +143,24 @@ Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`fo
 
 ## 隔离与评分边界
 
-每次实验先运行真实访问探针：验证 namespace 已分离、环境变量已清理、宿主私有文件和包含参考实现／评分材料的配置无法读取，以及任务目录可写。探针不通过时记录 `infrastructure_error`，不执行任何任务命令，也不退回宿主直接执行。缺少执行器可用 `--set environment.bwrap=/does-not-exist/bwrap` 重现。
+每次实验先运行真实访问探针：验证 namespace 已分离、环境变量已清理、宿主私有文件和包含参考实现／评分材料的配置无法读取、任务目录和 HOME 可写，以及新增挂载只读、账户和 localhost 解析正常、Python/pytest 版本符合配置、awk/sed/grep/git/pytest 可用。探针使用独立的 `environment.probe_timeout_seconds`（默认 30 秒），避免任务的短命令超时影响环境检查；生效窗口写入运行记录。探针不通过时记录 `infrastructure_error`，不执行任何任务命令，也不退回宿主直接执行。缺少执行器可用 `--set environment.bwrap=/does-not-exist/bwrap` 重现。
 
-沙箱只挂载只读的 `/usr/bin`、`/usr/lib`、`/usr/lib64` 和当前任务目录，使用独立 `/proc`、`/dev`、`/tmp`，清理环境和继承的文件描述符，断开宿主网络，移除 capabilities 并建立新会话。实现依据 [Bubblewrap 0.6.1 的说明](https://github.com/containers/bubblewrap/blob/v0.6.1/README.md)及[参数文档](https://github.com/containers/bubblewrap/blob/v0.6.1/bwrap.xml)。节点内实际任务 Python 来自 `/usr/bin/python3`，与宿主 Python 分别记录；当前节点为 Python 3.10.12。首版任务仅使用该解释器的标准库。
+沙箱只读挂载 `/usr/bin`、`/usr/lib`、`/usr/lib64`、`/etc/alternatives` 和独立 Python 环境，并挂载当前任务目录。`/etc` 的账户、hosts、名称解析与 git 配置由配置生成，不挂载宿主 `/etc`。每一步使用独立 `/proc`、`/dev`、`/tmp` 和可写 HOME，清理环境和继承的文件描述符，断开宿主网络，移除 capabilities 并建立新会话；HOME 与临时文件不会跨步保留。实现依据 [Bubblewrap 0.6.1 的说明](https://github.com/containers/bubblewrap/blob/v0.6.1/README.md)及[参数文档](https://github.com/containers/bubblewrap/blob/v0.6.1/bwrap.xml)。任务 Python/pytest 的实际版本与宿主 Python 分别记录。默认环境关闭 Python 字节码写入和 [pytest 缓存插件](https://docs.pytest.org/en/stable/how-to/cache.html)，避免工作区快照产生 `__pycache__` 和 `.pytest_cache`；`pytest` 和 `python3 -m pytest` 都使用只读 Python 环境。
 
 `json-function-v1` 评分按 `Task.grader` 中的 `module_path` 和 `function_name` 加载模块、调用函数，接受 JSON 位置参数，返回值须可表示为 JSON。模块可导入工作区中的其他包或模块，并读取提交的数据文件。每个评分用例在新沙箱中执行快照的只读副本，宿主比较真实返回值与期望值，保留逐用例结果。参考实现只用于可信材料记录，不执行、不做源码相等比较；评分期望值始终留在宿主。学生的退出码 0、自报通过或被修改的反馈测试均不能代替评分。此切片尚未实现任意 MBPP 测试程序的适配。
+
+`test-command-v1` 对应 `CommandGrader(command=..., hidden_files=...)`。实验层在显式提交后，把隐藏文件写入 `private/grading-workspace/` 中的快照副本，再在新沙箱中只读执行测试命令；隐藏文件不会写回工作区、提交快照或学生观察。隐藏文件覆盖同路径的学生文件；若学生文件或目录阻碍注入，该提交评分失败。命令退出码为 0 即通过，输出文本或截断不影响判断；超时为失败，执行器故障单独记录。Grade 中的 `total_cases=1` 表示执行了一条测试命令，命令内部可运行多个 pytest 用例。
+
+测试命令评分的信任边界：**学生代码和测试在同一个进程里运行，恶意提交可以伪造通过**，例如导入时调用 `os._exit(0)`。这是与函数调用评分不同的已接受限制；OPSD 训练信号不使用评分结果，轨迹保留供审计。CLI 的可信 Task JSON 使用以下 grader 字段选择此评分器：
+
+```json
+"grader": {
+  "command": "pytest -q tests/test_hidden.py",
+  "hidden_files": {
+    "tests/test_hidden.py": "from solution import solve\ndef test_solve(): assert solve(-2) == -4\n"
+  }
+}
+```
 
 提交快照包含整个工作区的普通文件和目录，包括空目录、二进制文件与文件的执行权限；符号链接、FIFO、socket、设备和不可读文件都会使提交无效。快照从提交步的清单与内容存档生成，不跟随链接、不复用工作区 inode，后续对工作区的修改不影响它。`environment.submission_bytes` 限制全部文件的总字节数，`environment.submission_files` 限制路径条目数（含目录）。
 
@@ -159,7 +176,7 @@ Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`fo
 - `blobs/<sha256>`：初始状态及各步中普通文件内容的只读存档；跨路径、跨步骤去重。
 - `candidates/NNN.json`：多文件候选的只读清单；单文件候选直接复用 blob。
 - `submission/`：整个工作区的独立提交快照，包含路径、目录和原始文件内容；评分时只读挂载。
-- `private/grading-workspace/`：评分阶段创建的快照副本，逐用例运行在新沙箱中。
+- `private/grading-workspace/`：评分阶段创建的快照副本；函数评分逐用例执行，命令评分仅在此副本注入隐藏文件。
 - `probe/`：能力探针使用的临时工作区。
 
 `run_experiment` 返回值及整个运行目录供实验操作者使用；模型上下文只包含系统提示、公开任务与各步 `feedback` 中的真实观察。评分结果、参考实现、隐藏输入及期望值均不回写本回合工作区。

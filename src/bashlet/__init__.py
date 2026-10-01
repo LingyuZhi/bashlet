@@ -4,6 +4,7 @@ from .episode import run_episode
 from .experiment import run_experiment
 from .models import (
     Bash,
+    CommandGrader,
     Encoding,
     EpisodeResult,
     ExperimentResult,
@@ -25,6 +26,7 @@ __all__ = [
     "PROTOCOL_SHA256",
     "PROTOCOL_VERSION",
     "Bash",
+    "CommandGrader",
     "Encoding",
     "EpisodeResult",
     "ExperimentResult",

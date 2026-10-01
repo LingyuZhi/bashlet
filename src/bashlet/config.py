@@ -15,6 +15,9 @@ from .models import Encoding, InteractionBudget, Model, SamplingParams
 from .replay import ReplayModel
 
 _DEFAULT_PATH = Path(__file__).with_name("configs") / "bash-block-v2.yaml"
+_SOURCE_DEFAULT = Path(__file__).resolve().parents[2] / "configs" / _DEFAULT_PATH.name
+if _SOURCE_DEFAULT.is_file():
+    _DEFAULT_PATH = _SOURCE_DEFAULT
 _JINJA = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
 
 
@@ -49,6 +52,7 @@ class EnvironmentConfig:
     id: str
     bwrap: str
     timeout_seconds: float
+    probe_timeout_seconds: float
     output_bytes: int
     submission_bytes: int
     submission_files: int
@@ -57,6 +61,12 @@ class EnvironmentConfig:
     nofile: int
     path: str
     lang: str
+    home: str
+    python: Mount
+    python_version: str
+    pytest_version: str
+    variables: dict[str, str]
+    etc_files: dict[str, str]
     ro_bind: tuple[Mount, ...]
     symlink: tuple[Mount, ...]
 
@@ -141,6 +151,11 @@ def _read_yaml(path: Path) -> dict[str, Any]:
         raise ValueError(f"Invalid YAML in {path}: {error}") from error
     if not isinstance(loaded, dict):
         raise ValueError(f"{path} must contain a mapping")
+    environment = loaded.get("environment")
+    if isinstance(environment, dict):
+        python = environment.get("python")
+        if isinstance(python, dict) and isinstance(python.get("source"), str):
+            python["source"] = str((path.parent / python["source"]).resolve())
     return cast(dict[str, Any], loaded)
 
 
@@ -207,6 +222,14 @@ def _bind(cls: type[Any], data: object, path: str) -> Any:
 
 def _convert(hint: Any, value: object, path: str) -> Any:
     origin = get_origin(hint)
+    if origin is dict:
+        if not isinstance(value, dict):
+            raise ValueError(f"{path} must be a mapping")
+        key_type, value_type = get_args(hint)
+        return {
+            _convert(key_type, key, path): _convert(value_type, item, f"{path}.{key}")
+            for key, item in value.items()
+        }
     if origin is tuple:
         if not isinstance(value, list):
             raise ValueError(f"{path} must be a list")
@@ -268,6 +291,7 @@ def _require_positive_numbers(config: ExperimentConfig) -> None:
         "protocol.observation_head_chars": config.protocol.observation_head_chars,
         "protocol.observation_tail_chars": config.protocol.observation_tail_chars,
         "environment.timeout_seconds": config.environment.timeout_seconds,
+        "environment.probe_timeout_seconds": config.environment.probe_timeout_seconds,
         "environment.output_bytes": config.environment.output_bytes,
         "environment.submission_bytes": config.environment.submission_bytes,
         "environment.submission_files": config.environment.submission_files,

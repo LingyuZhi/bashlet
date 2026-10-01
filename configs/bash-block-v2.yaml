@@ -52,19 +52,36 @@ protocol:
 environment:
   id: linux-bwrap-v1
   bwrap: /usr/bin/bwrap
-  timeout_seconds: 2.0
+  timeout_seconds: 30.0
+  probe_timeout_seconds: 30.0
   output_bytes: 16384
   submission_bytes: 65536
   submission_files: 1024
   memory_bytes: 536870912
   file_bytes: 1048576
   nofile: 64
-  path: /usr/bin:/bin
+  path: /opt/bin:/opt/python/bin:/usr/bin:/bin
   lang: C.UTF-8
+  home: /home/agent
+  python: {source: sandbox-python/.venv, target: /opt/python}
+  python_version: 3.10.12
+  pytest_version: 9.1.1
+  variables:
+    PYTHONDONTWRITEBYTECODE: '1'
+    PYTEST_ADDOPTS: '-p no:cacheprovider'
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+  etc_files:
+    passwd: "agent:x:{uid}:{gid}:Sandbox agent:{home}:/bin/bash\n"
+    group: "agent:x:{gid}:\n"
+    hosts: "127.0.0.1 localhost\n::1 localhost\n"
+    nsswitch.conf: "passwd: files\ngroup: files\nhosts: files\n"
+    resolv.conf: "nameserver 127.0.0.1\n"
+    gitconfig: "[user]\n\tname = agent\n\temail = agent@localhost\n[init]\n\tdefaultBranch = main\n"
   ro_bind:
     - {source: /usr/bin, target: /usr/bin}
     - {source: /usr/lib, target: /usr/lib}
     - {source: /usr/lib64, target: /usr/lib64}
+    - {source: /etc/alternatives, target: /etc/alternatives}
   symlink:
     - {source: usr/bin, target: /bin}
     - {source: usr/lib, target: /lib}

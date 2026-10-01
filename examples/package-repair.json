@@ -1,0 +1,26 @@
+{
+  "task": {
+    "task_id": "manual/package-repair",
+    "prompt": "Fix doubled(n) in the package so it returns twice n for any integer. Run tests/test_public.py and submit the workspace.",
+    "initial_files": {
+      "package/__init__.py": "",
+      "package/math.py": "def doubled(n):\n    return n\n",
+      "package/api.py": "from .math import doubled\n",
+      "tests/test_public.py": "from package.api import doubled\ndef test_doubled(): assert doubled(2) == 4\n"
+    },
+    "grader": {
+      "command": "pytest -q tests/test_hidden.py",
+      "hidden_files": {
+        "tests/test_hidden.py": "from package.api import doubled\ndef test_negative(): assert doubled(-7) == -14\ndef test_zero(): assert doubled(0) == 0\n"
+      }
+    },
+    "implementation_paths": ["package/math.py", "package/api.py"],
+    "feedback_command": "pytest -q tests/test_public.py"
+  },
+  "replies": [
+    "THOUGHT: Run the public test to locate the bug.\n```bash\npytest -q tests/test_public.py\n```",
+    "THOUGHT: The function returns n instead of twice n.\n```bash\nsed -i 's/return n$/return 2 * n/' package/math.py\n```",
+    "THOUGHT: Verify the repaired implementation.\n```bash\npytest -q tests/test_public.py\n```",
+    "THOUGHT: Submit the repaired package.\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\nFixed doubled(n).\\n'\n```"
+  ]
+}

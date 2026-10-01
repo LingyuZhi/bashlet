@@ -28,7 +28,6 @@ from .models import (
 from .sandbox import Sandbox
 from .workspace import capture_workspace
 
-_PROBE_TIMEOUT_SECONDS = 5.0
 _PROBE_OUTPUT_BYTES = 16_384
 
 
@@ -45,12 +44,23 @@ def _verify_isolation(sandbox: Sandbox, run_dir: Path) -> Isolation:
         name: os.readlink(f"/proc/self/ns/{name}")
         for name in ("mnt", "pid", "net", "user", "ipc", "uts")
     }
+    readonly_mounts = [
+        "/etc",
+        "/opt/bin",
+        sandbox.environment.python.target,
+        *(mount.target for mount in sandbox.environment.ro_bind),
+    ]
     code = f"""
-import json, os, pathlib, sys
+import grp, json, os, pathlib, platform, pwd, socket, subprocess, sys
+import pytest
 checks = {{}}
 for name, host_id in {namespaces!r}.items():
     checks['namespace_' + name] = os.readlink('/proc/self/ns/' + name) != host_id
-checks['environment'] = set(os.environ) <= {{'PATH', 'LANG', 'LC_CTYPE', 'PWD'}}
+expected = {sandbox.variables!r}
+checks['environment'] = (
+    set(os.environ) <= set(expected) | {{'LC_CTYPE', 'PWD'}}
+    and all(os.environ.get(key) == value for key, value in expected.items())
+)
 checks['working_directory'] = os.environ.get('PWD') == '/workspace'
 for name, path in {paths!r}.items():
     for prefix in ('', '/proc/1/root'):
@@ -62,17 +72,45 @@ for name, path in {paths!r}.items():
             checks['denied_' + name + prefix] = False
 pathlib.Path('/workspace/writable').write_text('ok')
 checks['workspace_writable'] = pathlib.Path('/workspace/writable').read_text() == 'ok'
-print(json.dumps({{'checks': checks, 'python': sys.version}}))
+home = pathlib.Path(os.environ['HOME'])
+(home / 'writable').write_text('ok')
+checks['home_writable'] = (home / 'writable').read_text() == 'ok'
+checks['account'] = pwd.getpwuid(os.getuid()).pw_name == 'agent'
+checks['group'] = grp.getgrgid(os.getgid()).gr_name == 'agent'
+checks['localhost'] = socket.gethostbyname('localhost') == '127.0.0.1'
+for mount in {readonly_mounts!r}:
+    checks['readonly_' + mount] = bool(os.statvfs(mount).f_flag & os.ST_RDONLY)
+checks['python_version'] = (
+    platform.python_version() == {sandbox.environment.python_version!r}
+)
+checks['pytest_version'] = pytest.__version__ == {sandbox.environment.pytest_version!r}
+status = pathlib.Path('/proc/self/status').read_text()
+checks['capabilities_dropped'] = 'CapEff:\\t0000000000000000' in status
+tools = {{
+    'awk': (['awk', 'BEGIN {{print 7}}'], '7\\n'),
+    'sed': (['sed', 's/old/new/'], 'new\\n'),
+    'grep': (['grep', 'old'], 'old\\n'),
+    'git': (['git', 'init', '-q', str(home / 'repo')], ''),
+    'pytest': (['pytest', '--version'], 'pytest ' + pytest.__version__ + '\\n'),
+}}
+for name, (argv, output) in tools.items():
+    try:
+        tool = subprocess.run(argv, input='old\\n', capture_output=True, text=True)
+        checks['tool_' + name] = tool.returncode == 0 and tool.stdout == output
+    except OSError:
+        checks['tool_' + name] = False
+report = {{'checks': checks, 'python': sys.version, 'pytest': pytest.__version__}}
+print(json.dumps(report))
 """
     # Capability checks must not fail just because the episode has a tiny output budget.
     probe = Sandbox(
         replace(
             sandbox.environment,
-            timeout_seconds=_PROBE_TIMEOUT_SECONDS,
+            timeout_seconds=sandbox.environment.probe_timeout_seconds,
             output_bytes=_PROBE_OUTPUT_BYTES,
         )
     )
-    observation = probe.execute(probe_dir, ["/usr/bin/python3", "-I", "-c", code])
+    observation = probe.execute(probe_dir, [probe.python, "-I", "-B", "-c", code])
     if observation.status == "interrupted":
         raise KeyboardInterrupt
     if observation.status != "ok":
@@ -89,6 +127,8 @@ print(json.dumps({{'checks': checks, 'python': sys.version}}))
             checks,
             runtime={
                 "task_python": report["python"],
+                "task_pytest": report["pytest"],
+                "python_environment": sandbox.environment.python.source,
                 "kernel": os.uname().release,
                 "bwrap_sha256": executable_hash,
             },
@@ -180,7 +220,7 @@ def save_record(
             "isolation_policy": "linux-bwrap-v1",
             "effective_resource_limits": sandbox.resource_limits,
             "isolation_probe_limits": {
-                "timeout_seconds": _PROBE_TIMEOUT_SECONDS,
+                "timeout_seconds": condition.environment.probe_timeout_seconds,
                 "output_bytes": _PROBE_OUTPUT_BYTES,
             },
             "host_python": sys.version,

@@ -135,6 +135,41 @@ def test_task_displays_grading_and_show_replays_the_same_steps(tmp_path: Path) -
     assert replayed.stdout == live.stdout
 
 
+def test_task_accepts_a_hidden_test_command_and_show_preserves_its_grade(
+    tmp_path: Path,
+) -> None:
+    task = tmp_path / "command-task.json"
+    task.write_text(
+        json.dumps(
+            {
+                "task_id": "cli/hidden-command",
+                "prompt": "Submit the existing program.",
+                "initial_files": {"solution.py": "def solve(n): return n * 2\n"},
+                "grader": {
+                    "command": "pytest -q tests/test_hidden.py",
+                    "hidden_files": {
+                        "tests/test_hidden.py": (
+                            "from solution import solve\n"
+                            "def test_solve(): assert solve(-2) == -4\n"
+                        )
+                    },
+                },
+            }
+        )
+    )
+    config = replay_config(tmp_path, [submit()])
+    live = cli("task", str(task), "-c", str(config), cwd=tmp_path)
+
+    assert live.returncode == 0, live.stdout + live.stderr
+    run_dir, record = saved_run(tmp_path / "runs")
+    assert record["grading_protocol"] == "test-command-v1"
+    assert record["grade"]["passed"] is True
+    assert "Grade: passed (1/1)" in live.stdout
+    assert not (run_dir / "workspace/tests/test_hidden.py").exists()
+    replayed = cli("show", str(run_dir), cwd=tmp_path)
+    assert replayed.returncode == 0 and replayed.stdout == live.stdout
+
+
 @pytest.mark.parametrize("command", ["agent", "task"])
 def test_ctrl_c_keeps_the_inflight_action_output_and_workspace(
     tmp_path: Path,
