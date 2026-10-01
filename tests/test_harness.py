@@ -2,6 +2,7 @@
 
 import json
 import shlex
+import time
 from collections.abc import Callable
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -34,15 +35,11 @@ from bashlet import (
     InvalidAction,
     ReplayModel,
     SamplingParams,
-    Submit,
     Task,
     run_experiment,
 )
 from bashlet.protocol import SYSTEM_PROMPT
 
-FROZEN_PROTOCOL_SHA256 = (
-    "e3212936cc2175b313e7f2036e13d3dc5b61be5dee0ea68236a7ccae8f865077"
-)
 WRONG = "def solve(numbers):\n    return 3\n"
 FIXED = "def solve(numbers):\n    return sum(numbers)\n"
 
@@ -88,6 +85,327 @@ def repairing_policy(context: str) -> str:
     return bash("python3 feedback_tests.py")
 
 
+def test_successful_first_line_marker_submits_workspace_and_remaining_output(
+    tmp_path: Path,
+) -> None:
+    task = sum_task()
+    result = run_experiment(
+        task=replace(task, initial_files=task.initial_files | {"solution.py": FIXED}),
+        model=replay(
+            [
+                "THOUGHT: The workspace is ready to submit.\n"
+                "```bash\n"
+                "printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\nReady.\\n雪\\n'\n"
+                "```",
+                bash("touch MUST_NOT_RUN"),
+            ]
+        ),
+        output_dir=tmp_path,
+    )
+
+    assert result.episode_status == "submitted", result.reason
+    assert result.passed
+    assert result.submission_text == "Ready.\n雪\n"
+    assert result.usage.steps == 1
+    assert isinstance(result.trajectory[0].action, Bash)
+    assert result.trajectory[0].observation is not None
+    assert not (result.workspace / "MUST_NOT_RUN").exists()
+    record = json.loads((result.run_dir / "run.json").read_text())
+    assert record["submission_text"] == "Ready.\n雪\n"
+
+
+def test_observation_preserves_stdout_and_stderr_write_order(tmp_path: Path) -> None:
+    command = (
+        "import os; "
+        "os.write(1, b'first\\n'); os.write(2, b'second\\n'); "
+        "os.write(1, b'third\\n'); os.write(2, b'fourth\\n')"
+    )
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([bash("python3 -c " + shlex.quote(command))]),
+        output_dir=tmp_path,
+        overrides=["budget.max_steps=1"],
+    )
+
+    step = result.trajectory[0]
+    assert step.observation is not None
+    assert step.observation.output == "first\nsecond\nthird\nfourth\n"
+    assert step.feedback == (
+        "<returncode>0</returncode>\n<output>\nfirst\nsecond\nthird\nfourth\n</output>"
+    )
+
+
+def test_long_observation_keeps_head_and_tail_without_stopping_the_command(
+    tmp_path: Path,
+) -> None:
+    source = (
+        "import os; from pathlib import Path; "
+        "os.write(1, ('H' * 2000 + '雪' * 1001 + 'T' * 2000).encode()); "
+        f"Path('solution.py').write_text({FIXED!r})"
+    )
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([bash("python3 -c " + shlex.quote(source)), submit()]),
+        output_dir=tmp_path,
+    )
+
+    assert result.passed, result.reason
+    step = result.trajectory[0]
+    assert step.observation is not None
+    assert step.observation.output == "H" * 2000 + "雪" * 1001 + "T" * 2000
+    assert step.feedback == (
+        "<returncode>0</returncode>\n<output>\n"
+        + "H" * 2000
+        + "\n[... 1001 characters omitted ...]\n"
+        "Narrow the output with head, tail, sed, or a more selective search.\n"
+        + "T" * 2000
+        + "\n</output>"
+    )
+    assert (result.workspace / "solution.py").read_text() == FIXED
+
+
+def test_hard_output_limit_discards_bytes_and_allows_execution_and_next_step(
+    tmp_path: Path,
+) -> None:
+    source = (
+        "import os; from pathlib import Path; "
+        "os.write(1, b'X' * 40000); "
+        f"Path('solution.py').write_text({FIXED!r})"
+    )
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([bash("python3 -c " + shlex.quote(source)), submit()]),
+        output_dir=tmp_path,
+        overrides=["environment.output_bytes=128"],
+    )
+
+    assert result.passed, result.reason
+    step = result.trajectory[0]
+    assert step.observation is not None
+    assert step.observation.status == "ok"
+    assert step.observation.exit_code == 0
+    assert step.observation.output == "X" * 128
+    assert step.observation.output_truncated
+    assert step.feedback is not None
+    assert "further output was discarded" in step.feedback
+    assert result.usage.steps == 2
+
+
+def test_timeout_has_its_own_feedback_and_kills_detached_writers(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(
+            [
+                bash(
+                    "setsid bash -c 'sleep 0.4; touch delayed-write' "
+                    ">/dev/null 2>&1 < /dev/null & "
+                    "printf 'before timeout\\n'; sleep 5"
+                ),
+                bash("printf 'next step\\n'"),
+            ]
+        ),
+        output_dir=tmp_path,
+        overrides=["environment.timeout_seconds=0.2", "budget.max_steps=2"],
+    )
+
+    first, second = result.trajectory
+    assert first.observation is not None and first.observation.status == "timeout"
+    assert first.feedback is not None
+    assert first.feedback.startswith(
+        "The command timed out. All processes from this step were terminated.\n"
+    )
+    assert "before timeout\n" in first.feedback
+    assert second.observation is not None and second.observation.output == "next step\n"
+    time.sleep(0.5)
+    assert not (result.workspace / "delayed-write").exists()
+
+
+def test_reply_requires_a_thought_before_executing_its_bash_block(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(["```bash\ntouch MUST_NOT_RUN\n```"]),
+        output_dir=tmp_path,
+        overrides=["budget.max_steps=1"],
+    )
+
+    step = result.trajectory[0]
+    assert isinstance(step.action, InvalidAction)
+    assert step.observation is None
+    assert step.feedback is not None and "THOUGHT:" in step.feedback
+    assert not (result.workspace / "MUST_NOT_RUN").exists()
+
+
+def test_output_cutoff_cannot_turn_a_longer_first_line_into_a_submission(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([bash("printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT_EXTRA\\n'")]),
+        output_dir=tmp_path,
+        overrides=["environment.output_bytes=37", "budget.max_steps=1"],
+    )
+
+    assert result.episode_status == "budget_exhausted"
+    assert result.submission_text is None and result.grade is None
+    observation = result.trajectory[0].observation
+    assert observation is not None and observation.output_truncated
+    assert observation.output == "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
+
+
+def test_an_extra_unclosed_bash_block_prevents_execution(tmp_path: Path) -> None:
+    reply = bash("touch MUST_NOT_RUN") + "\n```bash\ntrue"
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([reply]),
+        output_dir=tmp_path,
+        overrides=["budget.max_steps=1"],
+    )
+
+    assert isinstance(result.trajectory[0].action, InvalidAction)
+    assert result.trajectory[0].observation is None
+    assert not (result.workspace / "MUST_NOT_RUN").exists()
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "THOUGHT: There is no command.",
+        bash("touch MUST_NOT_RUN") + "\n" + bash("true"),
+        bash(" \t"),
+        "THOUGHT: The block is incomplete.\n```bash\ntouch MUST_NOT_RUN",
+        "```bash\ntouch MUST_NOT_RUN\n```",
+        "THOUGHT: \n```bash\ntouch MUST_NOT_RUN\n```",
+    ],
+    ids=["missing", "multiple", "empty", "unclosed", "no-thought", "empty-thought"],
+)
+def test_format_errors_count_steps_and_stop_at_the_configured_limit(
+    tmp_path: Path,
+    reply: str,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([reply, reply, bash("touch MUST_NOT_RUN")]),
+        output_dir=tmp_path,
+        overrides=["budget.max_consecutive_invalid=2"],
+    )
+
+    assert result.episode_status == "format_error"
+    assert result.usage.steps == result.usage.invalid_actions == 2
+    assert result.grade is None and result.submission_text is None
+    assert all(step.observation is None for step in result.trajectory)
+    assert all(
+        step.feedback is not None and "Nothing was executed" in step.feedback
+        for step in result.trajectory
+    )
+    assert not (result.workspace / "MUST_NOT_RUN").exists()
+
+
+def test_a_valid_command_resets_consecutive_format_errors(tmp_path: Path) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(
+            ["no block", bash("true"), "no block", write_file(FIXED), submit()]
+        ),
+        output_dir=tmp_path,
+        overrides=["budget.max_consecutive_invalid=2"],
+    )
+
+    assert result.passed, result.reason
+    assert result.usage.steps == 5 and result.usage.invalid_actions == 2
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        bash("printf 'prefix\\nCOMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'"),
+        bash("printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'; exit 7"),
+        "THOUGHT: COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```bash\ntrue\n```",
+        bash("printf '\\nCOMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'"),
+        bash("printf ' COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'"),
+        bash("submit"),
+    ],
+    ids=["later-line", "nonzero", "thought-only", "blank-line", "space", "v1-command"],
+)
+def test_marker_elsewhere_or_in_a_failed_command_does_not_submit(
+    tmp_path: Path,
+    reply: str,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([reply]),
+        output_dir=tmp_path,
+        overrides=["budget.max_steps=1"],
+    )
+
+    assert result.episode_status == "budget_exhausted"
+    assert result.submission_text is None and result.grade is None
+
+
+def test_marker_on_stderr_submits_when_it_is_the_first_combined_line(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=replace(sum_task(), initial_files={"solution.py": FIXED}),
+        model=replay(
+            [bash("printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n' >&2; printf Done")]
+        ),
+        output_dir=tmp_path,
+    )
+
+    assert result.passed, result.reason
+    assert result.submission_text == "Done"
+
+
+def test_cd_and_export_do_not_persist_into_the_next_step(tmp_path: Path) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay(
+            [
+                bash(
+                    "mkdir sub; cd sub; export BASHLET_STEP_VALUE=present; touch kept"
+                ),
+                bash(
+                    "pwd; printf '%s\\n' \"${BASHLET_STEP_VALUE-unset}\"; cat sub/kept"
+                ),
+            ]
+        ),
+        output_dir=tmp_path,
+        overrides=["budget.max_steps=2"],
+    )
+
+    observation = result.trajectory[1].observation
+    assert observation is not None and observation.status == "ok"
+    assert observation.output == "/workspace\nunset\n"
+    assert (result.workspace / "sub/kept").is_file()
+    assert "fresh shell" in SYSTEM_PROMPT and "exported variables" in SYSTEM_PROMPT
+
+
+def test_observation_head_and_tail_lengths_follow_protocol_config(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=sum_task(),
+        model=replay([bash("printf 'abc雪雪XYZ'")]),
+        output_dir=tmp_path,
+        overrides=[
+            "budget.max_steps=1",
+            "protocol.observation_head_chars=3",
+            "protocol.observation_tail_chars=2",
+        ],
+    )
+
+    assert result.trajectory[0].feedback == (
+        "<returncode>0</returncode>\n<output>\nabc\n"
+        "[... 3 characters omitted ...]\n"
+        "Narrow the output with head, tail, sed, or a more selective search.\n"
+        "YZ\n</output>"
+    )
+
+
 def test_replay_keeps_reply_tokens_and_append_only_context(tmp_path: Path) -> None:
     task = sum_task()
     replies = [bash("printf '雪\\n'"), write_file(FIXED), submit()]
@@ -100,7 +418,7 @@ def test_replay_keeps_reply_tokens_and_append_only_context(tmp_path: Path) -> No
     assert result.status == "completed", result.reason
     assert result.grade is not None and result.grade.passed
     assert result.trajectory[0].observation is not None
-    assert result.trajectory[0].observation.stdout == "雪\n"
+    assert result.trajectory[0].observation.output == "雪\n"
     expected_context = [
         SYSTEM, *SYSTEM_PROMPT.encode(), END, USER, *task.prompt.encode(), END,
         ASSISTANT,
@@ -138,7 +456,7 @@ def test_exhausted_replies_end_through_normal_invalid_action_rules(
 ) -> None:
     result = run_experiment(task=sum_task(), model=replay(replies), output_dir=tmp_path)
 
-    assert result.status == "invalid_action"
+    assert result.status == "format_error"
     assert result.usage.steps == len(replies) + 3
     assert result.usage.invalid_actions == 3
     assert result.rejected_generation is None
@@ -208,12 +526,12 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
         Bash,
         Bash,
         Bash,
-        Submit,
+        Bash,
     ]
     failed, passed = result.trajectory[1].observation, result.trajectory[3].observation
     assert failed is not None and failed.status == "command_failed"
-    assert "solve([4]) should be 4" in failed.stderr
-    assert passed is not None and passed.stdout == "feedback passed\n"
+    assert "solve([4]) should be 4" in failed.output
+    assert passed is not None and passed.output == "feedback passed\n"
     assert result.grade is not None and result.grade.passed
     assert result.submission is not None
     assert (
@@ -251,11 +569,9 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     assert "feedback passed" not in "".join(renders[:4])
 
     record = json.loads((result.run_dir / "run.json").read_text())
-    assert record["schema_version"] == 6
-    assert record["protocol"]["name"] == "bash-block-v1"
-    # Frozen before demonstrations: changing any agent-visible protocol text
-    # must come with a new protocol version and an updated fingerprint here.
-    assert record["protocol"]["sha256"] == PROTOCOL_SHA256 == FROZEN_PROTOCOL_SHA256
+    assert record["schema_version"] == 7
+    assert record["protocol"]["name"] == "bash-block-v2"
+    assert record["protocol"]["sha256"] == PROTOCOL_SHA256
     assert record["trajectory"][0]["model_call"]["generation"]["tokens"] == list(
         model.generations[0].tokens
     )
@@ -265,7 +581,7 @@ def test_single_invalid_action_is_fed_back_without_execution(tmp_path: Path) -> 
     def policy(context: str) -> str:
         if turn_number(context) == 1:
             return "I will write the file now."  # no block
-        if "<invalid_action>" in latest_feedback(context):
+        if "<format_error>" in latest_feedback(context):
             return write_file(FIXED)
         return submit()
 
@@ -359,7 +675,7 @@ def test_generation_source_cannot_bypass_the_probability_contract(
             lambda context: "no block",
             InteractionBudget(),
             SamplingParams(),
-            "invalid_action",
+            "format_error",
             "3 consecutive invalid actions",
         ),
         (

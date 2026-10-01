@@ -1,7 +1,6 @@
 """Versioned experimental conditions: protocol, environment, budget, and model."""
 
 import math
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
@@ -13,7 +12,7 @@ from jinja2 import Environment, StrictUndefined, TemplateError
 
 from .models import InteractionBudget, SamplingParams
 
-_DEFAULT_PATH = Path(__file__).with_name("configs") / "bash-block-v1.yaml"
+_DEFAULT_PATH = Path(__file__).with_name("configs") / "bash-block-v2.yaml"
 _JINJA = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
 
 
@@ -31,9 +30,14 @@ class ProtocolConfig:
     system_prompt: str
     user_prompt: str
     observation_template: str
+    timeout_template: str
+    observation_head_chars: int
+    observation_tail_chars: int
+    elision_template: str
+    output_limit_message: str
     invalid_action_format: str
     history: str
-    verification_pattern: str
+    submission_marker: str
 
 
 @dataclass(frozen=True)
@@ -88,12 +92,6 @@ def load_config(
         _apply_override(merged, override)
     config = _bind(ExperimentConfig, merged, "config")
     protocol = _render_protocol(config.protocol)
-    try:
-        re.compile(protocol.verification_pattern)
-    except re.error as error:
-        raise ValueError(
-            f"protocol.verification_pattern is invalid: {error}"
-        ) from error
     _require_positive_numbers(config)
     return ExperimentConfig(protocol, config.environment, config.budget, config.model)
 
@@ -204,11 +202,14 @@ def _join(path: str, name: str) -> str:
 
 
 def _render_protocol(protocol: ProtocolConfig) -> ProtocolConfig:
-    rendered: dict[str, str] = {}
+    rendered: dict[str, Any] = {}
     for field in fields(protocol):
-        text = getattr(protocol, field.name)
+        value = getattr(protocol, field.name)
+        if not isinstance(value, str):
+            rendered[field.name] = value
+            continue
         try:
-            rendered[field.name] = _JINJA.from_string(text).render()
+            rendered[field.name] = _JINJA.from_string(value).render()
         except TemplateError as error:
             raise ValueError(
                 f"Protocol template {field.name} failed: {error}"
@@ -218,6 +219,8 @@ def _render_protocol(protocol: ProtocolConfig) -> ProtocolConfig:
 
 def _require_positive_numbers(config: ExperimentConfig) -> None:
     numbers: dict[str, float] = {
+        "protocol.observation_head_chars": config.protocol.observation_head_chars,
+        "protocol.observation_tail_chars": config.protocol.observation_tail_chars,
         "environment.timeout_seconds": config.environment.timeout_seconds,
         "environment.output_bytes": config.environment.output_bytes,
         "environment.submission_bytes": config.environment.submission_bytes,

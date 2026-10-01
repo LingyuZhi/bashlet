@@ -19,7 +19,6 @@ from bashlet import (
     InteractionBudget,
     Limits,
     Observation,
-    Submit,
     Task,
     run_experiment,
 )
@@ -169,7 +168,7 @@ def test_submission_preserves_executable_helpers_used_by_the_graded_function(
         output_dir=tmp_path,
     )
     assert observed(result, 0).status == "ok"
-    assert observed(result, 0).stdout == "42\n"
+    assert observed(result, 0).output == "42\n"
     assert result.passed, result.grade
 
 
@@ -334,7 +333,7 @@ def test_experiment_executes_feedback_and_grades_a_distinct_correct_submission(
 
     assert result.status == "completed", result
     assert result.isolation.passed, result.isolation
-    assert observed(result, 1).stdout == "feedback passed"
+    assert observed(result, 1).output == "feedback passed"
     assert result.grade is not None and result.grade.passed
     assert result.grade.passed_cases == 3
     assert result.submission is not None
@@ -627,7 +626,7 @@ def test_unavailable_isolation_preserves_reason_without_executing_actions(
     ("command", "expected_status"),
     [
         ("sleep 5", "timeout"),
-        ("yes excessive-output", "output_limit"),
+        ("yes excessive-output", "timeout"),
         ("printf 'diagnostic' >&2; exit 17", "command_failed"),
         ("echo invalid\x00command", "command_failed"),
     ],
@@ -649,10 +648,10 @@ def test_execution_limits_produce_recorded_real_observations(
     assert result.status == "budget_exhausted", result.reason
     observation = observed(result, 0)
     assert observation.status == expected_status
-    assert len(observation.stdout.encode()) + len(observation.stderr.encode()) <= 128
+    assert len(observation.output.encode()) <= 128
     if "exit 17" in command:
         assert observation.exit_code == 17
-        assert observation.stderr == "diagnostic"
+        assert observation.output == "diagnostic"
     record = json.loads((result.run_dir / "run.json").read_text())
     assert record["limits"]["timeout_seconds"] == 0.3
     assert record["limits"]["output_bytes"] == 128
@@ -661,7 +660,7 @@ def test_execution_limits_produce_recorded_real_observations(
 def test_infrastructure_failure_during_grading_retains_its_diagnostic(
     tmp_path: Path,
 ) -> None:
-    # A real executable boundary double removes bwrap only after probe + action.
+    # The executable boundary double fails after probe + write + submission.
     launcher = tmp_path / "bwrap-once"
     counter = tmp_path / "count"
     launcher.write_text(
@@ -669,7 +668,7 @@ def test_infrastructure_failure_during_grading_retains_its_diagnostic(
         f"count_file={shlex.quote(str(counter))}\n"
         'n=0; if [ -f "$count_file" ]; then read -r n < "$count_file"; fi\n'
         'n=$((n+1)); printf "%s\\n" "$n" > "$count_file"\n'
-        'if [ "$n" -gt 2 ]; then echo "executor unavailable" >&2; exit 70; fi\n'
+        'if [ "$n" -gt 3 ]; then echo "executor unavailable" >&2; exit 70; fi\n'
         'exec /usr/bin/bwrap "$@"\n'
     )
     launcher.chmod(0o700)
@@ -750,7 +749,7 @@ def test_submission_ends_the_episode_and_runs_keep_independent_snapshots(
     assert first.run_dir != second.run_dir
     assert first.grade is not None and first.grade.passed
     assert second.grade is not None and second.grade.passed
-    assert [type(step.action) for step in first.trajectory] == [Bash, Submit]
+    assert [type(step.action) for step in first.trajectory] == [Bash, Bash]
     assert (first.run_dir / "run.json").read_bytes() == first_record
     assert (
         first.run_dir / first.submission.path / "solution.py"
@@ -773,14 +772,80 @@ def test_run_records_one_merged_config_and_three_stable_fingerprints(
     assert set(record["config"]) == {"protocol", "environment", "budget", "model"}
     assert record["fingerprints"] == again["fingerprints"]
     assert set(record["fingerprints"]) == {"protocol", "environment", "budget"}
-    # v1 agent-visible text is unchanged: the protocol fingerprint stays frozen.
     assert record["fingerprints"]["protocol"] == record["protocol"]["sha256"]
-    assert record["protocol"]["sha256"] == (
-        "e3212936cc2175b313e7f2036e13d3dc5b61be5dee0ea68236a7ccae8f865077"
-    )
-    assert record["config"]["protocol"]["name"] == "bash-block-v1"
+    assert record["config"]["protocol"]["name"] == "bash-block-v2"
     assert record["config"]["budget"] == record["budget"]
     assert record["config"]["model"]["sampling"]["max_tokens"] == 1024
+
+
+def test_protocol_text_and_fingerprint_are_independent_of_task_shape(
+    tmp_path: Path,
+) -> None:
+    mbpp = run_experiment(
+        task=sum_task(),
+        model=replay(
+            [write_file("def solve(numbers): return sum(numbers)\n"), submit()]
+        ),
+        output_dir=tmp_path,
+    )
+    package = run_experiment(
+        task=Task(
+            task_id="manual/other-shape",
+            prompt="Fix the multiplier in the existing package and submit it.",
+            initial_files={
+                "helpers.py": "def twice(n): return n\n",
+                "main.py": (
+                    "from helpers import twice\ndef answer(n): return twice(n)\n"
+                ),
+            },
+            grader=FunctionGrader("main.py", "answer", (GradingCase((6,), 12),)),
+        ),
+        model=replay(
+            [bash("printf 'def twice(n): return n * 2\\n' > helpers.py"), submit()]
+        ),
+        output_dir=tmp_path,
+    )
+
+    assert mbpp.passed and package.passed
+    first = json.loads((mbpp.run_dir / "run.json").read_text())
+    second = json.loads((package.run_dir / "run.json").read_text())
+    assert first["protocol"] == second["protocol"]
+    assert first["fingerprints"]["protocol"] == second["fingerprints"]["protocol"]
+    text = json.dumps(first["protocol"])
+    for filename in (
+        "solution.py",
+        "feedback_tests.py",
+        "task.md",
+        "helpers.py",
+        "main.py",
+    ):
+        assert filename not in text
+
+
+def test_truncated_grading_json_cannot_pass_as_a_valid_output_prefix(
+    tmp_path: Path,
+) -> None:
+    result = run_experiment(
+        task=Task(
+            task_id="manual/truncated-grading",
+            prompt="Submit the existing program.",
+            initial_files={
+                "main.py": (
+                    "import os\ndef answer():\n"
+                    "    os.write(1, b'7' + b' ' * 256 + b'invalid suffix')\n"
+                    "    os._exit(0)\n"
+                ),
+            },
+            grader=FunctionGrader("main.py", "answer", (GradingCase((), 7),)),
+        ),
+        model=replay([submit()]),
+        output_dir=tmp_path,
+        overrides=["environment.output_bytes=128"],
+    )
+
+    assert result.status == "completed"
+    assert result.grade is not None and not result.grade.passed
+    assert result.grade.cases[0].status == "output_limit"
 
 
 def _fingerprints(tmp_path: Path, config: list[Path] | None = None) -> dict[str, str]:
@@ -999,7 +1064,7 @@ def test_task_cannot_connect_to_a_host_service(tmp_path: Path) -> None:
         )
     assert result.isolation.passed
     assert observed(result, 0).status == "command_failed"
-    assert "ConnectionRefusedError" in observed(result, 0).stderr
+    assert "ConnectionRefusedError" in observed(result, 0).output
 
 
 @pytest.mark.parametrize("wait_command", ["sleep 10", ":"])

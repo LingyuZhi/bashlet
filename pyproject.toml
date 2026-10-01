@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/bashlet/configs/bash-block-v1.yaml" = "bashlet/configs/bash-block-v1.yaml"
+"src/bashlet/configs/bash-block-v2.yaml" = "bashlet/configs/bash-block-v2.yaml"
 
 [build-system]
 requires = ["hatchling>=1.27"]

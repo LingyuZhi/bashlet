@@ -45,13 +45,6 @@ class Bash:
 
 
 @dataclass(frozen=True)
-class Submit:
-    """Submit the current Task Workspace and end the Episode."""
-
-    kind: Literal["submit"] = field(default="submit", init=False)
-
-
-@dataclass(frozen=True)
 class InvalidAction:
     """A generation the action protocol rejected; nothing was executed."""
 
@@ -132,11 +125,11 @@ class Limits:
 
 @dataclass(frozen=True)
 class Observation:
-    status: Literal[
-        "ok", "command_failed", "timeout", "output_limit", "infrastructure_error"
-    ]
+    status: Literal["ok", "command_failed", "timeout", "infrastructure_error"]
     stdout: str = ""
     stderr: str = ""
+    output: str = ""
+    output_truncated: bool = False
     exit_code: int | None = None
     duration_seconds: float = 0.0
 
@@ -190,7 +183,7 @@ class Step:
     """One Interaction Step. ``feedback`` is the exact text the policy sees next;
     ``candidate`` is derived after the episode from the workspace manifest."""
 
-    action: Bash | Submit | InvalidAction
+    action: Bash | InvalidAction
     observation: Observation | None = None
     model_call: ModelCall | None = None
     feedback: str | None = None

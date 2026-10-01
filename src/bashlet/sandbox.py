@@ -53,10 +53,16 @@ class Sandbox:
         *,
         stdin: bytes = b"",
         readonly: bool = False,
+        merge_output: bool = False,
     ) -> Observation:
         started = time.monotonic()
         if any("\x00" in argument for argument in argv):
-            return Observation("command_failed", stderr="Command contains a NUL byte")
+            message = "Command contains a NUL byte"
+            return Observation(
+                "command_failed",
+                output=message if merge_output else "",
+                stderr="" if merge_output else message,
+            )
         with (
             tempfile.TemporaryFile() as status_file,
             tempfile.TemporaryFile() as input_file,
@@ -110,7 +116,7 @@ class Sandbox:
                     command,
                     stdin=input_file,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stderr=subprocess.STDOUT if merge_output else subprocess.PIPE,
                     env={
                         "PATH": self.environment.path,
                         "LANG": self.environment.lang,
@@ -119,14 +125,20 @@ class Sandbox:
                     start_new_session=True,
                 )
             except (OSError, ValueError) as error:
-                return Observation("infrastructure_error", stderr=str(error))
+                return Observation(
+                    "infrastructure_error",
+                    output=str(error) if merge_output else "",
+                    stderr="" if merge_output else str(error),
+                )
             stdout, stderr = bytearray(), bytearray()
+            output_truncated = False
             outcome: Observation | None = None
-            assert process.stdout is not None and process.stderr is not None
+            assert process.stdout is not None
             try:
                 with selectors.DefaultSelector() as selector:
                     selector.register(process.stdout, selectors.EVENT_READ, stdout)
-                    selector.register(process.stderr, selectors.EVENT_READ, stderr)
+                    if process.stderr is not None:
+                        selector.register(process.stderr, selectors.EVENT_READ, stderr)
                     while selector.get_map() or process.poll() is None:
                         remaining = self.limits.timeout_seconds - (
                             time.monotonic() - started
@@ -144,17 +156,15 @@ class Sandbox:
                             )
                             key.data.extend(chunk[:available])
                             if len(chunk) > available:
-                                outcome = Observation("output_limit")
-                                break
-                        if outcome is not None:
-                            break
+                                output_truncated = True
             finally:
                 # Killing bwrap also kills the namespace's init and detached children.
                 if process.poll() is None:
                     os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
                 process.stdout.close()
-                process.stderr.close()
+                if process.stderr is not None:
+                    process.stderr.close()
             if outcome is None:
                 status_file.seek(0)
                 reports = [json.loads(line) for line in status_file if line.strip()]
@@ -166,8 +176,10 @@ class Sandbox:
                     )
             return replace(
                 outcome,
-                stdout=stdout.decode("utf-8", errors="replace"),
+                output=stdout.decode("utf-8", errors="replace") if merge_output else "",
+                stdout="" if merge_output else stdout.decode("utf-8", errors="replace"),
                 stderr=stderr.decode("utf-8", errors="replace"),
+                output_truncated=output_truncated,
                 exit_code=process.returncode,
                 duration_seconds=time.monotonic() - started,
             )

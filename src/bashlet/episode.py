@@ -23,7 +23,6 @@ from .models import (
     ModelCall,
     SamplingParams,
     Step,
-    Submit,
     Usage,
 )
 from .sandbox import Sandbox
@@ -171,7 +170,7 @@ def save_record(
     record = (
         asdict(result)
         | {
-            "schema_version": 6,
+            "schema_version": 7,
             "config": asdict(condition),
             "fingerprints": protocol.fingerprints(condition),
             "protocol": protocol.describe(condition.protocol),
@@ -279,41 +278,41 @@ def run_episode(
                 call.text, call.generation.stop_reason == "length"
             )
             result.usage.steps += 1
-            if isinstance(action, Submit):
-                record_step(Step(action, None, call))
-                save()
-                result.status = "submitted"
-                result.submission_text = ""
-                return result
             if isinstance(action, InvalidAction):
                 result.usage.invalid_actions += 1
                 consecutive_invalid += 1
+                feedback = protocol.render_invalid(
+                    action, condition.protocol.invalid_action_format
+                )
+                record_step(Step(action, None, call, feedback))
                 if consecutive_invalid >= budget.max_consecutive_invalid:
-                    record_step(Step(action, None, call))
-                    result.status = "invalid_action"
+                    result.status = "format_error"
                     result.reason = (
                         f"{consecutive_invalid} consecutive invalid actions: "
                         + action.reason
                     )
                     return result
-                feedback = protocol.render_invalid(
-                    action, condition.protocol.invalid_action_format
-                )
-                record_step(Step(action, None, call, feedback))
             else:
                 consecutive_invalid = 0
                 observation = sandbox.execute(
                     workspace,
                     ["/bin/bash", "--noprofile", "--norc", "-c", action.command],
+                    merge_output=True,
                 )
                 if observation.status == "infrastructure_error":
                     record_step(Step(action, observation, call))
                     result.status = "infrastructure_error"
-                    result.reason = observation.stderr
+                    result.reason = observation.output
                     return result
-                feedback = protocol.render_observation(
-                    observation, condition.protocol.observation_template
+                submitted = protocol.submission_text(
+                    observation, condition.protocol.submission_marker
                 )
+                if submitted is not None:
+                    record_step(Step(action, observation, call))
+                    result.status = "submitted"
+                    result.submission_text = submitted
+                    return result
+                feedback = protocol.render_observation(observation, condition.protocol)
                 record_step(Step(action, observation, call, feedback))
             # Feedback is appended only after its action has actually run.
             context.extend(

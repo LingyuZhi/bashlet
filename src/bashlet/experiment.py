@@ -87,6 +87,8 @@ def _grade(grader: FunctionGrader, sandbox: Sandbox, run_dir: Path) -> Grade:
             break
         if observation.status != "ok":
             results.append(CaseResult(False, observation.status))
+        elif observation.output_truncated:
+            results.append(CaseResult(False, "output_limit"))
         else:
             try:
                 passed = json.loads(observation.stdout) == case.expected

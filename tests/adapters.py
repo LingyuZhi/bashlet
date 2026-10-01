@@ -119,7 +119,7 @@ def latest_feedback(context: str) -> str:
 
 
 def bash(command: str) -> str:
-    return f"Next command:\n```bash\n{command}\n```"
+    return f"THOUGHT: Run the next command.\n```bash\n{command}\n```"
 
 
 def write_file(source: str) -> str:
@@ -127,7 +127,7 @@ def write_file(source: str) -> str:
 
 
 def submit() -> str:
-    return bash("submit")
+    return bash("printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'")
 
 
 def replay(replies: Sequence[str]) -> ReplayModel:

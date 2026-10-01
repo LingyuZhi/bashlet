@@ -16,7 +16,6 @@ from .models import (
     Model,
     Observation,
     SamplingParams,
-    Submit,
     Task,
 )
 from .protocol import PROTOCOL_SHA256, PROTOCOL_VERSION
@@ -39,7 +38,6 @@ __all__ = [
     "Observation",
     "ReplayModel",
     "SamplingParams",
-    "Submit",
     "Task",
     "Utf8Encoding",
     "run_experiment",
