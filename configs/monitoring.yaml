@@ -1,0 +1,8 @@
+# Separate from Harness configuration and comparison fingerprints.
+project: bashlet
+entity: null
+group: issue07-sft-v1
+mode: online
+log_every: 1
+timeout_seconds: 20
+dotenv_path: .env

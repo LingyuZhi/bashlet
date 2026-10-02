@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01–05、12–20：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合、回放运行记录，并评测固定开发任务清单。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。正式实验使用 PyTRIO 的 Qwen/Qwen3.5-4B，在提交付费请求前通过共用费用账本检查额度。
+当前实现任务 01–07、12–20：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合、回放运行记录，并评测固定开发任务清单。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。正式实验使用 PyTRIO 的 Qwen/Qwen3.5-4B，在提交付费请求前通过共用费用账本检查额度。
 
 ## 运行
 
@@ -251,6 +251,48 @@ uv run --locked bashlet evaluate configs/mbpp-dev-8-v1.json \
 本次共 39 次任务采样、2907 个任务生成 token，加上 2 次探测共 41 个收费请求，账本占用上界 ¥1.64、在途 ¥0；全项目累计上界 ¥1.92，充值剩余额度 ¥8.08。账单接口仍返回 401，实际扣费未知。结果与逐项哈希验收在 `runs/issue05-development-baseline/1dd96303a0784be6a0988c6a22bc31dc/` 的 `evaluation.json`、`acceptance.json`、`billing-verification.json`；比较指纹为 `cc0efb2e89e26e7d5dfcc7a148623eeb60042cde20a5c207a4ea0b4f292c9da8`。对应 sampler 为 `sample_3sv7dco753ii`，每题的 `run` 路径可交给 `bashlet show` 回放。
 
 后续人工费用证据另存 `billing-user-report.json`，保持原始运行记录不变。用户确认后台累计显示 `sample:2.97K ¥0.01`，另有 prefill ¥0.04，其中包含上一个任务；这两个分项合计 ¥0.05，不能精确分摊到本次评测。该累计金额与本次账本上界分别记录，尚未对 41 个请求擅自分摊费用或释放账本占用。替身验收记录单独归档在 `runs/issue05-test-double/`。实现通过 256 项全量测试；审查修复后评测／PyTRIO 两个文件的 38 项测试、mypy、ruff 均通过，两轴审查没有遗留代码问题。
+
+## SFT、快照选择与 W&B
+
+`train-sft` 读取任务 06 的已验证示范，核对训练划分、执行证据哈希、tokenizer 身份、原始 token 与右移后的监督掩码。输入／观察不参与 loss；全部上下文 token 仍进入费用预留。`configs/sft-v1.yaml` 固定 95 条示范、rank 16、batch 8、学习率 `1e-4`、24 次更新及第 12／24 步的 checkpoint。每次更新等待 PyTRIO 的 forward/backward 和 optimizer future 真正完成，未知结果保留在途费用并阻止自动重发。
+
+监控配置单独放在 `configs/monitoring.yaml` 或训练配置的 `monitor` 中，不进入 Harness 指纹和评测比较条件。锁定 `wandb==0.30.0`；凭证优先读 `WANDB_API_KEY` 环境变量，再读 `.env` 的同名字段，兼容已有的 `wandb_api_key`。密钥只传给 SDK，agent 沙箱清空环境。首次付费训练须完成在线认证；project 默认 `bashlet`，entity 由账号解析。上传仅有允许的指标、脱敏配置和 checkpoint URI；关闭控制台、源码、git、依赖清单和机器指标自动采集。
+
+以下命令使用既有总账 `runs/spend.sqlite3`；`sft` 和 `sft-development` 分别限 ¥4，原项目上限和已充值 ¥10 上限仍同时生效。新实验须另取输出目录，不覆盖已有证据：
+
+```bash
+# 从已验证示范开始；在第 12 步保存并退出。
+uv run --locked bashlet train-sft configs/sft-v1.yaml \
+  --output-dir runs/my-sft --stop-after 12
+# 从该步完整训练状态恢复，继续到配置中的第 24 步。
+uv run --locked bashlet train-sft configs/sft-v1.yaml \
+  --output-dir runs/my-sft --resume
+
+# 用 training.json 中某个 sampler.path 替换下面的 URI。
+uv run --locked bashlet evaluate configs/mbpp-dev-8-v1.json \
+  -c configs/pytrio-smoke.yaml -c configs/development-baseline-v1.yaml \
+  --set model.api_key_env=pytrio_api_key --set model.group=sft-development \
+  --set model.model_path=trio://TRAINING_RUN/sampler_weights/SNAPSHOT \
+  --snapshot pytrio/Qwen/Qwen3.5-4B@trio://TRAINING_RUN/sampler_weights/SNAPSHOT \
+  --monitor-config configs/monitoring.yaml --training-run runs/my-sft \
+  --output-dir runs/my-sft-dev
+
+uv run --locked bashlet select-sft runs/my-sft \
+  --baseline runs/issue05-development-baseline/1dd96303a0784be6a0988c6a22bc31dc/evaluation.json \
+  --evaluation runs/my-sft-dev/EVALUATION_ID/evaluation.json
+```
+
+`training.json` 保留优化器进度、批次用量、训练配置、示范来源和费用请求身份。sampler 权重供推理与冻结教师使用；`training_state` 保存模型和优化器，以 `create_training_client_from_state_with_optimizer()` 恢复。`--resume` 保留本地与 W&B 身份，校验配置和训练数据，并拒绝未核实的在途更新、缺少对应完整状态的恢复或并发启动。同一个运行的 `metrics.jsonl` 以独立事件序号记录，每次已完成更新默认上报一次；loss 为受监督 token 的交叉熵之和除以受监督 token 数。
+
+`select-sft` 只接受完整、真实、比较条件相同的开发评测和已保存的 SFT sampler。按最终通过数选择，同分取更早更新；最终测试数据、测试替身及不完整评测均被拒绝。`selection.json` 同时记录学生与冻结教师所用的同一个快照，以及配套的 SFT 完整状态。从 SFT 转到 OPSD **重置优化器**：学生从所选模型参数初始化，教师固定该快照；不能把这一新阶段初始化冒充 SFT 断点续训。教师的实际评分能力仍由后续 OPSD 小试验证。
+
+历史基线通过 `bashlet monitor import-evaluation EVALUATION_JSON --monitor-config configs/monitoring.yaml --output-dir runs/baseline-monitor` 导入，保留原产物、来源哈希和 `historical_import=true`，不再采样。未知实扣保持缺失，不能把费用上界当成实扣。
+
+断网时本地指标与 W&B 缓存保留在该运行目录；`monitor.json` 保存同步状态、实际 entity、run ID、URL、缓存路径与补同步命令。执行 `uv run --env-file .env bashlet monitor sync RUN_DIR` 会同步缓存并补发尚未进入缓存的事件，沿用原身份和全局事件序号；重复执行不会重复计数。文件中另列原生 `wandb sync --include-online --id RUN_ID CACHE_DIR` 命令，直接使用它时须提供标准 `WANDB_API_KEY`（只有小写 `.env` 字段时使用 bashlet 包装命令）。SDK 的 init／finish 都有超时，W&B 恢复与模型／优化器恢复分别记录。
+
+2026-10-02 的真实运行 `runs/issue07-sft-v1/` 完成 24 次更新，并在第 12 步退出后恢复完整训练状态。开发集基线 5/8，SFT 第 12、24 步均 2/8，比较指纹与基线一致；据同分规则选第 12 步 `trio://run_x2uvy7hltg83/sampler_weights/sampler-0012`，配套完整状态为 `trio://run_x2uvy7hltg83/weights/state-0012`。本次 SFT 出现退化，主要观察到 shell 引号错误和重复失败后用尽 6 步，loss 下降不代表任务能力提升；没有读取最终测试来选优。训练及两次评测的保守占用共 ¥6.48，项目累计 ¥8.40、在途 ¥0；用户提供的后台累计分项为 train 0.13M／¥0.60、sample 10.42K／¥0.04，未提供本次 prefill 或按会话拆分的金额；该 ¥0.64 不能作为本次独立总费用，账本未据此释放额度。证据保存在 `billing-user-report.json`。
+
+训练曲线及所选快照见 [W&B SFT run](https://wandb.ai/lingyuzhi-chinese-academy-of-sciences/bashlet/runs/712468fe186b4798ba3e7d48c1b69ecd)，配套证据在 `runs/issue07-dev-step12/`、`runs/issue07-dev-step24/`、`runs/issue07-baseline-monitor/` 和 `runs/issue07-monitor-recovery/`。完整轨迹与权重没有上传到 W&B。
 
 ## 两层入口与 Task v2
 

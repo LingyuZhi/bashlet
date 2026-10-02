@@ -9,12 +9,11 @@ import threading
 import time
 from collections.abc import Sequence
 from dataclasses import asdict, replace
-from decimal import ROUND_CEILING, Decimal, InvalidOperation
+from decimal import Decimal
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Literal, cast
 
-import httpx
 import yaml
 from dotenv import dotenv_values
 
@@ -26,7 +25,7 @@ from .models import (
     ModelResponseError,
     SamplingParams,
 )
-from .spend import DEFAULT_POLICY, BudgetRefused, SpendLedger, SpendPolicy
+from .spend import DEFAULT_POLICY, BudgetRefused, SpendLedger, SpendPolicy, TokenPricing
 
 MODEL = "Qwen/Qwen3.5-4B"
 SDK_VERSION = "0.2.9"
@@ -143,6 +142,7 @@ class PyTRIOModel:
             raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
         policy_path = Path(spend_config) if spend_config else DEFAULT_POLICY
         self._pricing = yaml.safe_load(policy_path.read_text())
+        self._prices = TokenPricing(self._pricing)
         self.ledger = ledger or SpendLedger(
             Path(ledger_path), policy=SpendPolicy.read(policy_path)
         )
@@ -193,7 +193,9 @@ class PyTRIOModel:
             return
         if self._service is None:
             key = _credential(self._key_env, self._dotenv)
-            self._verify_prices()
+            self._details["live_price_catalog"] = self._prices.verify(
+                self.model, self.timeout_seconds
+            )
             import pytrio as trio
 
             # Each explicit retry needs its own reservation.
@@ -248,86 +250,6 @@ class PyTRIOModel:
             }
         )
 
-    def _verify_prices(self) -> None:
-        """Read the same public catalog as the official price page before spending."""
-        response = httpx.get(
-            self._pricing["price_catalog_url"], timeout=self.timeout_seconds
-        )
-        response.raise_for_status()
-        catalog = response.json()
-        if (
-            catalog.get("currency") != "CNY"
-            or catalog.get("token_unit") != "per_1m_tokens"
-            or catalog.get("rounding") != "ceil"
-        ):
-            raise BudgetRefused("Unknown live PyTRIO billing units")
-        item = next(
-            (item for item in catalog["items"] if item["display_name"] == MODEL), None
-        )
-        if item is None:
-            raise BudgetRefused("Qwen3.5-4B pricing is not available")
-        configured = self._pricing["prices_cny_per_million"]
-        for remote, local in (
-            ("prefill", "prefill"),
-            ("sample", "sample"),
-            ("train", "train"),
-            ("cached_prefill", "cache"),
-        ):
-            price = item["prices"][remote]
-            if price["billing_unit"] != "per_1m_tokens" or Decimal(
-                str(price["unit_price"])
-            ) / 100 > Decimal(str(configured[local])):
-                raise BudgetRefused(
-                    "Live prices exceed the configured ceilings; review spend.yaml"
-                )
-        self._details["live_price_catalog"] = {
-            "version": catalog["version"],
-            "currency": "CNY",
-            "unit_price_currency": "fen",
-            "rounding": catalog["rounding"],
-            "model": item,
-        }
-
-    def _upper_bound(
-        self, prompt_tokens: int, max_tokens: int, *, scoring: bool = False
-    ) -> Decimal:
-        prices = self._pricing.get("prices_cny_per_million")
-        if not isinstance(prices, dict) or any(
-            type(prices.get(name)) not in (int, float)
-            or not math.isfinite(prices[name])
-            or prices[name] <= 0
-            for name in ("prefill", "sample", "train")
-        ):
-            raise BudgetRefused("Unknown token pricing; cannot bound paid work")
-        multiplier = self._pricing.get("ceiling_multiplier")
-        if (
-            type(multiplier) not in (int, float)
-            or not math.isfinite(multiplier)
-            or multiplier < 1
-        ):
-            raise BudgetRefused("A finite cost ceiling multiplier >= 1 is required")
-        try:
-            quantum = Decimal(str(self._pricing.get("billing_quantum_cny")))
-        except InvalidOperation:
-            raise BudgetRefused("Unknown billing rounding quantum") from None
-        if not quantum.is_finite() or quantum < Decimal("0.01"):
-            raise BudgetRefused(
-                "A billing rounding quantum of at least one fen is required"
-            )
-        prefill = (
-            max(prices[name] for name in ("prefill", "sample", "train"))
-            if scoring
-            else prices["prefill"]
-        )
-
-        def rounded(rate: float, tokens: int) -> Decimal:
-            cost = Decimal(str(rate)) * tokens / 1_000_000
-            return (cost / quantum).to_integral_value(rounding=ROUND_CEILING) * quantum
-
-        return Decimal(str(multiplier)) * (
-            rounded(prefill, prompt_tokens) + rounded(prices["sample"], max_tokens)
-        )
-
     @staticmethod
     def _terminal(error: BaseException) -> bool:
         # A timeout/gateway failure may conceal continuing remote work.
@@ -345,7 +267,9 @@ class PyTRIOModel:
     ) -> tuple[Any, str, str]:
         import pytrio as trio
 
-        upper = self._upper_bound(len(prompt), sampling.max_tokens, scoring=scoring)
+        upper = self._prices.upper_bound(
+            len(prompt), sampling.max_tokens, scoring=scoring
+        )
         payload = {
             "model": self.model,
             "prompt_tokens": list(prompt),

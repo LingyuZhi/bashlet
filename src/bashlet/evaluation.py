@@ -13,6 +13,8 @@ from .config import ExperimentConfig, config_record, load_model
 from .experiment import run_experiment, serialize_task, task_from_record
 from .mbpp import mbpp_task_path
 from .models import EpisodeResult, Model, ModelBackend, Task
+from .monitoring import MonitorConfig, RunMonitor, code_revision, evaluation_metrics
+from .protocol import fingerprints
 
 VERSION = "development-evaluation-v1"
 RULES = {
@@ -182,6 +184,19 @@ def _cost(model: Model) -> dict[str, Any]:
         if entries and all(entry["billing_basis"] == "confirmed" for entry in entries)
         else None,
         "billing_note": "Unreconciled ceilings are not verified actual charges.",
+        **{
+            key: spend[key]
+            for key in ("funded_remaining_cny", "project_remaining_cny")
+            if key in spend
+        },
+        **(
+            {
+                "project_upper_cny": spend["charged_cny"] + spend["pending_cny"],
+                "project_pending_cny": spend["pending_cny"],
+            }
+            if "charged_cny" in spend
+            else {}
+        ),
     }
 
 
@@ -192,6 +207,8 @@ def evaluate(
     evidence_kind: str,
     condition: ExperimentConfig,
     output_dir: Path,
+    monitoring: MonitorConfig | None = None,
+    training_run: Path | None = None,
 ) -> Path:
     """CLI orchestration; every planned attempt uses the existing experiment seam."""
     plan, tasks = _tasks(plan_path)
@@ -242,6 +259,7 @@ def evaluate(
     record: dict[str, Any] = {
         "version": VERSION,
         "started_at": datetime.now(UTC).isoformat(),
+        "code_revision": code_revision(),
         "status": "running",
         "evidence_kind": evidence_kind,
         "snapshot": snapshot,
@@ -263,8 +281,34 @@ def evaluate(
         _write(path, record)
 
     save()  # All denominators are durable before any paid probe or task starts.
+    monitor = None
+    active_row = None
     try:
+        if monitoring is not None:
+            monitor = RunMonitor(
+                run_dir,
+                monitoring,
+                phase="dev-eval",
+                metadata={
+                    "snapshot": snapshot,
+                    "evidence_kind": evidence_kind,
+                    "training_run": str(training_run.resolve())
+                    if training_run
+                    else None,
+                    "comparison_sha256": record["comparison_sha256"],
+                    "encoding": model.encoding.identity,
+                    "fingerprints": fingerprints(condition),
+                    "sampling": configuration["model"]["sampling"],
+                    "code_revision": record["code_revision"],
+                    "data_source": {
+                        k: plan[k]
+                        for k in ("source", "conversion", "split", "task_ids")
+                    },
+                },
+                require_online=evidence_kind == "experimental",
+            )
         for task, row in zip(tasks, rows, strict=True):
+            active_row = row
             row["outcome"] = "running"
             save()
 
@@ -295,6 +339,11 @@ def evaluate(
                 ).hexdigest(),
             )
             save()
+            if monitor is not None:
+                monitor.update_metadata(
+                    {"comparison_sha256": record["comparison_sha256"]}
+                )
+                monitor.log(f"task-{task.task_id}", evaluation_metrics(record))
             print(f"{task.task_id}: {row['outcome']}", flush=True)
             if (
                 row["outcome"] in {"infrastructure_error", "interrupted"}
@@ -307,12 +356,14 @@ def evaluate(
             ):
                 break
     except (OSError, KeyboardInterrupt) as error:
-        row.update(
-            outcome="interrupted"
-            if isinstance(error, KeyboardInterrupt)
-            else "infrastructure_error",
-            reason=str(error),
-        )
+        if active_row is not None:
+            active_row.update(
+                outcome="interrupted"
+                if isinstance(error, KeyboardInterrupt)
+                else "infrastructure_error",
+                reason=str(error),
+            )
+        record["error_type"] = type(error).__name__
     finally:
         summary = _summary(rows)
         record["status"] = (
@@ -325,4 +376,108 @@ def evaluate(
             model.describe() if isinstance(model, ModelBackend) else {}
         )
         save()
+        if monitor is not None:
+            monitor.update_metadata({"comparison_sha256": record["comparison_sha256"]})
+            monitor.log("finished", evaluation_metrics(record))
+            monitor.finish()
     return path
+
+
+def select_sft(run_dir: Path, baseline: Path, evaluations: list[Path]) -> Path:
+    """Select by fixed-denominator dev success; retain separate restart artifacts."""
+    training = json.loads((run_dir / "training.json").read_text())
+    control = json.loads(baseline.read_text())
+    if not evaluations or len(set(evaluations)) != len(evaluations):
+        raise ValueError("Select from distinct development evaluations")
+    checkpoints = {
+        f"pytrio/{training['metadata']['base_model']}@{c['sampler']['path']}": c
+        for c in training["checkpoints"]
+        if c["sampler"]["kind"] == "sampler_weights"
+        and c["training_state"]["kind"] == "training_state"
+    }
+    records = [
+        (path, json.loads(path.read_text())) for path in [baseline, *evaluations]
+    ]
+    for _, record in records:
+        if record["plan"]["split"] != "dev":
+            raise ValueError("SFT selection requires development data only")
+        if record["status"] != "complete" or record["evidence_kind"] != "experimental":
+            raise ValueError("SFT selection requires complete experimental evaluations")
+        if (
+            record["comparison_sha256"] != _digest(record["comparison"])
+            or record["comparison_sha256"] != control["comparison_sha256"]
+            or record["plan"]["task_ids"] != control["plan"]["task_ids"]
+            or record["summary"]["planned_tasks"] != len(control["plan"]["task_ids"])
+        ):
+            raise ValueError(
+                "Changed comparison conditions require a matching baseline"
+            )
+    candidates = []
+    seen = set()
+    for path, record in records[1:]:
+        snapshot = record["snapshot"]
+        if snapshot not in checkpoints or snapshot in seen:
+            raise ValueError(
+                "Evaluation must load a distinct saved SFT sampler snapshot"
+            )
+        seen.add(snapshot)
+        candidates.append(
+            {
+                "evaluation": str(path.resolve()),
+                "evaluation_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "passed_tasks": record["summary"]["passed_tasks"],
+                "planned_tasks": record["summary"]["planned_tasks"],
+                **checkpoints[snapshot],
+            }
+        )
+    selected = max(candidates, key=lambda c: (c["passed_tasks"], -c["optimizer_step"]))
+    selection = {
+        "rule": (
+            "highest fixed-denominator development pass rate; ties prefer earlier step"
+        ),
+        "comparison_sha256": control["comparison_sha256"],
+        "baseline": str(baseline.resolve()),
+        "baseline_sha256": hashlib.sha256(baseline.read_bytes()).hexdigest(),
+        "baseline_passed_tasks": control["summary"]["passed_tasks"],
+        "candidates": candidates,
+        "optimizer_step": selected["optimizer_step"],
+        "student_snapshot": selected["sampler"]["path"],
+        "frozen_teacher_snapshot": selected["sampler"]["path"],
+        "sft_training_state": selected["training_state"],
+        "optimizer_transition": "reset-for-opsd",
+        "opsd_initialization": (
+            "load selected SFT weights into a new optimizer; freeze teacher"
+        ),
+        "teacher_scoring_verified": False,
+    }
+    destination = run_dir / "selection.json"
+    if destination.exists() and json.loads(destination.read_text()) != selection:
+        raise ValueError(
+            "Selection already exists; preserve it and use a new experiment"
+        )
+    _write(destination, selection)
+    monitor_path = run_dir / "monitor.json"
+    if monitor_path.exists():
+        state = json.loads(monitor_path.read_text())
+        metadata = {k: v for k, v in state["config"].items() if k != "monitoring"}
+        monitor = RunMonitor(
+            run_dir,
+            MonitorConfig(**training["config"]["monitor"]),
+            phase="sft",
+            metadata=metadata,
+        )
+        monitor.log(
+            "selection",
+            {
+                "checkpoint/selected_sampler": selection["student_snapshot"],
+                "checkpoint/selected_optimizer_step": selection["optimizer_step"],
+                "checkpoint/selected_training_state": selected["training_state"][
+                    "path"
+                ],
+                "eval/selected_passed_tasks": selected["passed_tasks"],
+                "eval/planned_tasks": selected["planned_tasks"],
+                "eval/completed_tasks": selected["planned_tasks"],
+            },
+        )
+        monitor.finish()
+    return destination

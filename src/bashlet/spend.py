@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
@@ -12,6 +13,7 @@ from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
 import yaml
 
 _MICROS = 1_000_000
@@ -376,3 +378,93 @@ class SpendLedger:
                 )
                 / _MICROS,
             }
+
+
+class TokenPricing:
+    """Shared live catalog checks and conservative token charges."""
+
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config = config
+
+    def verify(self, model: str, timeout: float) -> dict[str, Any]:
+        """Read the same public catalog as the official price page before spending."""
+        response = httpx.get(self.config["price_catalog_url"], timeout=timeout)
+        response.raise_for_status()
+        catalog = response.json()
+        if (
+            catalog.get("currency") != "CNY"
+            or catalog.get("token_unit") != "per_1m_tokens"
+            or catalog.get("rounding") != "ceil"
+        ):
+            raise BudgetRefused("Unknown live PyTRIO billing units")
+        item = next(
+            (item for item in catalog["items"] if item["display_name"] == model), None
+        )
+        if item is None:
+            raise BudgetRefused("Qwen3.5-4B pricing is not available")
+        configured = self.config["prices_cny_per_million"]
+        for remote, local in (
+            ("prefill", "prefill"),
+            ("sample", "sample"),
+            ("train", "train"),
+            ("cached_prefill", "cache"),
+        ):
+            price = item["prices"][remote]
+            if price["billing_unit"] != "per_1m_tokens" or Decimal(
+                str(price["unit_price"])
+            ) / 100 > Decimal(str(configured[local])):
+                raise BudgetRefused(
+                    "Live prices exceed the configured ceilings; review spend.yaml"
+                )
+        return {
+            "version": catalog["version"],
+            "currency": "CNY",
+            "unit_price_currency": "fen",
+            "rounding": catalog["rounding"],
+            "model": item,
+        }
+
+    def upper_bound(
+        self, prompt_tokens: int, max_tokens: int, *, scoring: bool = False
+    ) -> Decimal:
+        prices = self.config.get("prices_cny_per_million")
+        if not isinstance(prices, dict) or any(
+            type(prices.get(name)) not in (int, float)
+            or not math.isfinite(prices[name])
+            or prices[name] <= 0
+            for name in ("prefill", "sample", "train")
+        ):
+            raise BudgetRefused("Unknown token pricing; cannot bound paid work")
+        multiplier = self.config.get("ceiling_multiplier")
+        if (
+            not isinstance(multiplier, (int, float))
+            or not math.isfinite(multiplier)
+            or multiplier < 1
+        ):
+            raise BudgetRefused("A finite cost ceiling multiplier >= 1 is required")
+        try:
+            quantum = Decimal(str(self.config.get("billing_quantum_cny")))
+        except InvalidOperation:
+            raise BudgetRefused("Unknown billing rounding quantum") from None
+        if not quantum.is_finite() or quantum < Decimal("0.01"):
+            raise BudgetRefused(
+                "A billing rounding quantum of at least one fen is required"
+            )
+        prefill = (
+            max(prices[name] for name in ("prefill", "sample", "train"))
+            if scoring
+            else prices["prefill"]
+        )
+
+        def rounded(rate: float, tokens: int) -> Decimal:
+            cost = Decimal(str(rate)) * tokens / 1_000_000
+            return (cost / quantum).to_integral_value(rounding=ROUND_CEILING) * quantum
+
+        return Decimal(str(multiplier)) * (
+            rounded(prefill, prompt_tokens) + rounded(prices["sample"], max_tokens)
+        )
+
+    def training_bound(self, tokens: int) -> Decimal:
+        # Bound all context tokens, including masked positions. Account for
+        # both training and possible prefill categories without cache discounts.
+        return 2 * self.upper_bound(tokens, 0, scoring=True)

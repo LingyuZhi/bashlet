@@ -190,6 +190,8 @@ def main() -> None:
     )
     evaluation.add_argument("plan", type=Path)
     evaluation.add_argument("--snapshot", required=True, help="Expected model identity")
+    evaluation.add_argument("--monitor-config", type=Path)
+    evaluation.add_argument("--training-run", type=Path)
     evaluation.add_argument(
         "--evidence-kind",
         choices=("experimental", "test-double"),
@@ -213,6 +215,29 @@ def main() -> None:
         help="Default: all verified training tasks",
     )
     _execution_options(demonstrations)
+    training = commands.add_parser(
+        "train-sft", help="Train and checkpoint verified SFT demonstrations"
+    )
+    training.add_argument("training_config", type=Path)
+    training.add_argument("--output-dir", type=Path, required=True)
+    training.add_argument("--resume", action="store_true")
+    training.add_argument("--stop-after", type=int)
+    selection = commands.add_parser(
+        "select-sft", help="Select a saved SFT snapshot using development results"
+    )
+    selection.add_argument("run_dir", type=Path)
+    selection.add_argument("--baseline", type=Path, required=True)
+    selection.add_argument("--evaluation", type=Path, action="append", required=True)
+    monitoring = commands.add_parser(
+        "monitor", help="Import or sync experiment metrics"
+    )
+    monitor_commands = monitoring.add_subparsers(dest="monitor_command", required=True)
+    historical = monitor_commands.add_parser("import-evaluation")
+    historical.add_argument("evaluation", type=Path)
+    historical.add_argument("--monitor-config", type=Path, required=True)
+    historical.add_argument("--output-dir", type=Path, required=True)
+    sync = monitor_commands.add_parser("sync")
+    sync.add_argument("run_dir", type=Path)
     show = commands.add_parser("show", help="Replay a saved run without executing it")
     show.add_argument("run_dir", type=Path)
     _view_options(show)
@@ -242,13 +267,48 @@ def main() -> None:
     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "select-sft":
+            from .evaluation import select_sft
+
+            print(select_sft(options.run_dir, options.baseline, options.evaluation))
+            return
+        if options.command == "train-sft":
+            from .training import train_sft
+
+            print(
+                train_sft(
+                    options.training_config,
+                    options.output_dir,
+                    resume=options.resume,
+                    stop_after=options.stop_after,
+                )
+            )
+            return
+        if options.command == "monitor":
+            from .monitoring import MonitorConfig, import_evaluation, sync_monitor
+
+            if options.monitor_command == "sync":
+                sync_monitor(options.run_dir)
+            else:
+                import_evaluation(
+                    options.evaluation,
+                    options.output_dir,
+                    MonitorConfig.read(options.monitor_config),
+                )
+            return
         if options.command == "evaluate":
+            from .monitoring import MonitorConfig
+
             path = evaluate(
                 plan_path=options.plan,
                 snapshot=options.snapshot,
                 evidence_kind=options.evidence_kind,
                 condition=load_config(options.config, options.overrides),
                 output_dir=options.output_dir,
+                monitoring=MonitorConfig.read(options.monitor_config)
+                if options.monitor_config
+                else None,
+                training_run=options.training_run,
             )
             record = json.loads(path.read_text())
             summary = record["summary"]

@@ -14,6 +14,7 @@ dependencies = [
     "rich==15.0.0",
     "tokenizers==0.22.1",
     "transformers==4.57.3",
+    "wandb==0.30.0",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
@@ -55,6 +56,10 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["pytrio", "pytrio.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["wandb", "wandb.*"]
+follow_imports = "skip"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
