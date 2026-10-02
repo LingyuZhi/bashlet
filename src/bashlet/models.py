@@ -1,5 +1,6 @@
 """Inputs and recorded outcomes of one small experiment."""
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -73,10 +74,48 @@ class Generation:
     """Raw model output; only sampled tokens carry sampling logprobs."""
 
     tokens: tuple[int, ...]
-    stop_reason: Literal["stop", "length"]
+    stop_reason: Literal["stop", "length", "context"]
     logprobs: tuple[float, ...] | None = None
     request_id: str = ""
     source: Literal["sampled", "replayed"] = "sampled"
+
+    def validate(self, sampling: SamplingParams) -> None:
+        """Reject incomplete sampling evidence without repairing its values."""
+        tokens, logprobs = self.tokens, self.logprobs
+        problem = ""
+        if self.source not in ("sampled", "replayed"):
+            problem = f"Unknown generation source {self.source!r}"
+        elif self.source == "replayed" and logprobs is not None:
+            problem = "Replayed generations cannot carry sampling logprobs"
+        elif self.source == "sampled" and logprobs is None:
+            problem = "Sampled generations require per-token logprobs"
+        elif logprobs is not None and len(tokens) != len(logprobs):
+            problem = f"{len(tokens)} tokens but {len(logprobs)} logprobs"
+        elif len(tokens) > sampling.max_tokens:
+            problem = f"{len(tokens)} tokens exceed max_tokens={sampling.max_tokens}"
+        elif not all(type(token) is int and token >= 0 for token in tokens):
+            problem = "Token IDs must be non-negative integers"
+        elif logprobs is not None and not all(
+            type(value) in (int, float) and math.isfinite(value) and value <= 0
+            for value in logprobs
+        ):
+            problem = "Logprobs must be finite and non-positive"
+        elif self.stop_reason not in ("stop", "length", "context"):
+            problem = f"Unknown stop reason {self.stop_reason!r}"
+        if problem:
+            raise ModelResponseError(problem, self)
+
+
+class ModelResponseError(Exception):
+    """A backend returned invalid model output, rather than a service failure."""
+
+    def __init__(self, reason: str, generation: Generation | None = None) -> None:
+        super().__init__(reason)
+        self.generation = generation
+
+
+class ContextExhausted(Exception):
+    """The model cannot generate another token in the remaining context."""
 
 
 @runtime_checkable
@@ -131,6 +170,18 @@ class Model(Protocol):
     def encoding(self) -> Encoding: ...
 
     def sample(self, prompt: Sequence[int], sampling: SamplingParams) -> Generation: ...
+
+
+@runtime_checkable
+class ModelBackend(Model, Protocol):
+    """An external sampling service with a cached capability probe and evidence."""
+
+    def probe(self) -> None: ...
+
+    @property
+    def max_context_tokens(self) -> int: ...
+
+    def describe(self) -> dict[str, JSONValue]: ...
 
 
 @dataclass(frozen=True)
@@ -289,6 +340,7 @@ class EpisodeResult:
     limits: Limits
     isolation: Isolation
     policy: str = ""
+    policy_details: dict[str, JSONValue] = field(default_factory=dict)
     encoding: str = ""
     encoding_details: dict[str, JSONValue] = field(default_factory=dict)
     budget: InteractionBudget = field(default_factory=InteractionBudget)

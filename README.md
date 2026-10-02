@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01、02、12–19：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。真实 PyTRIO 采样由任务 04 接入。
+当前实现任务 01、02、12–20：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。开发用 vLLM 可在计算节点运行，正式实验的 PyTRIO 采样由任务 04 接入。
 
 ## 运行
 
@@ -90,6 +90,42 @@ uv run bashlet show runs/<运行 ID>
 uv run bashlet show runs/<运行 ID> --show-thinking
 ```
 
+## 开发用 vLLM
+
+`VLLMModel`（也可写完整导入路径 `bashlet.vllm.VLLMModel`）只产生开发证据。每个运行的 `policy_details.development_only` 固定为 `true`，实时视图和 `show` 也会注明排除实验结果。该字段同样保留在探针失败、服务失败和中断的记录中；有评分的开发回合也不作为实验结果。
+
+服务环境独立锁定在 `configs/dev-vllm/`，使用 Python 3.12、vLLM 0.11.0、PyTorch 2.8.0 和 CUDA 12.8 wheel；tokenizer 库与宿主版本一致。首次使用先核对 `/version`、`/v1/models`，再用一个 prompt token 采样一个 token。探针结果、实际服务版本、模型 revision、服务报告的权重路径和上下文上限写入 `policy_details`，tokenizer 的文件哈希仍写入 `encoding_details`。探针失败时没有任务生成或命令执行。
+
+采样使用 [`/v1/completions` 的 token prompt、`return_token_ids=true` 和 `logprobs=0`](https://github.com/vllm-project/vllm/blob/v0.11.0/vllm/entrypoints/openai/protocol.py)，按[该版本的返回实现](https://github.com/vllm-project/vllm/blob/v0.11.0/vllm/entrypoints/openai/serving_completion.py)读取 `choices[0].token_ids` 与 `logprobs.token_logprobs`，并校验 logprob 标识对应的 token。服务返回的文本不参与生成解析；不对返回 token 重新编码，不补概率。缺失、错位或非法数值结束为 `model_error`。网络错误与 HTTP 408/429/500/502/503/504 默认最多重试两次，最终失败为 `infrastructure_error`；其他 HTTP 错误不重试。请求的生成量按剩余上下文裁剪，达到模型上限或服务报告上下文超限时结束为 `context_exhausted`，已采样的 token 与概率仍保留。
+
+安装 vLLM、下载权重和使用计算节点前须取得使用者同意。获准后，在 `n30126` 上执行以下命令；先列模块，再加载实际存在的模块。模型与 tokenizer revision 固定为 `cdbee75f17c01a7cc42f958dc650907174af0554`，优先复用本地缓存，缺少的资产通过 HF-Mirror 下载：
+
+```bash
+ssh n30126
+module avail
+module load cuda/12.8
+cd /data/home/zdhs0148/opd/bashlet
+uv sync --project configs/dev-vllm --python 3.12 --locked
+HF_ENDPOINT=https://hf-mirror.com uv run --project configs/dev-vllm --locked hf download Qwen/Qwen3-4B-Instruct-2507 --revision cdbee75f17c01a7cc42f958dc650907174af0554
+HF_ENDPOINT=https://hf-mirror.com uv run --project configs/dev-vllm --locked vllm serve Qwen/Qwen3-4B-Instruct-2507 --revision cdbee75f17c01a7cc42f958dc650907174af0554 --tokenizer-revision cdbee75f17c01a7cc42f958dc650907174af0554 --served-model-name Qwen/Qwen3-4B-Instruct-2507 --host 127.0.0.1 --port 8000 --dtype bfloat16 --max-model-len 8192 --gpu-memory-utilization 0.6 --max-num-seqs 1 --enforce-eager --generation-config vllm
+```
+
+服务只绑定节点的 loopback。另开终端建立只绑定本机的 SSH 隧道，再用示例配置启动 CLI：
+
+```bash
+ssh -N -L 127.0.0.1:18000:127.0.0.1:8000 n30126
+```
+
+```bash
+mkdir -p runs/dev-vllm-input
+uv run bashlet agent "创建 hello.py，运行后提交" --workdir runs/dev-vllm-input -c configs/dev-vllm.yaml
+uv run bashlet show runs/<运行 ID>
+```
+
+服务可以持续运行，供后续开发使用；本次任务验收后保留服务和 GPU 占用。使用带认证的服务时，通过 `BASHLET_VLLM_API_KEY` 环境变量提供 API key，或用 `model.api_key_env` 指定环境变量名；配置与运行记录只保存变量名。真实服务不加入自动测试；错误映射由本地假 HTTP 服务在实验入口和 CLI 子进程验证。
+
+2026-10-02 已在 `n30126` 的 A100 40GB 上完成真实 CLI 冒烟回合：上述 Qwen3-4B 模型在 3 步内创建并运行 `hello.py`，输出 `5` 后显式提交；48 个采样 token 均保存原始 id 和逐 token logprob，能力与隔离探针通过。开发证据保存在 `runs/issue20-vllm/`：`api-probe.json` 保存真实 token 接口请求和响应，`acceptance.json` 汇总验收，完整运行记录位于 `episodes/a2a47dbc534c43178098b1addd3f609c/run.json`。
+
 ## 两层入口与 Task v2
 
 `run_episode(instruction=..., workspace=..., model=..., config=...)` 在已有工作区中运行一个回合，不接收 Task 或评分器。`config` 是 `bashlet.config.load_config()` 返回的完整配置；默认加载内置配置。返回 `EpisodeResult`，包含轨迹、终止状态、最终工作区路径 `workspace`、预算用量和可选的 `submission_text`。此入口直接修改指定工作区，运行记录默认保存在唯一的 `runs/<ID>/` 中；调用者也可指定独立的 `run_dir`，通过 `on_update` 接收进度。每个回合的状态都属于调用实例。
@@ -153,7 +189,7 @@ print(result.status, result.grade)
 
 模型通过 `Model` Adapter 接入（`identity`、`encoding`、`sample(prompt, sampling) -> Generation`）；编码还提供 `encode(text)`，供回放使用。每次 `Generation` 标注 `source`：默认 `sampled`，必须带等长、有限、非正的逐 token `logprobs`；`replayed` 的 `logprobs` 为 `None`。回放 token 不属于 on-policy 样本。返回内容违反约定或无法解码时以 `model_error` 结束，被拒输出保存在 `rejected_generation`，不进入上下文；模型调用本身抛错（服务、网络、Adapter）记为 `infrastructure_error`。测试用可控采样 Adapter 位于 `tests/adapters.py`。
 
-Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`format_error`、`model_error`、`budget_exhausted`（`InteractionBudget` 的步数、生成 token 数或墙钟秒数）和 `infrastructure_error`。实验层保留 `episode_status`，将已提交回合进一步判为 `completed`、`invalid_submission` 或评分阶段的 `infrastructure_error`；`result.passed` 只在可信评分通过时为真。未提交回合不评分，计为失败，最终工作区保留供诊断。回放回复用尽后返回空回复，按连续格式错误上限或交互预算结束。每次请求的 `max_tokens` 裁剪到剩余生成额度；回放也按此裁剪 token，并将被截断的回复标记为 `length`。`usage` 记录实际步数、生成量、无效行动数与耗时。墙钟预算从隔离探针通过后开始计时，在步与步之间检查；单条命令另受 `Limits.timeout_seconds` 约束，单次模型调用的超时由接入的 Adapter 负责。
+Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`format_error`、`model_error`、`context_exhausted`（模型上下文耗尽）、`budget_exhausted`（`InteractionBudget` 的步数、生成 token 数或墙钟秒数）和 `infrastructure_error`。实验层保留 `episode_status`，将已提交回合进一步判为 `completed`、`invalid_submission` 或评分阶段的 `infrastructure_error`；`result.passed` 只在可信评分通过时为真。未提交回合不评分，计为失败，最终工作区保留供诊断。回放回复用尽后返回空回复，按连续格式错误上限或交互预算结束。每次请求的 `max_tokens` 裁剪到剩余生成额度；回放也按此裁剪 token，并将被截断的回复标记为 `length`。`usage` 记录实际步数、生成量、无效行动数与耗时。墙钟预算从隔离探针通过后开始计时，在步与步之间检查；单条命令另受 `Limits.timeout_seconds` 约束，单次模型调用的超时由接入的 Adapter 负责。
 
 每个交互步（包括格式错误、提交和执行器故障）之后记录工作区清单：每条相对路径包含文件类型，普通文件另含 SHA-256、字节数和权限；符号链接只记录目标，FIFO、socket 等特殊文件只记录类型，不读取或跟随。相同字节只在 `blobs/<sha256>` 保存一份，删除或覆盖文件后仍可按历史清单取回原内容。不可读的路径保留类型和读取错误，供后续行动修复；初始化时也保存一份清单。非 UTF-8 文件名和符号链接目标通过 JSON 转义保存，读取记录时可恢复原路径。
 
@@ -190,7 +226,7 @@ Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`fo
 
 `runs/<唯一运行 ID>/` 与源码分离，权限为当前用户私有。以下是实验运行的完整产物；`agent` 只保存 Harness 证据和工作区，没有 Task、候选分析或评分：
 
-- `run.json`（schema version 9）：任务身份与材料摘要、执行环境标识、Harness 终止状态、提交文本、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份（`encoding_details` 保存 tokenizer 名称、实际 revision、文件和模板哈希、库版本、thinking 与停止标记）、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、原文 `text`、分离后的 `reply`、学生实际看到的反馈、每步工作区清单和当时的预算用量）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、整个提交的内容哈希、清单和评分。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。`show` 也支持没有逐步用量快照或分离后正文的历史记录，以已存的 token、耗时和原文恢复展示。
+- `run.json`（schema version 10）：任务身份与材料摘要、执行环境标识、Harness 终止状态、提交文本、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份（`encoding_details` 保存 tokenizer 名称、实际 revision、文件和模板哈希、库版本、thinking 与停止标记）、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、原文 `text`、分离后的 `reply`、学生实际看到的反馈、每步工作区清单和当时的预算用量）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、整个提交的内容哈希、清单和评分。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。`show` 也支持没有逐步用量快照或分离后正文的历史记录，以已存的 token、耗时和原文恢复展示。
 - `private/task.json`：完整可信任务配置，包括参考实现和评分材料。
 - `workspace/`：Task 的初始文件及学生操作后的实际文件状态。
 - `blobs/<sha256>`：初始状态及各步中普通文件内容的只读存档；跨路径、跨步骤去重。

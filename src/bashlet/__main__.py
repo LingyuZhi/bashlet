@@ -21,6 +21,7 @@ from .models import (
     FunctionGrader,
     GradingCase,
     Isolation,
+    ModelBackend,
     Task,
 )
 from .sandbox import Sandbox
@@ -94,6 +95,7 @@ def _run_agent(options: argparse.Namespace, view: RunView) -> EpisodeResult:
             limits=Sandbox(condition.environment).limits,
             isolation=Isolation(False, reason="Workspace preparation did not finish"),
             policy=model.identity,
+            policy_details=model.describe() if isinstance(model, ModelBackend) else {},
             encoding=model.encoding.identity,
             encoding_details=model.encoding.describe(),
             budget=condition.budget,

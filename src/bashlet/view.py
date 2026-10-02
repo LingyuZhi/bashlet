@@ -38,6 +38,12 @@ class RunView:
             self.console.print(
                 Text(f"Run directory: {record['run_dir']}"), soft_wrap=True
             )
+            if record.get("policy_details", {}).get("development_only"):
+                self.console.print(
+                    Text(
+                        "Evidence: development only (excluded from experiment results)"
+                    )
+                )
             self.started = True
         budget = record["budget"]
         for step in record["trajectory"][self.steps :]:

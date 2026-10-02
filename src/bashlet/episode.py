@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import math
 import os
 import sys
 import time
@@ -14,13 +13,15 @@ from pathlib import Path
 from . import protocol
 from .config import ExperimentConfig, config_record, load_config
 from .models import (
+    ContextExhausted,
     EpisodeResult,
-    Generation,
     InteractionBudget,
     InvalidAction,
     Isolation,
     Model,
+    ModelBackend,
     ModelCall,
+    ModelResponseError,
     SamplingParams,
     Step,
     Usage,
@@ -141,53 +142,22 @@ class _SamplerError(Exception):
     """The sampling call raised instead of returning a Generation."""
 
 
-class _ModelError(Exception):
-    """The returned Generation broke the sampling contract or cannot be decoded."""
-
-    def __init__(self, reason: str, generation: Generation | None = None) -> None:
-        super().__init__(reason)
-        self.generation = generation
-
-
 def _sample(model: Model, context: list[int], sampling: SamplingParams) -> ModelCall:
     started = time.monotonic()
     try:
         generation = model.sample(tuple(context), sampling)
+    except (ModelResponseError, ContextExhausted):
+        raise
     except Exception as error:
         # The call itself failed (service, network, Adapter): not model output.
         raise _SamplerError(f"{type(error).__name__}: {error}") from error
     duration = time.monotonic() - started
-    tokens, logprobs = generation.tokens, generation.logprobs
-    problem = ""
-    if generation.source not in ("sampled", "replayed"):
-        problem = f"Unknown generation source {generation.source!r}"
-    elif generation.source == "replayed" and logprobs is not None:
-        problem = "Replayed generations cannot carry sampling logprobs"
-    elif generation.source == "sampled" and logprobs is None:
-        problem = "Sampled generations require per-token logprobs"
-    elif (
-        generation.source == "sampled"
-        and logprobs is not None
-        and len(tokens) != len(logprobs)
-    ):
-        problem = f"{len(tokens)} tokens but {len(logprobs)} logprobs"
-    elif len(tokens) > sampling.max_tokens:
-        problem = f"{len(tokens)} tokens exceed max_tokens={sampling.max_tokens}"
-    elif not all(type(token) is int and token >= 0 for token in tokens):
-        problem = "Token IDs must be non-negative integers"
-    elif logprobs is not None and not all(
-        math.isfinite(value) and value <= 0 for value in logprobs
-    ):
-        problem = "Logprobs must be finite and non-positive"
-    elif generation.stop_reason not in ("stop", "length"):
-        problem = f"Unknown stop reason {generation.stop_reason!r}"
-    if problem:
-        raise _ModelError(problem, generation)
+    generation.validate(sampling)
     try:
-        text = model.encoding.decode(tokens)
-        reply = model.encoding.reply(tokens)
+        text = model.encoding.decode(generation.tokens)
+        reply = model.encoding.reply(generation.tokens)
     except Exception as error:
-        raise _ModelError(
+        raise ModelResponseError(
             f"Decoding failed: {type(error).__name__}: {error}", generation
         ) from error
     return ModelCall(
@@ -215,7 +185,7 @@ def save_record(
     record = (
         asdict(result)
         | {
-            "schema_version": 9,
+            "schema_version": 10,
             "config": config_record(condition),
             "fingerprints": protocol.fingerprints(condition),
             "protocol": protocol.describe(condition.protocol),
@@ -259,6 +229,7 @@ def run_episode(
     workspace = workspace.resolve()
     sandbox = Sandbox(condition.environment)
     budget, sampling = condition.budget, condition.model.sampling
+    backend = model if isinstance(model, ModelBackend) else None
     result = EpisodeResult(
         run_dir=run_dir,
         workspace=workspace,
@@ -271,6 +242,8 @@ def run_episode(
     )
 
     def save() -> None:
+        if backend is not None:
+            result.policy_details = backend.describe()
         if on_update is None:
             save_record(result, condition)
         else:
@@ -286,6 +259,13 @@ def run_episode(
             result.status = "infrastructure_error"
             result.reason = result.isolation.reason
             return result
+        if backend is not None:
+            try:
+                backend.probe()
+            except (ModelResponseError, ContextExhausted):
+                raise
+            except Exception as error:
+                raise _SamplerError(f"Capability probe failed: {error}") from error
         started = time.monotonic()
 
         def record_step(step: Step) -> None:
@@ -313,22 +293,23 @@ def run_episode(
                 result.status, result.reason = "budget_exhausted", reason
                 return result
             remaining = budget.max_generated_tokens - result.usage.generated_tokens
+            if backend is not None:
+                context_remaining = backend.max_context_tokens - len(context)
+                if context_remaining <= 0:
+                    raise ContextExhausted(
+                        f"Reached model context limit={backend.max_context_tokens}"
+                    )
+                remaining = min(remaining, context_remaining)
             request = replace(sampling, max_tokens=min(sampling.max_tokens, remaining))
-            try:
-                call = _sample(model, context, request)
-            except _ModelError as error:
-                # Rejected output is kept for audit but never enters context.
-                result.rejected_generation = error.generation
-                if error.generation is not None:
-                    result.usage.generated_tokens += len(error.generation.tokens)
-                result.status, result.reason = "model_error", str(error)
-                return result
-            except _SamplerError as error:
-                result.status = "infrastructure_error"
-                result.reason = f"Model call failed: {error}"
-                return result
+            call = _sample(model, context, request)
             context.extend(call.generation.tokens)
             result.usage.generated_tokens += len(call.generation.tokens)
+            if call.generation.stop_reason == "context":
+                result.usage.steps += 1
+                reason = "Generation reached the model context limit"
+                record_step(Step(InvalidAction(reason), model_call=call))
+                result.status, result.reason = "context_exhausted", reason
+                return result
             assert call.reply is not None
             action = (
                 protocol.parse_action(
@@ -383,6 +364,19 @@ def run_episode(
                 model.encoding.continuation(call.generation.tokens, feedback)
             )
             save()
+    except ContextExhausted as error:
+        result.status, result.reason = "context_exhausted", str(error)
+        return result
+    except ModelResponseError as error:
+        # Rejected output is kept for audit but never enters context or executes.
+        result.rejected_generation = error.generation
+        if started is not None and error.generation is not None:
+            result.usage.generated_tokens += len(error.generation.tokens)
+        result.status, result.reason = "model_error", str(error)
+        return result
+    except _SamplerError as error:
+        result.status, result.reason = "infrastructure_error", str(error)
+        return result
     except OSError as error:
         result.status = "infrastructure_error"
         result.reason = str(error)

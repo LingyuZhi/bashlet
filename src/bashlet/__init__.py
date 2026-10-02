@@ -6,6 +6,7 @@ from .experiment import run_experiment
 from .models import (
     Bash,
     CommandGrader,
+    ContextExhausted,
     DecodedReply,
     Encoding,
     EpisodeResult,
@@ -17,18 +18,21 @@ from .models import (
     InvalidAction,
     Limits,
     Model,
+    ModelResponseError,
     Observation,
     SamplingParams,
     Task,
 )
 from .protocol import PROTOCOL_SHA256, PROTOCOL_VERSION
 from .replay import ReplayModel, Utf8Encoding
+from .vllm import VLLMModel
 
 __all__ = [
     "PROTOCOL_SHA256",
     "PROTOCOL_VERSION",
     "Bash",
     "CommandGrader",
+    "ContextExhausted",
     "DecodedReply",
     "Encoding",
     "EpisodeResult",
@@ -40,12 +44,14 @@ __all__ = [
     "InvalidAction",
     "Limits",
     "Model",
+    "ModelResponseError",
     "Observation",
     "QwenChatMLEncoding",
     "ReplayModel",
     "SamplingParams",
     "Task",
     "Utf8Encoding",
+    "VLLMModel",
     "run_experiment",
     "run_episode",
 ]

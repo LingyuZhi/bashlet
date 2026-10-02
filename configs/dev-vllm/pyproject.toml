@@ -1,0 +1,15 @@
+[project]
+name = "bashlet-dev-vllm"
+version = "0.1.0"
+description = "Pinned development-only inference service on n30126"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "vllm==0.11.0",
+    "huggingface-hub==0.36.0",
+    "tokenizers==0.22.1",
+    "transformers==4.57.1",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

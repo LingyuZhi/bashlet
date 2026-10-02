@@ -13,6 +13,7 @@ from jinja2 import Environment, StrictUndefined, TemplateError
 
 from .models import Encoding, InteractionBudget, Model, SamplingParams
 from .replay import ReplayModel
+from .vllm import VLLMModel
 
 _DEFAULT_PATH = Path(__file__).with_name("configs") / "bash-block-v3.yaml"
 _SOURCE_DEFAULT = Path(__file__).resolve().parents[2] / "configs" / _DEFAULT_PATH.name
@@ -102,13 +103,18 @@ def config_record(config: ExperimentConfig) -> dict[str, Any]:
 def load_model(config: ModelConfig) -> Model:
     """Instantiate a configured class without coupling the Harness to backends."""
     name = config.class_name
+    factory: type[Any]
     try:
         if name == "ReplayModel":
             factory = ReplayModel
+        elif name == "VLLMModel":
+            factory = VLLMModel
         else:
             module_name, separator, class_name = name.replace(":", ".").rpartition(".")
             if not separator:
-                raise ValueError("Use ReplayModel or a fully qualified model class")
+                raise ValueError(
+                    "Use ReplayModel, VLLMModel or a fully qualified model class"
+                )
             factory = getattr(importlib.import_module(module_name), class_name)
         if not isinstance(factory, type):
             raise ValueError(f"{name!r} is not a model class")
