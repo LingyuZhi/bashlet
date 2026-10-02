@@ -568,7 +568,7 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
     assert "feedback passed" not in "".join(renders[:4])
 
     record = json.loads((result.run_dir / "run.json").read_text())
-    assert record["schema_version"] == 10
+    assert record["schema_version"] == 11
     assert record["protocol"]["name"] == "bash-block-v3"
     assert (
         record["protocol"]["sha256"]

@@ -12,6 +12,7 @@ from typing import Any
 
 from .analysis import analyze_episode
 from .config import ExperimentConfig, load_config
+from .demonstrations import SFTAdapter, export_demonstration, validate_sft_request
 from .episode import run_episode, save_record
 from .mbpp import validate_origin
 from .models import (
@@ -236,6 +237,7 @@ def run_experiment(
     overrides: Sequence[str] = (),
     on_update: Callable[[EpisodeResult], None] | None = None,
     assess_first_implementation: bool = False,
+    sft_adapter: SFTAdapter | None = None,
 ) -> ExperimentResult:
     """Prepare a Task, run its Episode, and grade only an explicit Submission.
 
@@ -244,6 +246,10 @@ def run_experiment(
     results are compared on the host; test commands pass on exit code zero and
     share a process with untrusted student code. The returned record and run
     directory are operator-only and never become student observations.
+
+    ``sft_adapter`` opts into reference-demonstration validation and export after
+    grading. Rejected demonstrations retain their run evidence but never reach
+    the Adapter. Export errors propagate after the final run record is saved.
     """
     if isinstance(config, ExperimentConfig):
         if overrides:
@@ -252,6 +258,8 @@ def run_experiment(
     else:
         condition = load_config(config, overrides)
     _validate_task(task, condition.environment.id)
+    if sft_adapter is not None:
+        validate_sft_request(task, model, sft_adapter)
     grading_protocol = (
         "test-command-v1"
         if isinstance(task.grader, CommandGrader)
@@ -337,14 +345,18 @@ def run_experiment(
         analyze_episode(result, task, feedback_materials)
         if assess_first_implementation:
             result.first_implementation = _assess_first(result, task, condition)
-        save_record(
-            result,
-            condition,
-            {
-                "grading_protocol": grading_protocol,
-                "task_origin": asdict(task.origin) if task.origin else None,
-                "passed": result.passed,
-            },
-        )
+        try:
+            if sft_adapter is not None:
+                export_demonstration(result, task, model, condition, sft_adapter)
+        finally:
+            save_record(
+                result,
+                condition,
+                {
+                    "grading_protocol": grading_protocol,
+                    "task_origin": asdict(task.origin) if task.origin else None,
+                    "passed": result.passed,
+                },
+            )
         if on_update is not None:
             on_update(result)

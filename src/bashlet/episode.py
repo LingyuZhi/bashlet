@@ -186,7 +186,7 @@ def save_record(
     record = (
         asdict(result)
         | {
-            "schema_version": 10,
+            "schema_version": 11,
             "config": config_record(condition),
             "fingerprints": protocol.fingerprints(condition),
             "protocol": protocol.describe(condition.protocol),

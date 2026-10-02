@@ -193,6 +193,36 @@ uv run bashlet task runs/mbpp-sanitized-v1/manifest.json \
 
 2026-10-02 已真实完成全部 427 题的数据验证：训练 95、开发 37、最终测试 197，共 329 项可用任务；其余 98 项为提示示例或不支持的转换格式，均记录理由，未发现可转换参考解验证失败。清单与全部参考验证证据位于 `runs/mbpp-sanitized-v1-verified/`。真实训练题 `mbpp/602` 通过清单选择、v3 回放、反馈测试和独立评分（2/2），使用的实现与原参考程序不同；验收摘要为 `runs/issue03-mbpp-smoke/acceptance.json`。这些是数据与入口验收，不是模型能力评测。
 
+## 执行验证的 SFT 示范
+
+任务 06 使用当前已冻结的 **bash-block-v3**；Task v2 仍是独立的任务数据格式。示范复用 `ReplayModel`、`QwenChatMLEncoding` 和 `run_experiment`，依次写入参考实现、运行任务声明的反馈命令、显式提交，再接受独立评分。每步均为 `replayed`，没有采样 logprob，来源记录为 `reference-implementation-v1`，不能用作 on-policy 更新。
+
+从已验证的 MBPP 清单生成训练数据：
+
+```bash
+uv run bashlet prepare-sft runs/mbpp-sanitized-v1-verified/manifest.json \
+  -c configs/sft-demonstrations.yaml --output-dir runs/sft-reference-v1
+```
+
+默认选择全部已验证训练题；可重复传入 `--task-id mbpp/602` 选择子集。开发题和最终测试题不能加入。命令复用任务清单的家族、split、内容哈希与来源校验，输出目录必须是新目录。当前构造器要求一个参考实现文件和明确的反馈命令；这覆盖现有 MBPP 转换结果。
+
+[示范配置](configs/sft-demonstrations.yaml) 使用与 PyTRIO 学生相同的 Qwen3.5-4B tokenizer revision，默认关闭 thinking。构造过程中不调用采样或训练服务。开启 thinking 时仅构造空的思考段，不编造推理过程；模板已预填的思考起始标记不会重复生成。每轮回复显式包含 `<|im_end|>`，让学生学习停止。
+
+只有三步命令均成功、反馈材料未修改、显式提交和独立评分成功的示范才进入训练文件。截断、预算耗尽、反馈失败或评分失败会留下拒绝原因；基础设施错误或中断使整份清单标为 `incomplete`，不得当作完整数据集使用。导出 Adapter 失败记录为 `export_error` 并向调用者报告。
+
+产物保存在权限为 `0700` 的输出目录内：
+
+- `manifest.json`：完成状态、固定任务清单、逐题接纳／拒绝结果、源清单哈希、编码身份和配置、协议／环境／预算指纹，以及训练文件哈希。
+- `examples.jsonl`：每行包含 `metadata` 和可用 `pytrio.Datum.model_validate(row["datum"])` 读取的训练输入。metadata 保留任务和参考实现哈希、家族和 split、运行路径、评分、提交快照及原始 token 中的监督区间。
+- `episodes/<id>/run.json`：真实命令、观察、原始 token、最终评分和 `demonstration` 接纳状态。
+- 接纳回合的 `private/sft.json` 保存同一条训练输入，`private/replay.json` 保存 Task 和预写回复。可用 `bashlet task <replay.json> -c configs/sft-demonstrations.yaml --output-dir <new-dir>` 在新工作区重新执行；需要保持原运行的配置。
+
+监督权重直接取自执行记录中的生成区间，系统提示、任务输入、观察及聊天模板提供的上下文均为零；生成的行动、可选思考和结束 token 为一。沿用 [PyTRIO 的 SFT 数据契约](https://docs.pytrio.com/docs/api/Datum)，手动移位为 `model_input=tokens[:-1]`、`target_tokens=tokens[1:]`、`weights=weights[1:]`，使用 `cross_entropy` 和 `auto_shift=False`。不重新编码轨迹，也不额外补造环境观察。
+
+Python 调用者可用 `bashlet.demonstrations.reference_demonstration(task=..., encoding=..., config=...)` 构造回放模型，传给 `run_experiment(..., sft_adapter=...)`。Adapter 声明匹配的 `encoding` 身份并实现 `submit(datum, *, metadata)`；只有接纳示范才会送达。当前 CLI 的 Adapter 仅写文件，真实付费训练、优化器和快照选择由任务 07 实现，并继续使用统一费用守卫。
+
+2026-10-02 已执行全部 95 道已验证训练题，95 条接纳、0 条拒绝，共 13,776 个监督 token；每条上下文为 648–928 token。数据位于 `runs/sft-reference-v1/`，`acceptance.json` 记录文件哈希、真实评分、原始 token、自回归移位、监督范围和编码身份的逐条核验。此结果只证明示范数据链路成立，尚未进行模型参数更新。
+
 ## 固定开发集评测
 
 任务 05 的 `evaluate` 逐项调用同一个 `run_experiment`，在第一次付费探测前保存所有预定任务，完整结果写入 `runs/<目录>/<运行 ID>/evaluation.json`。固定清单见 [configs/mbpp-dev-8-v1.json](configs/mbpp-dev-8-v1.json)：将 37 道已验证开发题按原始题号排序，取位置 `floor(i * 36 / 7)`（i=0…7）的 8 道，选择不依据模型结果。此入口只接受 `dev`，不开展最终测试选参。
@@ -273,7 +303,7 @@ print(result.status, result.grade)
 
 ## 行动协议 bash-block-v3
 
-协议完整文本定义在[默认配置](configs/bash-block-v3.yaml)的 `protocol` 块，由 `src/bashlet/protocol.py` 渲染和解析。SFT 示范、学生 rollout 和评测共用它。系统提示、观察模板、历史编码和提交规则连同指纹写入每次运行 `run.json` 的 `protocol` 字段。v3 文本已交用户审阅，指纹固定为 `90720d09056f51501e9c5761577733296ecaf1c0f6792d8a7f00f1e0f070cb13`；修改协议必须更换版本、更新测试中的指纹并重建示范。v2 的交付记录保留在任务 16，已有示例已迁移；仓库尚无需要重建的 SFT 示范数据。
+协议完整文本定义在[默认配置](configs/bash-block-v3.yaml)的 `protocol` 块，由 `src/bashlet/protocol.py` 渲染和解析。SFT 示范、学生 rollout 和评测共用它。系统提示、观察模板、历史编码和提交规则连同指纹写入每次运行 `run.json` 的 `protocol` 字段。v3 文本已交用户审阅，指纹固定为 `90720d09056f51501e9c5761577733296ecaf1c0f6792d8a7f00f1e0f070cb13`；修改协议必须更换版本、更新测试中的指纹并重建示范。v2 的交付记录保留在任务 16，任务 06 的示范从 v3 开始生成。
 
 - 行动正文恰好包含一个非空、闭合的 ```` ```bash ```` 围栏块，块前说明可选，不要求 `THOUGHT:`。命令在隔离工作区执行。每一步都启动新的 shell，`cd`、`export` 和后台进程不跨步保留，工作区文件保留。
 - 开启 thinking 时，只解析最后一个思考结束 token 之后的正文；起始标记可以已经在 prompt 中，采样无需重复。思考里的块不参与行动块计数，原始思考 token 和 logprob 保留在轨迹与上下文中。关闭时，正文可直接给出 bash 块。
@@ -322,7 +352,7 @@ Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`fo
 
 `runs/<唯一运行 ID>/` 与源码分离，权限为当前用户私有。以下是实验运行的完整产物；`agent` 只保存 Harness 证据和工作区，没有 Task、候选分析或评分：
 
-- `run.json`（schema version 10）：任务身份与材料摘要、执行环境标识、Harness 终止状态、提交文本、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份（`encoding_details` 保存 tokenizer 名称、实际 revision、文件和模板哈希、库版本、thinking 与停止标记）、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、原文 `text`、分离后的 `reply`、学生实际看到的反馈、每步工作区清单和当时的预算用量）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、整个提交的内容哈希、清单和评分。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。`show` 也支持没有逐步用量快照或分离后正文的历史记录，以已存的 token、耗时和原文恢复展示。
+- `run.json`（schema version 11）：任务身份与材料摘要、执行环境标识、Harness 终止状态、提交文本、合并后的完整配置、protocol／environment／budget 三个指纹、协议、采样条件、模型与编码身份（`encoding_details` 保存 tokenizer 名称、实际 revision、文件和模板哈希、库版本、thinking 与停止标记）、预算与用量、隔离检查、实际轨迹（含每次生成的原始 token、来源、logprob、上下文位置、原文 `text`、分离后的 `reply`、学生实际看到的反馈、每步工作区清单和当时的预算用量）、初始工作区清单、完整 token 上下文、事后计算的候选与修复尝试、整个提交的内容哈希、清单、评分及可选 `demonstration` 接纳状态。回合进行时只保存证据，候选与修复结果在结束时写入。回放的 `logprobs` 保存为 `null`。`completed` 表示评分流程完成；任务成功由 `grade.passed` 决定。评分基础设施故障单独记录，未执行的用例不会计为通过。`show` 也支持没有逐步用量快照或分离后正文的历史记录，以已存的 token、耗时和原文恢复展示。
 - `private/task.json`：完整可信任务配置，包括参考实现和评分材料。
 - `workspace/`：Task 的初始文件及学生操作后的实际文件状态。
 - `blobs/<sha256>`：初始状态及各步中普通文件内容的只读存档；跨路径、跨步骤去重。

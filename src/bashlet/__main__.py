@@ -12,6 +12,7 @@ from types import FrameType
 from rich.console import Console
 
 from .config import load_config, load_model
+from .demonstrations import prepare_sft
 from .episode import run_episode, save_record
 from .evaluation import evaluate
 from .experiment import run_experiment, task_from_record
@@ -201,6 +202,17 @@ def main() -> None:
     prepare.add_argument("--source-lock", type=Path, required=True)
     prepare.add_argument("--source-file", type=Path)
     _execution_options(prepare)
+    demonstrations = commands.add_parser(
+        "prepare-sft", help="Execute verified training references and export SFT data"
+    )
+    demonstrations.add_argument("manifest", type=Path)
+    demonstrations.add_argument(
+        "--task-id",
+        action="append",
+        default=[],
+        help="Default: all verified training tasks",
+    )
+    _execution_options(demonstrations)
     show = commands.add_parser("show", help="Replay a saved run without executing it")
     show.add_argument("run_dir", type=Path)
     _view_options(show)
@@ -254,6 +266,16 @@ def main() -> None:
                 config=load_config(options.config, options.overrides),
             )
             print(manifest)
+            return
+        if options.command == "prepare-sft":
+            manifest = prepare_sft(
+                manifest_path=options.manifest,
+                task_ids=options.task_id,
+                output_dir=options.output_dir,
+                config=load_config(options.config, options.overrides),
+            )
+            record = json.loads(manifest.read_text())
+            print(f"{record['status']}: {record['counts']}\n{manifest}")
             return
         if options.command == "spend":
             ledger = SpendLedger(
