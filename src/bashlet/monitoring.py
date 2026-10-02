@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 import yaml
 from dotenv import dotenv_values
 
@@ -92,12 +93,65 @@ _CONFIG_FIELDS = {
 }
 
 
+def _network_failure(error: Exception) -> bool:
+    """Only known transport/transient failures may bypass online startup."""
+    pending: list[Any] = [error]
+    visited: set[int] = set()
+    transient = False
+    while pending:
+        current = pending.pop()
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        response = getattr(current, "response", None)
+        status = getattr(response, "status_code", None) or getattr(
+            response, "code", None
+        )
+        status = status or getattr(current, "status_code", None)
+        if status is not None:
+            try:
+                code = int(status)
+            except (TypeError, ValueError):
+                return False
+            if code not in (408, 429) and not 500 <= code <= 599:
+                return False
+            transient = True
+        if isinstance(
+            current,
+            (TimeoutError, ConnectionError, httpx.NetworkError, httpx.TimeoutException),
+        ):
+            transient = True
+        # W&B wraps requests transport errors inside CommError.exc.
+        if type(current).__module__ == "requests.exceptions" and type(
+            current
+        ).__name__ in {"ConnectionError", "Timeout", "ConnectTimeout", "ReadTimeout"}:
+            transient = True
+        pending.extend(
+            child
+            for attr in ("exc", "__cause__", "__context__")
+            if (child := getattr(current, attr, None)) is not None
+        )
+    return transient
+
+
 class RunMonitor:
     """W&B is a projection; the local journal remains the source of progress.
 
     Explicit log steps and event IDs let a resumed online run replay only events
     the server has not seen. Offline segments retain the same W&B identity.
     """
+
+    @classmethod
+    def resume(cls, run_dir: Path, *, require_online: bool = False) -> "RunMonitor":
+        state = json.loads((run_dir / "monitor.json").read_text())
+        config = MonitorConfig(**state["config"]["monitoring"])
+        return cls(
+            run_dir,
+            replace(config, mode="online") if require_online else config,
+            phase=state["phase"],
+            metadata={k: v for k, v in state["config"].items() if k in _CONFIG_FIELDS},
+            require_online=require_online,
+        )
 
     def __init__(
         self,
@@ -157,15 +211,18 @@ class RunMonitor:
         try:
             self._start()
         except Exception as error:
+            # init may have succeeded before history lookup failed. Until replay
+            # is complete, sending newer events could skip the missing prefix.
+            self.delivery_failed = True
             self.state["error_type"] = type(error).__name__
             self.state["sync_status"] = "pending"
             write_document(self.path, self.state)
+            self.finish()
             # Authentication/configuration errors must never become offline success.
-            if isinstance(error, (ValueError, PermissionError)) or any(
-                word in type(error).__name__.lower() for word in ("auth", "usage")
-            ):
+            if not _network_failure(error):
                 raise ValueError(
-                    f"W&B authentication/configuration: {type(error).__name__}"
+                    "W&B startup failed; authentication/configuration must be checked: "
+                    f"{type(error).__name__}"
                 ) from None
             if require_online and not self.state["online_verified"]:
                 raise ValueError(
@@ -367,7 +424,7 @@ def evaluation_metrics(record: dict[str, Any]) -> dict[str, Any]:
     ]
     for key in ("input_tokens", "output_tokens"):
         if usage_rows and all(key in usage for usage in usage_rows):
-            metrics[f"eval/billed_{key}"] = sum(usage[key] for usage in usage_rows)
+            metrics[f"eval/request_{key}"] = sum(usage[key] for usage in usage_rows)
     if summary["recovery"]["rate"] is not None:
         metrics["eval/recovery_rate"] = summary["recovery"]["rate"]
     outcomes = {
@@ -388,14 +445,16 @@ def evaluation_metrics(record: dict[str, Any]) -> dict[str, Any]:
             for k in sorted(outcomes | set(summary["outcomes"]))
         }
     )
-    cost = record["cost"]
-    metrics.update(
-        {
-            "spend/run_upper_cny": cost["charged_upper_bound_cny"],
-            "spend/run_pending_cny": cost["pending_upper_bound_cny"],
-            "spend/run_actual_known": cost["actual_cny"] is not None,
-        }
-    )
+    metrics.update(spend_metrics(record["cost"]))
+    return metrics
+
+
+def spend_metrics(cost: dict[str, Any]) -> dict[str, Any]:
+    metrics = {
+        "spend/run_upper_cny": cost["charged_upper_bound_cny"],
+        "spend/run_pending_cny": cost["pending_upper_bound_cny"],
+        "spend/run_actual_known": cost["actual_cny"] is not None,
+    }
     if cost["actual_cny"] is not None:
         metrics["spend/run_actual_cny"] = cost["actual_cny"]
     metrics.update(
@@ -491,14 +550,7 @@ def sync_monitor(run_dir: Path) -> None:
         raise ValueError("W&B cache sync did not finish; retry the recorded command")
     # Include events whose SDK log failed before reaching any W&B cache. Online
     # resume supplies the server's next step, so replays cannot double-count.
-    metadata = {k: v for k, v in state["config"].items() if k in _CONFIG_FIELDS}
-    monitor = RunMonitor(
-        run_dir,
-        replace(config, mode="online"),
-        phase=state["phase"],
-        metadata=metadata,
-        require_online=True,
-    )
+    monitor = RunMonitor.resume(run_dir, require_online=True)
     monitor.finish()
     if monitor.state["sync_status"] != "synced":
         raise ValueError("W&B metrics remain pending; retry the recorded sync command")

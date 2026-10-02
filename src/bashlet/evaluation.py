@@ -15,6 +15,7 @@ from .mbpp import mbpp_task_path
 from .models import EpisodeResult, Model, ModelBackend, Task
 from .monitoring import MonitorConfig, RunMonitor, code_revision, evaluation_metrics
 from .protocol import fingerprints
+from .spend import summarize_cost
 
 VERSION = "development-evaluation-v1"
 RULES = {
@@ -170,34 +171,7 @@ def _cost(model: Model) -> dict[str, Any]:
         == details.get("sampling_run_cuid")
         and details.get("sampling_run_cuid") is not None
     ]
-    return {
-        "ledger": spend.get("ledger"),
-        "request_ids": [entry["id"] for entry in entries],
-        "charged_upper_bound_cny": round(
-            sum(entry["charged_cny"] for entry in entries), 6
-        ),
-        "pending_upper_bound_cny": round(
-            sum(entry["upper_cny"] for entry in entries if entry["state"] == "pending"),
-            6,
-        ),
-        "actual_cny": round(sum(entry["charged_cny"] for entry in entries), 6)
-        if entries and all(entry["billing_basis"] == "confirmed" for entry in entries)
-        else None,
-        "billing_note": "Unreconciled ceilings are not verified actual charges.",
-        **{
-            key: spend[key]
-            for key in ("funded_remaining_cny", "project_remaining_cny")
-            if key in spend
-        },
-        **(
-            {
-                "project_upper_cny": spend["charged_cny"] + spend["pending_cny"],
-                "project_pending_cny": spend["pending_cny"],
-            }
-            if "charged_cny" in spend
-            else {}
-        ),
-    }
+    return summarize_cost(spend, entries)
 
 
 def evaluate(
@@ -387,6 +361,13 @@ def select_sft(run_dir: Path, baseline: Path, evaluations: list[Path]) -> Path:
     """Select by fixed-denominator dev success; retain separate restart artifacts."""
     training = json.loads((run_dir / "training.json").read_text())
     control = json.loads(baseline.read_text())
+    base_snapshot = f"pytrio/{training['metadata']['base_model']}@unversioned-base"
+    if control.get("snapshot") != base_snapshot or any(
+        path.resolve() == baseline.resolve() for path in evaluations
+    ):
+        raise ValueError(
+            "SFT baseline must be the original instruction model evaluation"
+        )
     if not evaluations or len(set(evaluations)) != len(evaluations):
         raise ValueError("Select from distinct development evaluations")
     checkpoints = {
@@ -458,14 +439,7 @@ def select_sft(run_dir: Path, baseline: Path, evaluations: list[Path]) -> Path:
     _write(destination, selection)
     monitor_path = run_dir / "monitor.json"
     if monitor_path.exists():
-        state = json.loads(monitor_path.read_text())
-        metadata = {k: v for k, v in state["config"].items() if k != "monitoring"}
-        monitor = RunMonitor(
-            run_dir,
-            MonitorConfig(**training["config"]["monitor"]),
-            phase="sft",
-            metadata=metadata,
-        )
+        monitor = RunMonitor.resume(run_dir)
         monitor.log(
             "selection",
             {

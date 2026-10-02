@@ -380,6 +380,37 @@ class SpendLedger:
             }
 
 
+def summarize_cost(
+    snapshot: dict[str, Any], entries: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Report one run's entries against the same point-in-time project ledger."""
+    return {
+        "ledger": snapshot.get("ledger"),
+        "request_ids": [entry["id"] for entry in entries],
+        "charged_upper_bound_cny": round(sum(e["charged_cny"] for e in entries), 6),
+        "pending_upper_bound_cny": round(
+            sum(e["upper_cny"] for e in entries if e["state"] == "pending"), 6
+        ),
+        "actual_cny": round(sum(e["charged_cny"] for e in entries), 6)
+        if entries and all(e["billing_basis"] == "confirmed" for e in entries)
+        else None,
+        "billing_note": "Unreconciled ceilings are not verified actual charges.",
+        **{
+            k: snapshot[k]
+            for k in ("funded_remaining_cny", "project_remaining_cny")
+            if k in snapshot
+        },
+        **(
+            {
+                "project_upper_cny": snapshot["charged_cny"] + snapshot["pending_cny"],
+                "project_pending_cny": snapshot["pending_cny"],
+            }
+            if "charged_cny" in snapshot
+            else {}
+        ),
+    }
+
+
 class TokenPricing:
     """Shared live catalog checks and conservative token charges."""
 

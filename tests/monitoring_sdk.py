@@ -62,9 +62,16 @@ class Run:
 current_run: Run
 
 
+class CommError(Exception):
+    def __init__(self) -> None:
+        self.exc = SimpleNamespace(response=SimpleNamespace(status_code=403))
+
+
 def init(**kwargs: Any) -> Run:
     if os.environ.get("FAKE_WANDB_AUTH_FAIL"):
         raise PermissionError("authentication failed")
+    if os.environ.get("FAKE_WANDB_REVOKED"):
+        raise CommError()
     global current_run
     current_run = Run(**kwargs)
     return current_run
@@ -78,4 +85,6 @@ class Api:
         self.default_entity = "test-account"
 
     def run(self, path: str) -> Any:
+        if os.environ.get("FAKE_WANDB_HISTORY_FAIL"):
+            raise ConnectionError("history unavailable after successful init")
         return SimpleNamespace(lastHistoryStep=current_run.step - 1)

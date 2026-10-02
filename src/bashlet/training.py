@@ -18,9 +18,21 @@ import yaml
 from .demonstrations import SOURCE
 from .mbpp import validate_origin
 from .models import TaskOrigin
-from .monitoring import MonitorConfig, RunMonitor, code_revision, write_document
+from .monitoring import (
+    MonitorConfig,
+    RunMonitor,
+    code_revision,
+    spend_metrics,
+    write_document,
+)
 from .pytrio import MODEL, SDK_VERSION, _credential
-from .spend import DEFAULT_POLICY, SpendLedger, SpendPolicy, TokenPricing
+from .spend import (
+    DEFAULT_POLICY,
+    SpendLedger,
+    SpendPolicy,
+    TokenPricing,
+    summarize_cost,
+)
 
 if TYPE_CHECKING:
     import pytrio as trio
@@ -317,20 +329,7 @@ def training_cost(ledger: SpendLedger, run_id: str) -> dict[str, Any]:
         for e in snapshot["entries"]
         if e["evidence"]["payload"].get("run_id") == run_id
     ]
-    return {
-        "charged_upper_bound_cny": round(sum(e["charged_cny"] for e in entries), 6),
-        "pending_upper_bound_cny": round(
-            sum(e["upper_cny"] for e in entries if e["state"] == "pending"), 6
-        ),
-        "actual_cny": sum(e["charged_cny"] for e in entries)
-        if entries and all(e["billing_basis"] == "confirmed" for e in entries)
-        else None,
-        "request_ids": [e["id"] for e in entries],
-        "project_upper_cny": snapshot["charged_cny"] + snapshot["pending_cny"],
-        "project_pending_cny": snapshot["pending_cny"],
-        "funded_remaining_cny": snapshot["funded_remaining_cny"],
-        "project_remaining_cny": snapshot["project_remaining_cny"],
-    }
+    return summarize_cost(snapshot, entries)
 
 
 def _train_sft(
@@ -473,16 +472,7 @@ def _train_sft(
                         "seconds",
                     )
                 }
-                metrics.update(
-                    {
-                        f"spend/{k}": v
-                        for k, v in record["cost"].items()
-                        if isinstance(v, (int, float))
-                    }
-                )
-                metrics["spend/run_actual_known"] = (
-                    record["cost"]["actual_cny"] is not None
-                )
+                metrics.update(spend_metrics(record["cost"]))
                 monitor.log(f"update-{step}", metrics)
             if step % config.checkpoint_every == 0 or step == final_step:
                 checkpoint = backend.save(step)
@@ -516,12 +506,7 @@ def _train_sft(
             {
                 "run/status": record["status"],
                 "train/optimizer_step": record["optimizer_step"],
-                **{
-                    f"spend/{k}": v
-                    for k, v in record["cost"].items()
-                    if isinstance(v, (int, float))
-                },
-                "spend/run_actual_known": record["cost"]["actual_cny"] is not None,
+                **spend_metrics(record["cost"]),
             },
         )
         monitor.finish()

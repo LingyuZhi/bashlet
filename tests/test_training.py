@@ -91,8 +91,9 @@ def training_config(tmp_path: Path, manifest: Path) -> Path:
     return config
 
 
+@pytest.mark.parametrize("monitor_outage", ["none", "network", "revoked"])
 def test_training_waits_for_updates_and_resumes_optimizer_without_relogging_steps(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, monitor_outage: str
 ) -> None:
     manifest = training_input(tmp_path)
     config = training_config(tmp_path, manifest)
@@ -103,13 +104,26 @@ def test_training_waits_for_updates_and_resumes_optimizer_without_relogging_step
     monkeypatch.setenv("FAKE_TRAINING_ROOT", str(tmp_path))
     output = tmp_path / "training"
     args = ["train-sft", str(config), "--output-dir", str(output)]
+    if monitor_outage == "network":
+        monkeypatch.setenv("FAKE_WANDB_LOG_FAIL", "1")
     first = cli(*args, "--stop-after", "1", cwd=tmp_path, timeout=45)
     assert first.returncode == 0, first.stdout + first.stderr
     state: dict[str, Any] = json.loads((output / "training.json").read_text())
     assert state["optimizer_step"] == 1
     assert state["checkpoints"][0]["sampler"]["kind"] == "sampler_weights"
     assert state["checkpoints"][0]["training_state"]["kind"] == "training_state"
+    if monitor_outage == "network":
+        monkeypatch.delenv("FAKE_WANDB_LOG_FAIL")
+        monkeypatch.setenv("FAKE_WANDB_HISTORY_FAIL", "1")
+    elif monitor_outage == "revoked":
+        monkeypatch.setenv("FAKE_WANDB_REVOKED", "1")
     second = cli(*args, "--resume", cwd=tmp_path, timeout=45)
+    if monitor_outage == "revoked":
+        assert second.returncode != 0 and "CommError" in second.stderr
+        service = json.loads((tmp_path / "training-service.json").read_text())
+        assert service["optimizer_step"] == 1
+        assert json.loads((output / "training.json").read_text())["optimizer_step"] == 1
+        return
     assert second.returncode == 0, second.stdout + second.stderr
     final = json.loads((output / "training.json").read_text())
     assert final["optimizer_step"] == 2
@@ -127,6 +141,17 @@ def test_training_waits_for_updates_and_resumes_optimizer_without_relogging_step
     assert [e["train/optimizer_step"] for e in updates] == [1, 2]
     assert all(e["train/loss"] == 2.0 for e in updates)
     assert final["cost"]["actual_cny"] is None
+    if monitor_outage == "network":
+        # New events must not jump ahead while old history cannot be checked.
+        assert json.loads((output / "remote.json").read_text())["rows"] == []
+        monkeypatch.delenv("FAKE_WANDB_HISTORY_FAIL")
+        synced = cli("monitor", "sync", str(output), cwd=tmp_path)
+        assert synced.returncode == 0, synced.stdout + synced.stderr
+    cloud = json.loads((output / "remote.json").read_text())
+    assert [row["_step"] for row in cloud["rows"]] == list(range(len(events)))
+    assert [
+        row["train/optimizer_step"] for row in cloud["rows"] if "train/loss" in row
+    ] == [1, 2]
 
 
 @pytest.mark.parametrize("failure", ["tampered", "encoding", "auth", "pending"])
@@ -202,6 +227,7 @@ def test_selection_requires_comparable_dev_results_and_preserves_snapshot_roles(
         )
     )
     base: dict[str, Any] = {
+        "snapshot": "pytrio/Qwen/Qwen3.5-4B@unversioned-base",
         "status": "complete",
         "evidence_kind": "experimental",
         "plan": {"split": "dev", "task_ids": ["mbpp/511", "mbpp/512"]},
@@ -236,6 +262,11 @@ def test_selection_requires_comparable_dev_results_and_preserves_snapshot_roles(
     assert selection["optimizer_transition"] == "reset-for-opsd"
     assert selection["sft_training_state"]["path"] == "trio://run/state-12"
     original = (training / "selection.json").read_bytes()
+    baseline.write_text(evaluations[0].read_text())
+    refused = cli(*args, cwd=tmp_path)
+    assert refused.returncode == 2 and "base" in refused.stderr
+    assert (training / "selection.json").read_bytes() == original
+    baseline.write_text(json.dumps(base))
     bad = json.loads(evaluations[1].read_text())
     bad["plan"]["split"] = "test"
     evaluations[1].write_text(json.dumps(bad))
