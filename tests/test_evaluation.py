@@ -123,8 +123,11 @@ def test_evaluation_preserves_the_planned_denominator_and_failure_categories(
         assert episode["task_sha256"] == row["task_sha256"]
 
 
-def test_evaluation_spend_exhaustion_keeps_missing_tasks_and_a_shared_ledger(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("fail_before_identity", [False, True])
+def test_evaluation_spend_failures_keep_missing_tasks_and_all_commitments(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fail_before_identity: bool,
 ) -> None:
     prepared = prepare(tmp_path, [double_row(511), double_row(512), double_row(513)])
     plan = tmp_path / "plan.json"
@@ -147,6 +150,7 @@ def test_evaluation_spend_exhaustion_keeps_missing_tasks_and_a_shared_ledger(
                 "model": {
                     "class": "adapters.PaidEvaluationModel",
                     "ledger_path": str(ledger),
+                    "fail_before_identity": fail_before_identity,
                 }
             }
         )
@@ -171,6 +175,17 @@ def test_evaluation_spend_exhaustion_keeps_missing_tasks_and_a_shared_ledger(
     assert len(records) == 1, process.stdout + process.stderr
     record = json.loads(records[0].read_text())
     assert record["status"] == "incomplete"
+    if fail_before_identity:
+        assert record["summary"]["missing_task_ids"] == [
+            "mbpp/511",
+            "mbpp/512",
+            "mbpp/513",
+        ]
+        assert record["tasks"][0]["outcome"] == "infrastructure_error"
+        assert record["cost"]["pending_upper_bound_cny"] == 0.04
+        assert record["cost"]["charged_upper_bound_cny"] == 0
+        assert len(record["cost"]["request_ids"]) == 1
+        return
     assert record["summary"]["final_pass_rate"] == 1 / 3
     assert record["summary"]["missing_task_ids"] == ["mbpp/512", "mbpp/513"]
     assert record["tasks"][1]["budget_kind"] == "spend"

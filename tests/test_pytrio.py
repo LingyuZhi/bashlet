@@ -54,8 +54,11 @@ class FakeSampling:
         self.requests: list[dict[str, Any]] = []
         self.score_barrier: Barrier | None = None
         self.episode_started: Event | None = None
+        self.fail_before_identity = False
 
     def sample(self, **request: Any) -> APIFuture[Any]:
+        if self.fail_before_identity:
+            raise TimeoutError("No service request identity was received")
         self.requests.append(request)
         request_id = f"remote-{self.sampling_run_cuid}-{len(self.requests)}"
         SDK_LOG.debug(

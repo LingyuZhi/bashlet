@@ -151,7 +151,12 @@ class EvaluationModel(ScriptedModel):
 class PaidEvaluationModel(PyTRIOModel):
     """Construct the production adapter against the controllable SDK boundary."""
 
-    def __init__(self, ledger_path: str, thinking: bool = False) -> None:
+    def __init__(
+        self,
+        ledger_path: str,
+        thinking: bool = False,
+        fail_before_identity: bool = False,
+    ) -> None:
         from pathlib import Path
 
         from test_pytrio import MODEL, REVISION, FakeSampling, FakeService, response
@@ -166,6 +171,7 @@ class PaidEvaluationModel(PyTRIOModel):
                 response(list(submit().encode())),
             ]
         )
+        sdk.fail_before_identity = fail_before_identity
         super().__init__(
             model=MODEL,
             model_revision=REVISION,

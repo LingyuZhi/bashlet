@@ -206,7 +206,7 @@ uv run --locked bashlet evaluate configs/mbpp-dev-8-v1.json \
 
 每题最多 6 步、4096 个生成 token、300 秒；单次生成最多 1024 token，temperature=1、top-p=1、seed=4，关闭 thinking。`development-baseline` 累计子额度为 ¥2，探测、失败和重跑也计入，并继续受同一个 `runs/spend.sqlite3` 的 ¥10 充值额度和 ¥200 项目上限限制。账本允许在原有全局限制、子额度和历史支出不变时追加子额度，记录政策变更；不能通过重启提高已有上限。
 
-评测记录保存模型身份、参考 revision、服务端会话／采样身份、完整条件、数据来源与 Task 哈希、反馈命令、每题运行路径和文件哈希。`comparison_sha256` 覆盖任务顺序与内容、评分和分析规则、协议、环境、交互预算、采样参数、编码与实际上下文上限；模型快照另行保存，不混进比较条件。后续 SFT／OPSD 使用原清单和配置，仅选择对应 `model.model_path`，并把 `--snapshot` 写为 `pytrio/Qwen/Qwen3.5-4B@<该路径>`。快照加载使用 [SDK 的 create_sampling_client(model_path=...)](https://docs.pytrio.com/docs/api/ServiceClient#create_sampling_client)，仍要在相应训练任务中验证真实保存／加载。原始基座只有服务端别名，`server_model_revision=null` 明示无法确认权重 commit，不把 tokenizer revision 当成权重证据。
+评测记录保存模型身份、参考 revision、服务端会话／采样身份、完整条件、数据来源与 Task 哈希、反馈命令、每题运行路径和文件哈希。`comparison_sha256` 覆盖任务顺序与内容、评分和分析规则、协议、环境、交互预算、采样参数、编码与实际上下文上限；模型快照另行保存，不混进比较条件。后续 SFT／OPSD 使用原清单和交互／采样条件，选择对应 `model.model_path`，并把 `--snapshot` 写为 `pytrio/Qwen/Qwen3.5-4B@<该路径>`；阶段评测子额度可另行分配，仍共用原账本及全局现金上限，不能重置已用额度。快照加载使用 [SDK 的 create_sampling_client(model_path=...)](https://docs.pytrio.com/docs/api/ServiceClient#create_sampling_client)，仍要在相应训练任务中验证真实保存／加载。原始基座只有服务端别名，`server_model_revision=null` 明示无法确认权重 commit，不把 tokenizer revision 当成权重证据。
 
 首次实现采用 `first-recorded-candidate-v1`：某个已执行步骤结束后，所有 Task 声明的实现路径首次成为有内容存档、总大小未超实现限制的普通文件。空文件、语法错误以及任务原有但未修改的实现都算候选；无需先验证或提交。回合结束后，从该步清单和 blobs 恢复整个工作区，再用原评分器独立评分。结果保存在 `first_implementation` 和 `private/first-implementation/`，不会成为学生反馈。单题 API 可用 `assess_first_implementation=True` 启用，普通交互默认不增加这次评分。
 
@@ -219,6 +219,8 @@ uv run --locked bashlet evaluate configs/mbpp-dev-8-v1.json \
 2026-10-02 的真实基线完整执行 8 题，最终通过 5/8（62.5%），首次实现通过 6/8（75%），错误为协议错误 2 题、交互步数耗尽 1 题，服务缺口 0。失败恢复分母仅 `mbpp/581`，恢复成功 0/1。`mbpp/573` 的首次实现评分通过，但模型随后连续输出观察格式，未提交；`mbpp/593` 未形成候选；`mbpp/581` 修复后公开反馈通过，却在提交前用尽 6 步，所以仍为失败。这 8 题显示出协议适配和交互效率的改进空间，不能作为最终测试能力估计；本次没有据此修改协议或扩大预算重跑。
 
 本次共 39 次任务采样、2907 个任务生成 token，加上 2 次探测共 41 个收费请求，账本占用上界 ¥1.64、在途 ¥0；全项目累计上界 ¥1.92，充值剩余额度 ¥8.08。账单接口仍返回 401，实际扣费未知。结果与逐项哈希验收在 `runs/issue05-development-baseline/1dd96303a0784be6a0988c6a22bc31dc/` 的 `evaluation.json`、`acceptance.json`、`billing-verification.json`；比较指纹为 `cc0efb2e89e26e7d5dfcc7a148623eeb60042cde20a5c207a4ea0b4f292c9da8`。对应 sampler 为 `sample_3sv7dco753ii`，每题的 `run` 路径可交给 `bashlet show` 回放。
+
+后续人工费用证据另存 `billing-user-report.json`，保持原始运行记录不变。用户从后台提供了 `sample:2.97K ¥0.01`；目前将其作为已报告的采样分项，prefill／探测评分与本次总扣费范围仍待确认。未将分项当作总额，也未在缺少逐请求账单分配时释放共用账本占用。替身验收记录单独归档在 `runs/issue05-test-double/`。
 
 ## 两层入口与 Task v2
 

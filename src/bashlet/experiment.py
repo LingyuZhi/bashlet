@@ -67,6 +67,11 @@ def task_from_record(data: dict[str, Any]) -> Task:
     return Task(**task_data, grader=grader)
 
 
+def serialize_task(task: Task) -> str:
+    """Canonical private Task document used for both storage and identity hashes."""
+    return json.dumps(asdict(task), ensure_ascii=True, allow_nan=False, indent=2)
+
+
 def _validate_task(task: Task, environment_id: str) -> None:
     if not task.task_id:
         raise ValueError("A task identity is required")
@@ -252,7 +257,7 @@ def run_experiment(
         if isinstance(task.grader, CommandGrader)
         else "json-function-v1"
     )
-    task_json = json.dumps(asdict(task), ensure_ascii=True, allow_nan=False, indent=2)
+    task_json = serialize_task(task)
     run_dir = output_dir.resolve() / uuid.uuid4().hex
     run_dir.mkdir(parents=True, mode=0o700)
     private = run_dir / "private"

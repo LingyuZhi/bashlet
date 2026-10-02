@@ -373,7 +373,10 @@ class PyTRIOModel:
                     capture.entry = entry
                     self.ledger.annotate(
                         entry,
-                        {"service_session_cuid": self._service.service_session_cuid},
+                        {
+                            "service_session_cuid": self._service.service_session_cuid,
+                            "sampling_run_cuid": self._sampler.sampling_run_cuid,
+                        },
                     )
                     token_input = trio.ModelInput.from_ints(list(prompt))
                     if scoring:

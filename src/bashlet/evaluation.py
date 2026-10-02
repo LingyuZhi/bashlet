@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import ExperimentConfig, config_record, load_model
-from .experiment import run_experiment, task_from_record
+from .experiment import run_experiment, serialize_task, task_from_record
 from .mbpp import mbpp_task_path
 from .models import EpisodeResult, Model, ModelBackend, Task
 
@@ -217,11 +217,7 @@ def evaluate(
     rows = [
         {
             "task_id": task.task_id,
-            "task_sha256": hashlib.sha256(
-                json.dumps(
-                    asdict(task), ensure_ascii=True, allow_nan=False, indent=2
-                ).encode()
-            ).hexdigest(),
+            "task_sha256": hashlib.sha256(serialize_task(task).encode()).hexdigest(),
             "task_origin": asdict(task.origin) if task.origin else None,
             "feedback_command": task.feedback_command,
             "implementation_paths": list(task.implementation_paths),
