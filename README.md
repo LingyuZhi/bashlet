@@ -292,7 +292,7 @@ uv run --locked bashlet select-sft runs/my-sft \
 
 2026-10-02 的真实运行 `runs/issue07-sft-v1/` 完成 24 次更新，并在第 12 步退出后恢复完整训练状态。开发集基线 5/8，SFT 第 12、24 步均 2/8，比较指纹与基线一致；据同分规则选第 12 步 `trio://run_x2uvy7hltg83/sampler_weights/sampler-0012`，配套完整状态为 `trio://run_x2uvy7hltg83/weights/state-0012`。本次 SFT 出现退化，主要观察到 shell 引号错误和重复失败后用尽 6 步，loss 下降不代表任务能力提升；没有读取最终测试来选优。训练及两次评测的保守占用共 ¥6.48，项目累计 ¥8.40、在途 ¥0；用户提供的后台累计分项为 train 0.13M／¥0.60、sample 10.42K／¥0.04，未提供本次 prefill 或按会话拆分的金额；该 ¥0.64 不能作为本次独立总费用，账本未据此释放额度。证据保存在 `billing-user-report.json`。
 
-训练曲线及所选快照见 [W&B SFT run](https://wandb.ai/lingyuzhi-chinese-academy-of-sciences/bashlet/runs/712468fe186b4798ba3e7d48c1b69ecd)，配套证据在 `runs/issue07-dev-step12/`、`runs/issue07-dev-step24/`、`runs/issue07-baseline-monitor/` 和 `runs/issue07-monitor-recovery/`。完整轨迹与权重没有上传到 W&B。
+训练曲线及所选快照见 [W&B SFT run](https://wandb.ai/lingyuzhi-chinese-academy-of-sciences/bashlet/runs/712468fe186b4798ba3e7d48c1b69ecd)，配套证据在 `runs/issue07-dev-step12/`、`runs/issue07-dev-step24/`、`runs/issue07-baseline-monitor/` 和 `runs/issue07-monitor-recovery/`。完整轨迹与权重没有上传到 W&B。总验收为 `runs/issue07-sft-v1/acceptance.json`，其中保留训练、评测、费用和云端指标核对的文件哈希。全量测试 286 项通过，mypy、ruff 和格式检查通过；Standards／Spec 两轴复审均无遗留问题。
 
 ## 两层入口与 Task v2
 

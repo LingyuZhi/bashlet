@@ -525,6 +525,7 @@ def sync_monitor(run_dir: Path) -> None:
         try:
             result = subprocess.run(
                 command,
+                cwd=run_dir.resolve(),
                 env=os.environ | {"WANDB_API_KEY": key},
                 capture_output=True,
                 text=True,
