@@ -220,7 +220,7 @@ uv run --locked bashlet evaluate configs/mbpp-dev-8-v1.json \
 
 本次共 39 次任务采样、2907 个任务生成 token，加上 2 次探测共 41 个收费请求，账本占用上界 ¥1.64、在途 ¥0；全项目累计上界 ¥1.92，充值剩余额度 ¥8.08。账单接口仍返回 401，实际扣费未知。结果与逐项哈希验收在 `runs/issue05-development-baseline/1dd96303a0784be6a0988c6a22bc31dc/` 的 `evaluation.json`、`acceptance.json`、`billing-verification.json`；比较指纹为 `cc0efb2e89e26e7d5dfcc7a148623eeb60042cde20a5c207a4ea0b4f292c9da8`。对应 sampler 为 `sample_3sv7dco753ii`，每题的 `run` 路径可交给 `bashlet show` 回放。
 
-后续人工费用证据另存 `billing-user-report.json`，保持原始运行记录不变。用户从后台提供了 `sample:2.97K ¥0.01`；目前将其作为已报告的采样分项，prefill／探测评分与本次总扣费范围仍待确认。未将分项当作总额，也未在缺少逐请求账单分配时释放共用账本占用。替身验收记录单独归档在 `runs/issue05-test-double/`。
+后续人工费用证据另存 `billing-user-report.json`，保持原始运行记录不变。用户确认后台累计显示 `sample:2.97K ¥0.01`，另有 prefill ¥0.04，其中包含上一个任务；这两个分项合计 ¥0.05，不能精确分摊到本次评测。该累计金额与本次账本上界分别记录，尚未对 41 个请求擅自分摊费用或释放账本占用。替身验收记录单独归档在 `runs/issue05-test-double/`。实现通过 256 项全量测试；审查修复后评测／PyTRIO 两个文件的 38 项测试、mypy、ruff 均通过，两轴审查没有遗留代码问题。
 
 ## 两层入口与 Task v2
 
