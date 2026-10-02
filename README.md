@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01、02、04、12–20：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。正式实验使用 PyTRIO 的 Qwen/Qwen3.5-4B，在提交付费请求前通过共用费用账本检查额度。
+当前实现任务 01–05、12–20：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合、回放运行记录，并评测固定开发任务清单。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。正式实验使用 PyTRIO 的 Qwen/Qwen3.5-4B，在提交付费请求前通过共用费用账本检查额度。
 
 ## 运行
 
@@ -192,6 +192,33 @@ uv run bashlet task runs/mbpp-sanitized-v1/manifest.json \
 选择入口检查整份清单的原题号、家族和 split，校验所选 Task 的内容哈希和来源。即使增强来源把 `Mbpp/602` 标成 `test`，其家族仍为 `mbpp/602`，归属 train；错误的目标 split 会在模型启动前被拒绝。直接 Task JSON 和 `run_experiment` 同样校验来源中的家族与原始划分。`Task.origin`（`TaskOrigin`）保存数据来源和家族身份，目前支持 MBPP 来源；派生任务用 `dataclasses.replace(task, task_id=..., prompt=..., initial_files=...)` 保留它。每次实验的 `run.json.task_origin` 同样保留该身份，供示范和 rollout 继承；修改衍生内容不产生新的原题家族。
 
 2026-10-02 已真实完成全部 427 题的数据验证：训练 95、开发 37、最终测试 197，共 329 项可用任务；其余 98 项为提示示例或不支持的转换格式，均记录理由，未发现可转换参考解验证失败。清单与全部参考验证证据位于 `runs/mbpp-sanitized-v1-verified/`。真实训练题 `mbpp/602` 通过清单选择、v3 回放、反馈测试和独立评分（2/2），使用的实现与原参考程序不同；验收摘要为 `runs/issue03-mbpp-smoke/acceptance.json`。这些是数据与入口验收，不是模型能力评测。
+
+## 固定开发集评测
+
+任务 05 的 `evaluate` 逐项调用同一个 `run_experiment`，在第一次付费探测前保存所有预定任务，完整结果写入 `runs/<目录>/<运行 ID>/evaluation.json`。固定清单见 [configs/mbpp-dev-8-v1.json](configs/mbpp-dev-8-v1.json)：将 37 道已验证开发题按原始题号排序，取位置 `floor(i * 36 / 7)`（i=0…7）的 8 道，选择不依据模型结果。此入口只接受 `dev`，不开展最终测试选参。
+
+```bash
+uv run --locked bashlet evaluate configs/mbpp-dev-8-v1.json \
+  --snapshot pytrio/Qwen/Qwen3.5-4B@unversioned-base \
+  -c configs/pytrio-smoke.yaml -c configs/development-baseline-v1.yaml \
+  --output-dir runs/issue05-development-baseline
+```
+
+每题最多 6 步、4096 个生成 token、300 秒；单次生成最多 1024 token，temperature=1、top-p=1、seed=4，关闭 thinking。`development-baseline` 累计子额度为 ¥2，探测、失败和重跑也计入，并继续受同一个 `runs/spend.sqlite3` 的 ¥10 充值额度和 ¥200 项目上限限制。账本允许在原有全局限制、子额度和历史支出不变时追加子额度，记录政策变更；不能通过重启提高已有上限。
+
+评测记录保存模型身份、参考 revision、服务端会话／采样身份、完整条件、数据来源与 Task 哈希、反馈命令、每题运行路径和文件哈希。`comparison_sha256` 覆盖任务顺序与内容、评分和分析规则、协议、环境、交互预算、采样参数、编码与实际上下文上限；模型快照另行保存，不混进比较条件。后续 SFT／OPSD 使用原清单和配置，仅选择对应 `model.model_path`，并把 `--snapshot` 写为 `pytrio/Qwen/Qwen3.5-4B@<该路径>`。快照加载使用 [SDK 的 create_sampling_client(model_path=...)](https://docs.pytrio.com/docs/api/ServiceClient#create_sampling_client)，仍要在相应训练任务中验证真实保存／加载。原始基座只有服务端别名，`server_model_revision=null` 明示无法确认权重 commit，不把 tokenizer revision 当成权重证据。
+
+首次实现采用 `first-recorded-candidate-v1`：某个已执行步骤结束后，所有 Task 声明的实现路径首次成为有内容存档、总大小未超实现限制的普通文件。空文件、语法错误以及任务原有但未修改的实现都算候选；无需先验证或提交。回合结束后，从该步清单和 blobs 恢复整个工作区，再用原评分器独立评分。结果保存在 `first_implementation` 和 `private/first-implementation/`，不会成为学生反馈。单题 API 可用 `assess_first_implementation=True` 启用，普通交互默认不增加这次评分。
+
+最终通过率和首次实现通过率的分母均为全部预定任务。无候选计首次实现未通过；服务、现金额度或中断造成的缺口另列，不能缩小分母。失败恢复分母为首次实现已独立评分且失败的任务 ID 集合，分子要求最终显式提交并通过；没有失败候选时比例为 `null`。各模型的失败集合可能不同，不能把这些比例当作同一失败起点上的配对比较。
+
+每题只运行一个回合，回合级不自动重试；后端请求仅按原配置有限重试并逐次记账。模型失败、模型输出证据错误、协议错误、交互／上下文预算耗尽、服务错误分别记录。服务故障、现金不足或中断后停止，剩余题保留为 `not_started`，整次运行标为 `incomplete`，CLI 返回 2；运行完整返回 0，通过率不影响此退出码。重跑创建全新记录并沿用原分母和账本，不能合并不同运行中的成功样本。条件变化产生新指纹，需另存配置／任务清单新版本并重跑受影响对照，最终测试前冻结条件。
+
+日常验收用 `--evidence-kind test-double` 显式标识替身或回放；默认 `experimental` 只接受 PyTRIO 生产后端。真实评测与测试替身的输出目录、证据标签和比较指纹分开。费用摘要关联本次 sampler 的账本请求；`charged_upper_bound_cny` 与未结算预留都是保守占用，只有全部请求具有已核实账单时 `actual_cny` 才是数值。
+
+2026-10-02 的真实基线完整执行 8 题，最终通过 5/8（62.5%），首次实现通过 6/8（75%），错误为协议错误 2 题、交互步数耗尽 1 题，服务缺口 0。失败恢复分母仅 `mbpp/581`，恢复成功 0/1。`mbpp/573` 的首次实现评分通过，但模型随后连续输出观察格式，未提交；`mbpp/593` 未形成候选；`mbpp/581` 修复后公开反馈通过，却在提交前用尽 6 步，所以仍为失败。这 8 题显示出协议适配和交互效率的改进空间，不能作为最终测试能力估计；本次没有据此修改协议或扩大预算重跑。
+
+本次共 39 次任务采样、2907 个任务生成 token，加上 2 次探测共 41 个收费请求，账本占用上界 ¥1.64、在途 ¥0；全项目累计上界 ¥1.92，充值剩余额度 ¥8.08。账单接口仍返回 401，实际扣费未知。结果与逐项哈希验收在 `runs/issue05-development-baseline/1dd96303a0784be6a0988c6a22bc31dc/` 的 `evaluation.json`、`acceptance.json`、`billing-verification.json`；比较指纹为 `cc0efb2e89e26e7d5dfcc7a148623eeb60042cde20a5c207a4ea0b4f292c9da8`。对应 sampler 为 `sample_3sv7dco753ii`，每题的 `run` 路径可交给 `bashlet show` 回放。
 
 ## 两层入口与 Task v2
 

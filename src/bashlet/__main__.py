@@ -13,18 +13,14 @@ from rich.console import Console
 
 from .config import load_config, load_model
 from .episode import run_episode, save_record
-from .experiment import run_experiment
-from .mbpp import mbpp_task_path, prepare_mbpp, validate_origin
+from .evaluation import evaluate
+from .experiment import run_experiment, task_from_record
+from .mbpp import mbpp_task_path, prepare_mbpp
 from .models import (
-    CommandGrader,
     EpisodeResult,
     ExperimentResult,
-    FunctionGrader,
-    GradingCase,
     Isolation,
     ModelBackend,
-    Task,
-    TaskOrigin,
 )
 from .sandbox import Sandbox
 from .spend import DEFAULT_POLICY, BudgetRefused, SpendLedger, SpendPolicy
@@ -159,23 +155,7 @@ def _run_task(options: argparse.Namespace, view: RunView) -> ExperimentResult:
         data = data["task"]
     if not isinstance(data, dict):
         raise ValueError("task must be a JSON object")
-    task_data = dict(data)
-    grader_data = dict(task_data.pop("grader"))
-    grader: FunctionGrader | CommandGrader
-    if "command" in grader_data:
-        grader = CommandGrader(**grader_data)
-    else:
-        cases = tuple(
-            GradingCase(args=tuple(case["args"]), expected=case["expected"])
-            for case in grader_data.pop("cases")
-        )
-        grader = FunctionGrader(**grader_data, cases=cases)
-    if "implementation_paths" in task_data:
-        task_data["implementation_paths"] = tuple(task_data["implementation_paths"])
-    if task_data.get("origin") is not None:
-        task_data["origin"] = TaskOrigin(**task_data["origin"])
-        validate_origin(task_data["origin"])
-    task = Task(**task_data, grader=grader)
+    task = task_from_record(data)
     model = load_model(condition.model)
     return run_experiment(
         task=task,
@@ -204,6 +184,17 @@ def main() -> None:
     task.add_argument("--task-id", help="Select a task from a prepared MBPP manifest")
     task.add_argument("--split", choices=("train", "dev", "test"))
     _execution_options(task)
+    evaluation = commands.add_parser(
+        "evaluate", help="Evaluate a fixed development task list"
+    )
+    evaluation.add_argument("plan", type=Path)
+    evaluation.add_argument("--snapshot", required=True, help="Expected model identity")
+    evaluation.add_argument(
+        "--evidence-kind",
+        choices=("experimental", "test-double"),
+        default="experimental",
+    )
+    _execution_options(evaluation)
     prepare = commands.add_parser(
         "prepare-mbpp", help="Import pinned MBPP and validate references in isolation"
     )
@@ -239,6 +230,22 @@ def main() -> None:
     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "evaluate":
+            path = evaluate(
+                plan_path=options.plan,
+                snapshot=options.snapshot,
+                evidence_kind=options.evidence_kind,
+                condition=load_config(options.config, options.overrides),
+                output_dir=options.output_dir,
+            )
+            record = json.loads(path.read_text())
+            summary = record["summary"]
+            print(
+                f"{record['status']}: {summary['passed_tasks']}/"
+                f"{summary['planned_tasks']} passed; "
+                f"missing={summary['missing_task_ids']}\n{path}"
+            )
+            raise SystemExit(2 if record["status"] != "complete" else 0)
         if options.command == "prepare-mbpp":
             manifest = prepare_mbpp(
                 source_lock=options.source_lock,

@@ -47,6 +47,7 @@ class SpendPolicy:
         default_factory=lambda: {
             "pytrio-smoke": 0.50,
             "opsd-pilot": 10,
+            "development-baseline": 2,
         }
     )
 
@@ -105,8 +106,31 @@ class SpendLedger:
                 "SELECT value FROM metadata WHERE key='policy'"
             ).fetchone()
             if existing is not None and existing[0] != encoded:
-                raise ValueError(
-                    "Ledger policy differs; restarting cannot reset cash limits"
+                previous = json.loads(existing[0])
+                current = asdict(policy)
+                previous_groups = previous.pop("groups")
+                current_groups = current.pop("groups")
+                if previous != current or any(
+                    current_groups.get(name) != limit
+                    for name, limit in previous_groups.items()
+                ):
+                    raise ValueError(
+                        "Ledger policy differs; restarting cannot reset cash limits"
+                    )
+                # Add allocations under unchanged global caps; retain every charge.
+                db.execute("UPDATE metadata SET value=? WHERE key='policy'", (encoded,))
+                db.execute(
+                    "INSERT INTO events VALUES (?, ?, ?)",
+                    (
+                        "policy",
+                        datetime.now(UTC).isoformat(),
+                        json.dumps(
+                            {
+                                "previous": json.loads(existing[0]),
+                                "current": asdict(policy),
+                            }
+                        ),
+                    ),
                 )
             db.execute(
                 "INSERT OR IGNORE INTO metadata VALUES ('policy', ?)", (encoded,)

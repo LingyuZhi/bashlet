@@ -357,6 +357,7 @@ class EpisodeResult:
     encoding: str = ""
     encoding_details: dict[str, JSONValue] = field(default_factory=dict)
     budget: InteractionBudget = field(default_factory=InteractionBudget)
+    budget_kind: Literal["interaction", "spend"] | None = None
     started_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: str = "running"
     trajectory: list[Step] = field(default_factory=list)
@@ -378,8 +379,21 @@ class ExperimentResult(EpisodeResult):
     repair_attempts: list[RepairAttempt] = field(default_factory=list)
     submission: Submission | None = None
     grade: Grade | None = None
+    first_implementation: "FirstImplementation | None" = None
 
     @property
     def passed(self) -> bool:
         """Unsubmitted episodes are failures, even if feedback passed."""
         return self.grade is not None and self.grade.passed
+
+
+@dataclass
+class FirstImplementation:
+    """Host-only, post-episode grading of the earliest recorded candidate."""
+
+    status: str = "no_candidate"
+    candidate_index: int | None = None
+    formed_at_step: int | None = None
+    snapshot: Submission | None = None
+    grade: Grade | None = None
+    reason: str = ""

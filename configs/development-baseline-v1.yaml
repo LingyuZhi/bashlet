@@ -1,0 +1,13 @@
+# Layer after pytrio-smoke.yaml. Same ledger, a separate cumulative allocation.
+model:
+  group: development-baseline
+  operation: evaluation
+  sampling:
+    max_tokens: 1024
+    temperature: 1.0
+    top_p: 1.0
+    seed: 4
+budget:
+  max_steps: 6
+  max_generated_tokens: 4096
+  max_seconds: 300.0

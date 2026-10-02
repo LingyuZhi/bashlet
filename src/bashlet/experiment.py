@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, fields
 from pathlib import Path
+from typing import Any
 
 from .analysis import analyze_episode
 from .config import ExperimentConfig, load_config
@@ -18,10 +19,13 @@ from .models import (
     CommandGrader,
     EpisodeResult,
     ExperimentResult,
+    FirstImplementation,
     FunctionGrader,
     Grade,
+    GradingCase,
     Model,
     Task,
+    TaskOrigin,
 )
 from .sandbox import Sandbox
 from .workspace import snapshot_workspace, validate_workspace_path
@@ -40,6 +44,27 @@ with contextlib.redirect_stdout(sys.stderr):
     answer = getattr(module, request['function'])(*request['args'])
 print(json.dumps(answer, allow_nan=False))
 """
+
+
+def task_from_record(data: dict[str, Any]) -> Task:
+    """Decode the trusted Task format shared by CLI and evaluation plans."""
+    task_data = dict(data)
+    grader_data = dict(task_data.pop("grader"))
+    grader: FunctionGrader | CommandGrader
+    if "command" in grader_data:
+        grader = CommandGrader(**grader_data)
+    else:
+        cases = tuple(
+            GradingCase(args=tuple(case["args"]), expected=case["expected"])
+            for case in grader_data.pop("cases")
+        )
+        grader = FunctionGrader(**grader_data, cases=cases)
+    if "implementation_paths" in task_data:
+        task_data["implementation_paths"] = tuple(task_data["implementation_paths"])
+    if task_data.get("origin") is not None:
+        task_data["origin"] = TaskOrigin(**task_data["origin"])
+        validate_origin(task_data["origin"])
+    return Task(**task_data, grader=grader)
 
 
 def _validate_task(task: Task, environment_id: str) -> None:
@@ -82,17 +107,22 @@ def _validate_files(files: dict[str, str]) -> None:
 
 
 def _grade(
-    grader: FunctionGrader | CommandGrader, sandbox: Sandbox, run_dir: Path
+    grader: FunctionGrader | CommandGrader,
+    sandbox: Sandbox,
+    run_dir: Path,
+    *,
+    submission: str = "submission",
+    destination: str = "private/grading-workspace",
 ) -> Grade:
-    workspace = run_dir / "private" / "grading-workspace"
-    shutil.copytree(run_dir / "submission", workspace)
+    workspace = run_dir / destination
+    shutil.copytree(run_dir / submission, workspace)
     if isinstance(grader, CommandGrader):
         try:
             for path, content in grader.hidden_files.items():
-                destination = workspace / path
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.unlink(missing_ok=True)
-                destination.write_text(content)
+                file_path = workspace / path
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.unlink(missing_ok=True)
+                file_path.write_text(content)
         except (FileExistsError, IsADirectoryError, NotADirectoryError) as error:
             return Grade(
                 False, 0, 1, (CaseResult(False, "grading_path_conflict", str(error)),)
@@ -151,6 +181,47 @@ def _grade(
     )
 
 
+def _assess_first(
+    result: ExperimentResult, task: Task, condition: ExperimentConfig
+) -> FirstImplementation:
+    assessment = FirstImplementation()
+    if not result.candidates:
+        return assessment
+    candidate = result.candidates[0]
+    assessment.candidate_index = candidate.index
+    assessment.formed_at_step = candidate.formed_at_step
+    manifest = result.trajectory[candidate.formed_at_step].workspace_manifest
+    try:
+        assessment.snapshot = snapshot_workspace(
+            manifest,
+            result.run_dir,
+            result.limits,
+            destination="private/first-implementation",
+        )
+        assessment.grade = _grade(
+            task.grader,
+            Sandbox(condition.environment),
+            result.run_dir,
+            submission=assessment.snapshot.path,
+            destination="private/first-grading-workspace",
+        )
+        assessment.status = (
+            "infrastructure_error"
+            if any(c.status == "infrastructure_error" for c in assessment.grade.cases)
+            else "graded"
+        )
+    except ValueError as error:
+        assessment.status, assessment.reason = "invalid_snapshot", str(error)
+    except OSError as error:
+        assessment.status, assessment.reason = "infrastructure_error", str(error)
+    except KeyboardInterrupt:
+        assessment.status, assessment.reason = (
+            "interrupted",
+            "First grading interrupted",
+        )
+    return assessment
+
+
 def run_experiment(
     *,
     task: Task,
@@ -159,6 +230,7 @@ def run_experiment(
     config: ExperimentConfig | Sequence[Path] = (),
     overrides: Sequence[str] = (),
     on_update: Callable[[EpisodeResult], None] | None = None,
+    assess_first_implementation: bool = False,
 ) -> ExperimentResult:
     """Prepare a Task, run its Episode, and grade only an explicit Submission.
 
@@ -258,6 +330,8 @@ def run_experiment(
             and path in result.initial_workspace_manifest
         }
         analyze_episode(result, task, feedback_materials)
+        if assess_first_implementation:
+            result.first_implementation = _assess_first(result, task, condition)
         save_record(
             result,
             condition,

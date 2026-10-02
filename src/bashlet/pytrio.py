@@ -91,6 +91,7 @@ class PyTRIOModel:
         *,
         model: str,
         model_revision: str,
+        model_path: str | None = None,
         encoding: Encoding | None = None,
         tokenizer: str | None = None,
         tokenizer_revision: str | None = None,
@@ -113,6 +114,10 @@ class PyTRIOModel:
             raise ValueError(f"This experiment requires {MODEL}")
         if not model_revision:
             raise ValueError("Record the reference model revision")
+        if model_path is not None and (
+            not isinstance(model_path, str) or not model_path.strip()
+        ):
+            raise ValueError("model_path must be a nonempty sampler checkpoint URI")
         if type(timeout_seconds) is not int or timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be a positive integer")
         if type(max_retries) is not int or max_retries < 0:
@@ -142,8 +147,9 @@ class PyTRIOModel:
             Path(ledger_path), policy=SpendPolicy.read(policy_path)
         )
         self.model, self.encoding = model, encoding
+        self.model_path = model_path
         # The SDK accepts a base alias, not a Hub commit.
-        self.identity = f"pytrio/{model}@unversioned-base"
+        self.identity = f"pytrio/{model}@{model_path or 'unversioned-base'}"
         self.timeout_seconds, self.max_retries = timeout_seconds, max_retries
         self.retry_delay_seconds = retry_delay_seconds
         self.group, self.operation = group, operation
@@ -161,6 +167,8 @@ class PyTRIOModel:
             "development_only": False,
             "sdk_version": SDK_VERSION,
             "model": model,
+            "model_path": model_path,
+            "snapshot_kind": "sampler_weights" if model_path else "unversioned_base",
             "reference_model_revision": model_revision,
             "server_model_revision": None,
             "revision_limitation": "SDK exposes an alias, not a weight commit",
@@ -224,7 +232,10 @@ class PyTRIOModel:
             raise ModelResponseError("PyTRIO must report a finite context limit")
         self.max_context_tokens = min(known)
         self.ledger.bind_account(self._service.workspace_cuid)
-        sampler = self._service.create_sampling_client(base_model=self.model)
+        arguments = {"base_model": self.model}
+        if self.model_path is not None:
+            arguments["model_path"] = self.model_path
+        sampler = self._service.create_sampling_client(**arguments)
         if sampler.model_id != self.model:
             raise ModelResponseError("PyTRIO created a different model")
         self._sampler = sampler
@@ -341,6 +352,8 @@ class PyTRIOModel:
             "sampling": asdict(sampling),
             "scoring": scoring,
         }
+        if self.model_path is not None:
+            payload["model_path"] = self.model_path
         with self._lock:
             for attempt in range(self.max_retries + 1):
                 probing = operation in ("capability_probe", "logprob_probe")

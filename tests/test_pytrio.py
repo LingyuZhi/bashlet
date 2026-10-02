@@ -128,6 +128,7 @@ class FakeService:
 
     def __init__(self, sampling: FakeSampling) -> None:
         self.sampling = sampling
+        self.loaded_path: str | None = None
 
     def get_server_capabilities(self) -> Any:
         return SimpleNamespace(
@@ -142,8 +143,11 @@ class FakeService:
             ]
         )
 
-    def create_sampling_client(self, base_model: str) -> FakeSampling:
+    def create_sampling_client(
+        self, base_model: str, model_path: str | None = None
+    ) -> FakeSampling:
         assert base_model == MODEL
+        self.loaded_path = model_path
         return self.sampling
 
 
@@ -165,6 +169,65 @@ def model_for(sdk: FakeSampling, ledger: SpendLedger, **options: Any) -> PyTRIOM
         ledger=ledger,
         retry_delay_seconds=0,
         **options,
+    )
+
+
+def test_new_evaluation_group_keeps_existing_cash_commitments(tmp_path: Path) -> None:
+    policy = SpendPolicy(groups={"pytrio-smoke": 0.50, "opsd-pilot": 10})
+    path = tmp_path / "spend.sqlite3"
+    ledger = SpendLedger(path, policy=policy)
+    tokens = list(b"```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```")
+    run_experiment(
+        task=double_task(),
+        model=model_for(FakeSampling([response([65]), response(tokens)]), ledger),
+        output_dir=tmp_path / "before",
+    )
+    before = ledger.snapshot()
+    extended = replace(policy, groups=policy.groups | {"development-baseline": 0.04})
+    reopened = SpendLedger(path, policy=extended)
+    result = run_experiment(
+        task=double_task(),
+        model=model_for(
+            FakeSampling([response([65])]), reopened, group="development-baseline"
+        ),
+        output_dir=tmp_path / "after",
+    )
+    assert result.status == "budget_exhausted"
+    after = reopened.snapshot()
+    assert after["entries"][: len(before["entries"])] == before["entries"]
+    assert after["charged_cny"] == pytest.approx(before["charged_cny"] + 0.04)
+    assert after["funded_remaining_cny"] == pytest.approx(10 - after["charged_cny"])
+    with pytest.raises(ValueError, match="policy differs"):
+        SpendLedger(path, policy=replace(extended, funded_cny=20))
+    with pytest.raises(ValueError, match="policy differs"):
+        SpendLedger(
+            path, policy=replace(extended, groups=extended.groups | {"pytrio-smoke": 1})
+        )
+
+
+def test_explicit_sampler_snapshot_is_loaded_and_traced_through_the_experiment(
+    tmp_path: Path,
+) -> None:
+    snapshot = "trio://training-test/weights/sft-step-10"
+    tokens = list(b"```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```")
+    service = FakeService(FakeSampling([response([65]), response(tokens)]))
+    ledger = SpendLedger(tmp_path / "spend.sqlite3", policy=SpendPolicy())
+    model = PyTRIOModel(
+        model=MODEL,
+        model_revision=REVISION,
+        model_path=snapshot,
+        encoding=ByteEncoding(),
+        service_client=service,
+        ledger=ledger,
+    )
+    result = run_experiment(task=double_task(), model=model, output_dir=tmp_path)
+    assert service.loaded_path == snapshot
+    assert result.policy == f"pytrio/{MODEL}@{snapshot}"
+    assert result.policy_details["model_path"] == snapshot
+    assert result.policy_details["snapshot_kind"] == "sampler_weights"
+    assert all(
+        entry["evidence"]["payload"]["model_path"] == snapshot
+        for entry in ledger.snapshot()["entries"]
     )
 
 

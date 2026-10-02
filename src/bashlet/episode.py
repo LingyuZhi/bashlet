@@ -292,6 +292,7 @@ def run_episode(
             reason = _budget_exhausted_reason(budget, result.usage)
             if reason:
                 result.status, result.reason = "budget_exhausted", reason
+                result.budget_kind = "interaction"
                 return result
             remaining = budget.max_generated_tokens - result.usage.generated_tokens
             if backend is not None:
@@ -367,6 +368,7 @@ def run_episode(
             save()
     except BudgetRefused as error:
         result.status, result.reason = "budget_exhausted", str(error)
+        result.budget_kind = "spend"
         return result
     except ContextExhausted as error:
         result.status, result.reason = "context_exhausted", str(error)

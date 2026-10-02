@@ -7,6 +7,7 @@ limits:
   groups:
     pytrio-smoke: 0.50
     opsd-pilot: 10
+    development-baseline: 2
 prices_cny_per_million:
   prefill: 1.49
   cache: 0.30

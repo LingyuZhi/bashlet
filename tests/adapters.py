@@ -8,6 +8,8 @@ from bashlet import (
     Generation,
     InteractionBudget,
     Limits,
+    ModelResponseError,
+    PyTRIOModel,
     ReplayModel,
     SamplingParams,
 )
@@ -114,6 +116,66 @@ class ScriptedModel:
         )
         self.generations.append(generation)
         return generation
+
+
+class EvaluationModel(ScriptedModel):
+    """CLI-loadable external model double with task-controlled outcomes."""
+
+    def __init__(
+        self, thinking: bool = False, identity: str = "test/evaluation-v1"
+    ) -> None:
+        assert not thinking
+        super().__init__(self._respond, identity=identity)
+
+    def _respond(self, context: str) -> str:
+        task = context.split("<|user|>")[1]
+        if "interrupt\n" in task:
+            raise KeyboardInterrupt
+        if "model\n" in task:
+            raise ModelResponseError("Invalid model evidence")
+        if "service\n" in task:
+            raise RuntimeError("Service unavailable")
+        if "protocol\n" in task:
+            return "Missing bash block"
+        if "budget\n" in task:
+            return bash("ls")
+        if turn_number(context) == 1:
+            return write_file(
+                "def double(n): return 4\n"
+                if "wrong\n" in task
+                else "def double(n): return n * 2\n"
+            )
+        return submit()
+
+
+class PaidEvaluationModel(PyTRIOModel):
+    """Construct the production adapter against the controllable SDK boundary."""
+
+    def __init__(self, ledger_path: str, thinking: bool = False) -> None:
+        from pathlib import Path
+
+        from test_pytrio import MODEL, REVISION, FakeSampling, FakeService, response
+
+        from bashlet import SpendLedger, SpendPolicy
+
+        ledger = SpendLedger(Path(ledger_path), policy=SpendPolicy(funded_cny=0.16))
+        sdk = FakeSampling(
+            [
+                response([65]),
+                response(list(write_file("def double(n): return n * 2\n").encode())),
+                response(list(submit().encode())),
+            ]
+        )
+        super().__init__(
+            model=MODEL,
+            model_revision=REVISION,
+            encoding=ByteEncoding(),
+            service_client=FakeService(sdk),
+            ledger=ledger,
+            group="development-baseline",
+            operation="evaluation",
+            retry_delay_seconds=0,
+        )
 
 
 def turn_number(context: str) -> int:

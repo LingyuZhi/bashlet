@@ -112,7 +112,11 @@ def validate_workspace_path(path: str) -> None:
 
 
 def snapshot_workspace(
-    manifest: dict[str, WorkspaceEntry], run_dir: Path, limits: Limits
+    manifest: dict[str, WorkspaceEntry],
+    run_dir: Path,
+    limits: Limits,
+    *,
+    destination: str = "submission",
 ) -> Submission:
     """Materialize the recorded submission, independently of the live workspace."""
     if len(manifest) > limits.submission_files:
@@ -130,16 +134,17 @@ def snapshot_workspace(
             size_bytes += entry.size_bytes
     if size_bytes > limits.submission_bytes:
         raise ValueError("Workspace exceeds the submission size limit")
-    target = run_dir / "submission"
-    target.mkdir()
+    validate_workspace_path(destination)
+    target = run_dir / destination
+    target.mkdir(parents=True)
     for path, entry in sorted(manifest.items()):
-        destination = target / path
+        file_path = target / path
         if entry.kind == "directory":
-            destination.mkdir(parents=True, exist_ok=True)
+            file_path.mkdir(parents=True, exist_ok=True)
         else:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(run_dir / "blobs" / str(entry.sha256), destination)
-            destination.chmod(0o400 | ((entry.mode or 0) & 0o111))
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(run_dir / "blobs" / str(entry.sha256), file_path)
+            file_path.chmod(0o400 | ((entry.mode or 0) & 0o111))
     payload = json.dumps(
         {
             path: {"kind": entry.kind, "sha256": entry.sha256, "mode": entry.mode}
