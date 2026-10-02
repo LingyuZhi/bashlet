@@ -14,6 +14,7 @@ from rich.console import Console
 from .config import load_config, load_model
 from .episode import run_episode, save_record
 from .experiment import run_experiment
+from .mbpp import mbpp_task_path, prepare_mbpp
 from .models import (
     CommandGrader,
     EpisodeResult,
@@ -23,6 +24,7 @@ from .models import (
     Isolation,
     ModelBackend,
     Task,
+    TaskOrigin,
 )
 from .sandbox import Sandbox
 from .spend import DEFAULT_POLICY, BudgetRefused, SpendLedger, SpendPolicy
@@ -122,7 +124,14 @@ def _run_agent(options: argparse.Namespace, view: RunView) -> EpisodeResult:
 
 
 def _run_task(options: argparse.Namespace, view: RunView) -> ExperimentResult:
-    data = json.loads(options.task.read_text())
+    task_path = options.task
+    if options.task_id is not None:
+        if options.split is None:
+            raise ValueError("Task-set selection requires --split")
+        task_path = mbpp_task_path(task_path, options.task_id, options.split)
+    elif options.split is not None:
+        raise ValueError("--split requires a task set and --task-id")
+    data = json.loads(task_path.read_text())
     if not isinstance(data, dict):
         raise ValueError("Task file must contain a JSON object")
     condition = load_config(options.config, options.overrides)
@@ -163,6 +172,8 @@ def _run_task(options: argparse.Namespace, view: RunView) -> ExperimentResult:
         grader = FunctionGrader(**grader_data, cases=cases)
     if "implementation_paths" in task_data:
         task_data["implementation_paths"] = tuple(task_data["implementation_paths"])
+    if task_data.get("origin") is not None:
+        task_data["origin"] = TaskOrigin(**task_data["origin"])
     task = Task(**task_data, grader=grader)
     model = load_model(condition.model)
     return run_experiment(
@@ -189,7 +200,15 @@ def main() -> None:
     task.add_argument(
         "task", type=Path, help="Task JSON or a legacy task/replies request"
     )
+    task.add_argument("--task-id", help="Select a task from a prepared MBPP manifest")
+    task.add_argument("--split", choices=("train", "dev", "test"))
     _execution_options(task)
+    prepare = commands.add_parser(
+        "prepare-mbpp", help="Import pinned MBPP and validate references in isolation"
+    )
+    prepare.add_argument("--source-lock", type=Path, required=True)
+    prepare.add_argument("--source-file", type=Path)
+    _execution_options(prepare)
     show = commands.add_parser("show", help="Replay a saved run without executing it")
     show.add_argument("run_dir", type=Path)
     _view_options(show)
@@ -219,6 +238,15 @@ def main() -> None:
     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "prepare-mbpp":
+            manifest = prepare_mbpp(
+                source_lock=options.source_lock,
+                source_file=options.source_file,
+                output_dir=options.output_dir,
+                config=load_config(options.config, options.overrides),
+            )
+            print(manifest)
+            return
         if options.command == "spend":
             ledger = SpendLedger(
                 options.ledger, policy=SpendPolicy.read(options.policy)

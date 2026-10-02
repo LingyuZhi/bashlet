@@ -155,6 +155,42 @@ uv run bashlet show runs/<运行 ID>
 
 2026-10-02 已在 `n30126` 的 A100 40GB 上完成真实 CLI 冒烟回合：上述 Qwen3-4B 模型在 3 步内创建并运行 `hello.py`，输出 `5` 后显式提交；48 个采样 token 均保存原始 id 和逐 token logprob，能力与隔离探针通过。开发证据保存在 `runs/issue20-vllm/`：`api-probe.json` 保存真实 token 接口请求和响应，`acceptance.json` 汇总验收，完整运行记录位于 `episodes/a2a47dbc534c43178098b1addd3f609c/run.json`。
 
+## 已验证的 MBPP 任务集
+
+`prepare-mbpp` 将锁定的 MBPP sanitized 转为当前 Task 数据结构，使用现有 `json-function-v1` 函数评分和 bash-block-v3 行动协议。Task v2 是任务 15 引入的数据结构名称，与行动协议的版本独立。
+
+默认数据选择记录在 [configs/mbpp-sanitized-v1.json](configs/mbpp-sanitized-v1.json)：Google Research 提交 `e49bbfe381c9c0e564b937f1c4e163a2273c65cc`，原文件 SHA-256 为 `ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9`。这是本次实施的例行数据配置。按[官方原始题号划分](https://github.com/google-research/google-research/blob/e49bbfe381c9c0e564b937f1c4e163a2273c65cc/mbpp/README.md)，sanitized 的 427 题包含训练 120、开发 43、最终测试 257 和提示示例 7 题；提示示例排除。原始题号 601–974 属于 train，511–600 属于 dev，11–510 属于 test，不重新随机划分。
+
+先准备 [sandbox Python 环境](#运行)，然后运行：
+
+```bash
+uv run bashlet prepare-mbpp \
+  --source-lock configs/mbpp-sanitized-v1.json \
+  --output-dir runs/mbpp-sanitized-v1
+```
+
+下载遵循 `HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`，网络异常及 HTTP 408/429/500/502/503/504 最多重试两次。可用 `--source-file /path/to/sanitized-mbpp.json` 离线重建，包括复用此前产物的 `private/source.json`。从镜像取得的文件同样必须通过固定 SHA-256；不自动用另一个 HF 数据版本替换原文件。输出目录必须是新目录，避免覆盖已有清单和验证证据；中断后用缓存原文件重建到新目录。
+
+转换规则 `mbpp-json-functions-v1`：第一条原始断言公开为 `feedback_tests.py`，其余不同输入用于隐藏评分。只支持单一命名函数的位置参数调用与字面量相等断言；输入必须保持 JSON 类型语义，tuple、set、非字符串键字典、复杂调用与不支持的断言会被排除并记录理由。输出 tuple 按既有 JSON 评分约定序列化为 list；不支持集合、复数和近似比较。重复反馈输入不算独立评分用例；没有独立用例的任务排除。该规则保留少量隐藏用例，**不是 MBPP+ 增强评测**；MBPP+ 的完整格式、类型恢复和增强用例导入不在这个转换器中。
+
+每个候选任务先在私有验证工作区真实运行全部原始断言，再用学生所用的函数评分器逐用例验证参考实现。参考验证只使用固定回放命令，没有模型采样；错误参考解被排除，基础设施故障使准备过程失败，不据此筛掉题目。最终测试材料只进入可信数据验证与评分流程，这一步不作模型选优或探索性评测。
+
+产物全部保存在权限为 `0700` 的输出目录下：
+
+- `manifest.json`：源版本、内容哈希、转换规则、验证环境、所有原题的家族／split、可用状态、排除原因和验证记录路径；只有 `status: complete` 才能从清单选择任务。
+- `private/source.json`：校验过的原始数据，供离线重建。
+- `private/tasks/{train,dev,test}/<原题号>.json`：可直接传给既有实验入口的可信 Task；包含宿主持有的参考实现和评分用例，不能整份复制给学生。
+- `private/reference-validation/`：参考实现的真实隔离执行、原始断言结果和逐用例评分证据，供操作者审计。
+
+例如选择训练题 602，通过已有任务入口运行；模型配置仍由 `-c` 决定：
+
+```bash
+uv run bashlet task runs/mbpp-sanitized-v1/manifest.json \
+  --task-id mbpp/602 --split train -c configs/dev-vllm.yaml
+```
+
+选择入口检查整份清单的原题号、家族和 split，校验所选 Task 的内容哈希和来源。即使增强来源把 `Mbpp/602` 标成 `test`，其家族仍为 `mbpp/602`，归属 train；错误的目标 split 会在模型启动前被拒绝。`Task.origin`（`TaskOrigin`）保存数据来源和家族身份；派生任务用 `dataclasses.replace(task, task_id=..., prompt=..., initial_files=...)` 保留它。每次实验的 `run.json.task_origin` 同样保留该身份，供示范和 rollout 继承；修改衍生内容不产生新的原题家族。
+
 ## 两层入口与 Task v2
 
 `run_episode(instruction=..., workspace=..., model=..., config=...)` 在已有工作区中运行一个回合，不接收 Task 或评分器。`config` 是 `bashlet.config.load_config()` 返回的完整配置；默认加载内置配置。返回 `EpisodeResult`，包含轨迹、终止状态、最终工作区路径 `workspace`、预算用量和可选的 `submission_text`。此入口直接修改指定工作区，运行记录默认保存在唯一的 `runs/<ID>/` 中；调用者也可指定独立的 `run_dir`，通过 `on_update` 接收进度。每个回合的状态都属于调用实例。
@@ -232,7 +268,7 @@ Harness 回合结果互斥：`submitted`（显式提交）、`interrupted`、`fo
 
 沙箱只读挂载 `/usr/bin`、`/usr/lib`、`/usr/lib64`、`/etc/alternatives` 和独立 Python 环境，并挂载当前任务目录。`/etc` 的账户、hosts、名称解析与 git 配置由配置生成，不挂载宿主 `/etc`。每一步使用独立 `/proc`、`/dev`、`/tmp` 和可写 HOME，清理环境和继承的文件描述符，断开宿主网络，移除 capabilities 并建立新会话；HOME 与临时文件不会跨步保留。实现依据 [Bubblewrap 0.6.1 的说明](https://github.com/containers/bubblewrap/blob/v0.6.1/README.md)及[参数文档](https://github.com/containers/bubblewrap/blob/v0.6.1/bwrap.xml)。任务 Python/pytest 的实际版本与宿主 Python 分别记录。默认环境关闭 Python 字节码写入和 [pytest 缓存插件](https://docs.pytest.org/en/stable/how-to/cache.html)，避免工作区快照产生 `__pycache__` 和 `.pytest_cache`；`pytest` 和 `python3 -m pytest` 都使用只读 Python 环境。
 
-`json-function-v1` 评分按 `Task.grader` 中的 `module_path` 和 `function_name` 加载模块、调用函数，接受 JSON 位置参数，返回值须可表示为 JSON。模块可导入工作区中的其他包或模块，并读取提交的数据文件。每个评分用例在新沙箱中执行快照的只读副本，宿主比较真实返回值与期望值，保留逐用例结果。参考实现只用于可信材料记录，不执行、不做源码相等比较；评分期望值始终留在宿主。学生的退出码 0、自报通过或被修改的反馈测试均不能代替评分。此切片尚未实现任意 MBPP 测试程序的适配。
+`json-function-v1` 评分按 `Task.grader` 中的 `module_path` 和 `function_name` 加载模块、调用函数，接受 JSON 位置参数，返回值须可表示为 JSON。模块可导入工作区中的其他包或模块，并读取提交的数据文件。每个评分用例在新沙箱中执行快照的只读副本，宿主比较真实返回值与期望值，保留逐用例结果。学生实验不会执行参考实现或比较源码；MBPP 准备阶段在独立的可信验证运行中执行参考实现。评分期望值始终留在宿主。学生的退出码 0、自报通过或被修改的反馈测试均不能代替评分。MBPP 转换仅支持上文记录的子集。
 
 `test-command-v1` 对应 `CommandGrader(command=..., hidden_files=...)`。实验层在显式提交后，把隐藏文件写入 `private/grading-workspace/` 中的快照副本，再在新沙箱中只读执行测试命令；隐藏文件不会写回工作区、提交快照或学生观察。隐藏文件覆盖同路径的学生文件；若学生文件或目录阻碍注入，该提交评分失败。命令退出码为 0 即通过，输出文本或截断不影响判断；超时为失败，执行器故障单独记录。Grade 中的 `total_cases=1` 表示执行了一条测试命令，命令内部可运行多个 pytest 用例。
 

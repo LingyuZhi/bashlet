@@ -36,6 +36,18 @@ class CommandGrader:
 
 
 @dataclass(frozen=True)
+class TaskOrigin:
+    """Immutable task-family identity inherited by variants and their trajectories."""
+
+    dataset: str
+    revision: str
+    source_sha256: str
+    original_task_id: str
+    family_id: str
+    split: Literal["train", "dev", "test"]
+
+
+@dataclass(frozen=True)
 class Task:
     task_id: str
     prompt: str
@@ -45,6 +57,7 @@ class Task:
     reference_implementation: str = ""
     implementation_paths: tuple[str, ...] = ()
     feedback_command: str | None = None
+    origin: TaskOrigin | None = None
 
 
 @dataclass(frozen=True)

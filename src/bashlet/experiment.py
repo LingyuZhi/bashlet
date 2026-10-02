@@ -191,6 +191,7 @@ def run_experiment(
         target.write_text(content)
     metadata: dict[str, object] = {
         "task_id": task.task_id,
+        "task_origin": asdict(task.origin) if task.origin else None,
         "task_sha256": hashlib.sha256(task_json.encode()).hexdigest(),
         "environment_id": task.environment_id,
         "grading_protocol": grading_protocol,
@@ -259,6 +260,7 @@ def run_experiment(
             condition,
             {
                 "grading_protocol": grading_protocol,
+                "task_origin": asdict(task.origin) if task.origin else None,
                 "passed": result.passed,
             },
         )

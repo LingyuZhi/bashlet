@@ -22,6 +22,7 @@ from .models import (
     Observation,
     SamplingParams,
     Task,
+    TaskOrigin,
 )
 from .protocol import PROTOCOL_SHA256, PROTOCOL_VERSION
 from .pytrio import PyTRIOModel
@@ -56,6 +57,7 @@ __all__ = [
     "SpendLedger",
     "SpendPolicy",
     "Task",
+    "TaskOrigin",
     "Utf8Encoding",
     "VLLMModel",
     "run_experiment",
