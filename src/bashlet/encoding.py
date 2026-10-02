@@ -176,6 +176,19 @@ class QwenChatMLEncoding:
             ),
         )
 
+    def replay_reply(self, action_text: str) -> str:
+        """Frame a constructed action with a stop and, if enabled, empty thinking.
+
+        A template-prefilled opening marker remains context. Only the missing
+        reasoning markers are generated; no reasoning is fabricated.
+        """
+        prefix = ""
+        if self.thinking:
+            prefix = (
+                "" if "<think>" in self._assistant_header else "<think>\n"
+            ) + "</think>\n\n"
+        return prefix + action_text + "<|im_end|>"
+
     def continuation(self, generated: Sequence[int], observation: str) -> list[int]:
         close = "" if generated and generated[-1] == self._im_end else "<|im_end|>"
         return self.encode(

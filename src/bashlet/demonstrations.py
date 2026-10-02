@@ -1,14 +1,14 @@
 """Reference-constructed, executed SFT data; never on-policy sampling evidence."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import shlex
 from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Protocol
-
-import pytrio as trio
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .config import ExperimentConfig, config_record, load_model
 from .encoding import QwenChatMLEncoding
@@ -17,6 +17,9 @@ from .models import ExperimentResult, Model, Task
 from .protocol import fingerprints
 from .replay import ReplayModel
 from .workspace import validate_workspace_path
+
+if TYPE_CHECKING:
+    import pytrio as trio
 
 SOURCE = "reference-implementation-v1"
 
@@ -63,13 +66,7 @@ def _reference_replies(
         str(task.feedback_command),
         "printf '%s\\n' " + shlex.quote(config.protocol.submission_marker),
     ]
-    # No fabricated reasoning: constructed thinking demonstrations have an
-    # explicitly empty reasoning segment, respecting a template's prefill.
-    prefix = ""
-    if encoding.thinking:
-        header = str(encoding.describe()["assistant_header"])
-        prefix = ("" if "<think>" in header else "<think>\n") + "</think>\n\n"
-    return [prefix + f"```bash\n{command}\n```<|im_end|>" for command in commands]
+    return [encoding.replay_reply(f"```bash\n{command}\n```") for command in commands]
 
 
 def reference_demonstration(
@@ -135,6 +132,8 @@ def export_demonstration(
         weights[start:end] = [1.0] * len(generated)
         spans.append({"start": start, "end": end})
         previous_end = end
+    import pytrio as trio
+
     datum = trio.Datum(
         model_input=trio.ModelInput.from_ints(tokens[:-1]),
         loss_fn_inputs={
