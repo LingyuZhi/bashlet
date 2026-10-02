@@ -2,14 +2,17 @@
 
 import hashlib
 import json
+from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from typing import Any
 
 import pytest
-from adapters import bash, submit, write_file
+from adapters import bash, replay, submit, write_file
 from test_cli import cli, replay_config, saved_run
+
+from bashlet import FunctionGrader, GradingCase, Task, TaskOrigin, run_experiment
 
 
 def source_files(tmp_path: Path, rows: list[dict[str, Any]]) -> tuple[Path, Path]:
@@ -205,6 +208,39 @@ def test_derived_task_and_its_trajectory_keep_the_original_family(
     assert record["task_id"] == "mbpp/602/repair-1"
     assert record["task_origin"] == origin
     assert record["repair_attempts"][0]["passed"] is True
+
+
+@pytest.mark.parametrize("entrypoint", ["cli", "experiment"])
+def test_direct_derived_task_cannot_change_its_original_family_split(
+    tmp_path: Path,
+    entrypoint: str,
+) -> None:
+    task = Task(
+        task_id="mbpp/602/repair-1",
+        prompt="Submit the existing solution.",
+        initial_files={"solution.py": "def double(n): return n * 2\n"},
+        grader=FunctionGrader("solution.py", "double", (GradingCase((5,), 10),)),
+        origin=TaskOrigin(
+            dataset="google-research/mbpp",
+            revision="a" * 40,
+            source_sha256="b" * 64,
+            original_task_id="602",
+            family_id="mbpp/602",
+            split="test",
+        ),
+    )
+    if entrypoint == "experiment":
+        with pytest.raises(ValueError, match="MBPP family split"):
+            run_experiment(
+                task=task, model=replay([submit()]), output_dir=tmp_path / "runs"
+            )
+    else:
+        path = tmp_path / "derived.json"
+        path.write_text(json.dumps(asdict(task)))
+        model = replay_config(tmp_path, [submit()])
+        process = cli("task", str(path), "-c", str(model), cwd=tmp_path)
+        assert process.returncode == 2 and "MBPP family split" in process.stderr
+    assert not (tmp_path / "runs").exists()
 
 
 @pytest.mark.parametrize("change", ["task_bytes", "incomplete"])

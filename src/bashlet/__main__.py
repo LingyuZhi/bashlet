@@ -14,7 +14,7 @@ from rich.console import Console
 from .config import load_config, load_model
 from .episode import run_episode, save_record
 from .experiment import run_experiment
-from .mbpp import mbpp_task_path, prepare_mbpp
+from .mbpp import mbpp_task_path, prepare_mbpp, validate_origin
 from .models import (
     CommandGrader,
     EpisodeResult,
@@ -174,6 +174,7 @@ def _run_task(options: argparse.Namespace, view: RunView) -> ExperimentResult:
         task_data["implementation_paths"] = tuple(task_data["implementation_paths"])
     if task_data.get("origin") is not None:
         task_data["origin"] = TaskOrigin(**task_data["origin"])
+        validate_origin(task_data["origin"])
     task = Task(**task_data, grader=grader)
     model = load_model(condition.model)
     return run_experiment(

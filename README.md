@@ -189,7 +189,9 @@ uv run bashlet task runs/mbpp-sanitized-v1/manifest.json \
   --task-id mbpp/602 --split train -c configs/dev-vllm.yaml
 ```
 
-选择入口检查整份清单的原题号、家族和 split，校验所选 Task 的内容哈希和来源。即使增强来源把 `Mbpp/602` 标成 `test`，其家族仍为 `mbpp/602`，归属 train；错误的目标 split 会在模型启动前被拒绝。`Task.origin`（`TaskOrigin`）保存数据来源和家族身份；派生任务用 `dataclasses.replace(task, task_id=..., prompt=..., initial_files=...)` 保留它。每次实验的 `run.json.task_origin` 同样保留该身份，供示范和 rollout 继承；修改衍生内容不产生新的原题家族。
+选择入口检查整份清单的原题号、家族和 split，校验所选 Task 的内容哈希和来源。即使增强来源把 `Mbpp/602` 标成 `test`，其家族仍为 `mbpp/602`，归属 train；错误的目标 split 会在模型启动前被拒绝。直接 Task JSON 和 `run_experiment` 同样校验来源中的家族与原始划分。`Task.origin`（`TaskOrigin`）保存数据来源和家族身份，目前支持 MBPP 来源；派生任务用 `dataclasses.replace(task, task_id=..., prompt=..., initial_files=...)` 保留它。每次实验的 `run.json.task_origin` 同样保留该身份，供示范和 rollout 继承；修改衍生内容不产生新的原题家族。
+
+2026-10-02 已真实完成全部 427 题的数据验证：训练 95、开发 37、最终测试 197，共 329 项可用任务；其余 98 项为提示示例或不支持的转换格式，均记录理由，未发现可转换参考解验证失败。清单与全部参考验证证据位于 `runs/mbpp-sanitized-v1-verified/`。真实训练题 `mbpp/602` 通过清单选择、v3 回放、反馈测试和独立评分（2/2），使用的实现与原参考程序不同；验收摘要为 `runs/issue03-mbpp-smoke/acceptance.json`。这些是数据与入口验收，不是模型能力评测。
 
 ## 两层入口与 Task v2
 

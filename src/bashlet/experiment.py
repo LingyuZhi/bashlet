@@ -12,6 +12,7 @@ from pathlib import Path
 from .analysis import analyze_episode
 from .config import ExperimentConfig, load_config
 from .episode import run_episode, save_record
+from .mbpp import validate_origin
 from .models import (
     CaseResult,
     CommandGrader,
@@ -44,6 +45,8 @@ print(json.dumps(answer, allow_nan=False))
 def _validate_task(task: Task, environment_id: str) -> None:
     if not task.task_id:
         raise ValueError("A task identity is required")
+    if task.origin is not None:
+        validate_origin(task.origin)
     if task.environment_id != environment_id:
         raise ValueError(
             f"Task environment {task.environment_id!r} "

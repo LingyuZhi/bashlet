@@ -14,7 +14,6 @@ from typing import Any, Literal
 import httpx
 
 from .config import ExperimentConfig, config_record
-from .experiment import run_experiment
 from .models import FunctionGrader, GradingCase, JSONValue, Task, TaskOrigin
 from .protocol import fingerprint
 from .replay import ReplayModel, Utf8Encoding
@@ -69,6 +68,20 @@ def _split(task_id: int) -> Literal["train", "dev", "test", "prompt"]:
     if 601 <= task_id <= 974:
         return "train"
     raise ValueError(f"Unknown original MBPP task ID: {task_id}")
+
+
+def validate_origin(origin: TaskOrigin) -> None:
+    """Validate source-owned lineage even when a derived Task bypasses a manifest."""
+    if origin.dataset != "google-research/mbpp":
+        raise ValueError(f"Unsupported task-origin dataset: {origin.dataset}")
+    original_id = _original_id(origin.original_task_id)
+    split = _split(original_id)
+    if (
+        split == "prompt"
+        or origin.family_id != f"mbpp/{original_id}"
+        or origin.split != split
+    ):
+        raise ValueError(f"MBPP family split mismatch: mbpp/{original_id}")
 
 
 def _json_literal(value: object, *, output: bool = False) -> JSONValue:
@@ -172,6 +185,10 @@ def prepare_mbpp(
     assertions and the actual function grader must both pass in real sandboxes.
     Infrastructure failures abort preparation rather than filter the dataset.
     """
+    # Preparation orchestrates experiments; experiment-side origin validation
+    # imports only the data rules above, not this orchestration dependency.
+    from .experiment import run_experiment
+
     lock = json.loads(source_lock.read_text())
     if lock["variant"] != "sanitized" or lock["conversion"] != CONVERSION:
         raise ValueError("Only sanitized MBPP with mbpp-json-functions-v1 is supported")
@@ -349,4 +366,5 @@ def mbpp_task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     )
     if task["task_id"] != task_id or task["origin"] != asdict(expected):
         raise ValueError("Task identity or origin differs from its family manifest")
+    validate_origin(expected)
     return path
