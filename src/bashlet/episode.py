@@ -27,6 +27,7 @@ from .models import (
     Usage,
 )
 from .sandbox import Sandbox
+from .spend import BudgetRefused
 from .workspace import capture_workspace
 
 _PROBE_OUTPUT_BYTES = 16_384
@@ -146,7 +147,7 @@ def _sample(model: Model, context: list[int], sampling: SamplingParams) -> Model
     started = time.monotonic()
     try:
         generation = model.sample(tuple(context), sampling)
-    except (ModelResponseError, ContextExhausted):
+    except (ModelResponseError, ContextExhausted, BudgetRefused):
         raise
     except Exception as error:
         # The call itself failed (service, network, Adapter): not model output.
@@ -262,7 +263,7 @@ def run_episode(
         if backend is not None:
             try:
                 backend.probe()
-            except (ModelResponseError, ContextExhausted):
+            except (ModelResponseError, ContextExhausted, BudgetRefused):
                 raise
             except Exception as error:
                 raise _SamplerError(f"Capability probe failed: {error}") from error
@@ -364,6 +365,9 @@ def run_episode(
                 model.encoding.continuation(call.generation.tokens, feedback)
             )
             save()
+    except BudgetRefused as error:
+        result.status, result.reason = "budget_exhausted", str(error)
+        return result
     except ContextExhausted as error:
         result.status, result.reason = "context_exhausted", str(error)
         return result

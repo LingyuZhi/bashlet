@@ -1,0 +1,21 @@
+# Shared across all paid workflows; never create a fresh ledger per run.
+limits:
+  regular_cny: 150
+  reserve_cny: 50
+  project_cny: 200
+  funded_cny: 10
+  groups:
+    pytrio-smoke: 0.50
+    opsd-pilot: 10
+prices_cny_per_million:
+  prefill: 1.49
+  cache: 0.30
+  sample: 4.54
+  train: 4.54
+price_source: https://pytrio.cn/home/pricing
+price_recorded: '2026-10-02'
+price_catalog_url: https://pytrio.cn/api/model-prices
+price_version: '2026-08-21'
+billing_quantum_cny: 0.01
+# No cache discounts. Scoring uses the largest rate until billing is confirmed.
+ceiling_multiplier: 2

@@ -264,7 +264,7 @@ def test_run_records_the_tokenizer_revision_asset_hashes_and_stop_markers(
     assert details["stop_tokens"] == [151645, 151643]
     assert details["thinking_start_token"] == 151667
     assert details["thinking_end_token"] == 151668
-    assert details["transformers_version"] == "4.57.1"
+    assert details["transformers_version"] == "4.57.3"
     assert details["tokenizers_version"] == "0.22.1"
     assert record["encoding"] == encoding.identity
 
@@ -346,3 +346,64 @@ def test_subsequent_qwen_prompts_preserve_sampled_tokens_without_retokenizing(
     assert "Reasoning stays." in encoding.decode(model.prompts[1])
     assert result.trajectory[0].observation is not None
     assert result.trajectory[0].observation.output == "雪\n"
+
+
+@pytest.mark.parametrize("thinking", [False, True])
+def test_qwen35_official_template_and_native_thinking_in_an_episode(
+    tmp_path: Path,
+    thinking: bool,
+) -> None:
+    model = "Qwen/Qwen3.5-4B"
+    revision = "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    cache = "runs/tokenizers"
+    snapshot = snapshot_download(
+        model, revision=revision, cache_dir=cache, local_files_only=True
+    )
+    official = AutoTokenizer.from_pretrained(snapshot, local_files_only=True)
+    encoding = QwenChatMLEncoding(
+        model, revision=revision, cache_dir=cache, thinking=thinking
+    )
+    reasoning = (
+        "Do not execute ```bash\ntouch MUST_NOT_RUN\n```.\n</think>\n"
+        if thinking
+        else ""
+    )
+    instruction = "创建 DONE，打印雪，再提交。\n"
+    result = run_experiment(
+        task=Task(
+            "qwen35/template", instruction, {}, CommandGrader("test -f DONE", {})
+        ),
+        model=ReplayModel(
+            [
+                reasoning + "```bash\ntouch DONE; printf '雪\\n'\n```<|im_end|>",
+                ("Submit now.</think>\n" if thinking else "")
+                + "```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n"
+                "```<|im_end|>",
+            ],
+            encoding=encoding,
+        ),
+        output_dir=tmp_path,
+    )
+    assert result.passed, result.reason
+    record = json.loads((result.run_dir / "run.json").read_text())
+    expected = official.apply_chat_template(
+        [
+            {"role": "system", "content": record["protocol"]["system_prompt"]},
+            {"role": "user", "content": instruction},
+        ],
+        tokenize=True,
+        add_generation_prompt=True,
+        enable_thinking=thinking,
+    )
+    first = result.trajectory[0].model_call
+    assert first is not None
+    assert result.context_tokens[: first.context_offset] == expected
+    assert official.decode(expected).endswith(
+        "<think>\n" if thinking else "<think>\n\n</think>\n\n"
+    )
+    assert not (result.workspace / "MUST_NOT_RUN").exists()
+    assert result.trajectory[0].observation is not None
+    assert result.trajectory[0].observation.output == "雪\n"
+    assert record["encoding_details"]["revision"] == revision
+    if thinking:
+        assert reasoning.strip() in encoding.decode(result.context_tokens)

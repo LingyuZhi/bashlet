@@ -25,6 +25,7 @@ from .models import (
     Task,
 )
 from .sandbox import Sandbox
+from .spend import DEFAULT_POLICY, BudgetRefused, SpendLedger, SpendPolicy
 from .view import RunView
 from .workspace import capture_workspace
 
@@ -192,10 +193,48 @@ def main() -> None:
     show = commands.add_parser("show", help="Replay a saved run without executing it")
     show.add_argument("run_dir", type=Path)
     _view_options(show)
+    spend = commands.add_parser(
+        "spend", help="Inspect or reconcile the shared cash ledger"
+    )
+    spend_commands = spend.add_subparsers(dest="spend_command", required=True)
+    status = spend_commands.add_parser(
+        "status", help="Show charges and pending ceilings"
+    )
+    reconcile = spend_commands.add_parser(
+        "reconcile", help="Record verified completion and billing"
+    )
+    for command in (status, reconcile):
+        command.add_argument("--ledger", type=Path, default=Path("runs/spend.sqlite3"))
+        command.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
+    reconcile.add_argument("request_id")
+    reconcile.add_argument("--actual-cny", required=True)
+    reconcile.add_argument("--outcome", choices=("completed", "failed"), required=True)
+    reconcile.add_argument(
+        "--evidence",
+        type=Path,
+        required=True,
+        help="JSON completion and billing evidence",
+    )
     options = parser.parse_args()
-    view = RunView(Console(), show_thinking=options.show_thinking)
+    view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "spend":
+            ledger = SpendLedger(
+                options.ledger, policy=SpendPolicy.read(options.policy)
+            )
+            if options.spend_command == "reconcile":
+                evidence = json.loads(options.evidence.read_text())
+                if not isinstance(evidence, dict):
+                    raise ValueError("Billing evidence must be a JSON object")
+                ledger.reconcile(
+                    options.request_id,
+                    actual_cny=options.actual_cny,
+                    evidence=evidence,
+                    outcome=options.outcome,
+                )
+            print(json.dumps(ledger.snapshot(), indent=2, ensure_ascii=True))
+            return
         if options.command == "show":
             record = json.loads((options.run_dir / "run.json").read_text())
             if not isinstance(record, dict):
@@ -207,7 +246,7 @@ def main() -> None:
             if options.command == "agent"
             else _run_task(options, view)
         )
-    except (OSError, ValueError, TypeError, KeyError) as error:
+    except (OSError, ValueError, TypeError, KeyError, BudgetRefused) as error:
         parser.error(str(error))
     except KeyboardInterrupt:
         raise SystemExit(130) from None

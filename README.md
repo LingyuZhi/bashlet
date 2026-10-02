@@ -2,7 +2,7 @@
 
 A Tiny Coding Agent with On-Policy Self-Distillation。
 
-当前实现任务 01、02、12–20：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。开发用 vLLM 可在计算节点运行，正式实验的 PyTRIO 采样由任务 04 接入。
+当前实现任务 01、02、04、12–20：Harness 入口 `bashlet.run_episode` 负责指令、工作区和模型之间的交互；实验入口 `bashlet.run_experiment` 负责准备 Task、对提交工作区做快照、独立评分和事后候选／修复分析。CLI 可以实时观察回合并回放运行记录。每个交互回合都由模型驱动：可以使用根据真实观察采样行动的策略，也可以用 `ReplayModel` 编码预写回复；两者共用同一 token 上下文、Harness、预算与评分。正式实验使用 PyTRIO 的 Qwen/Qwen3.5-4B，在提交付费请求前通过共用费用账本检查额度。
 
 ## 运行
 
@@ -45,7 +45,7 @@ uv run bashlet show runs/<运行 ID>
 - `budget`：步数、生成 token 数、墙钟时间和连续格式错误上限。
 - `model`：`class` 选择后端类，`sampling` 由 Harness 在每步采样时传入，其余字段作为模型构造参数。回放可用 `tokenizer`、`tokenizer_revision` 和 `thinking` 选择真实 Qwen 编码及思考模式，默认关闭 thinking。
 
-`class` 可写内置类名 `ReplayModel`，或者完整导入路径，例如 `bashlet.replay.ReplayModel` / `bashlet.replay:ReplayModel`。回放模型默认使用 `Utf8Encoding`；`replies` 为预写回复列表，`identity` 可选。自定义类须满足同一个 token 模型和编码接口，采样输出仍接受 Harness 的 token / logprob 校验；构造失败时在创建运行目录前报配置错误。Python 调用者仍可以直接传入 `model=` 对象。
+`class` 可写内置类名 `ReplayModel`、`VLLMModel` 或 `PyTRIOModel`，或者完整导入路径，例如 `bashlet.replay.ReplayModel` / `bashlet.replay:ReplayModel`。回放模型默认使用 `Utf8Encoding`；`replies` 为预写回复列表，`identity` 可选。自定义类须满足同一个 token 模型和编码接口，采样输出仍接受 Harness 的 token / logprob 校验；构造失败时在创建运行目录前报配置错误。Python 调用者仍可以直接传入 `model=` 对象。
 
 ```yaml
 model:
@@ -78,9 +78,9 @@ model:
   thinking: false
 ```
 
-`tokenizer_revision` 必填，支持 Hub commit、tag 或 branch；运行记录保存实际解析到的 snapshot commit 和文件 SHA-256。`tokenizer` 也可指向本地 tokenizer 目录，此时 revision 由调用者指定，文件哈希仍参与身份。默认先读本地 Hugging Face 缓存，缺少资产时从 HF-Mirror 下载 tokenizer 文件，不下载模型权重；可用 `tokenizer_cache_dir` 指定缓存位置。依赖精确锁定为 transformers 4.57.1、tokenizers 0.22.1 和 huggingface-hub 0.36.0。
+`tokenizer_revision` 必填，支持 Hub commit、tag 或 branch；运行记录保存实际解析到的 snapshot commit 和文件 SHA-256。`tokenizer` 也可指向本地 tokenizer 目录，此时 revision 由调用者指定，文件哈希仍参与身份。默认先读本地 Hugging Face 缓存，缺少资产时从 HF-Mirror 下载 tokenizer 文件，不下载模型权重；可用 `tokenizer_cache_dir` 指定缓存位置。依赖精确锁定为 transformers 4.57.3、tokenizers 0.22.1 和 huggingface-hub 0.36.0。
 
-`QwenChatMLEncoding` 用官方 `apply_chat_template` 构造首个 prompt，thinking 开关对应 `enable_thinking`；后续只追加 ChatML 观察与同一生成提示。编码提供 `stop_tokens`、真实思考标记的 token ID，以及 `reply(tokens)` 返回的行动正文、思考内容和结束状态。原始 token 不改写；即使官方多轮模板会移除早先的思考，本项目也保留它。调用方式依据 [Qwen 官方说明](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html)和 [Transformers 聊天模板文档](https://huggingface.co/docs/transformers/v4.57.1/chat_templating)。Qwen3.5-4B 的模板与边界校验由任务 04 完成（H-11）。
+`QwenChatMLEncoding` 用官方 `apply_chat_template` 构造首个 prompt，thinking 开关对应 `enable_thinking`；后续只追加 ChatML 观察与同一生成提示。编码提供 `stop_tokens`、真实思考标记的 token ID，以及 `reply(tokens)` 返回的行动正文、思考内容和结束状态。原始 token 不改写；即使官方多轮模板会移除早先的思考，本项目也保留它。调用方式依据 [Qwen 官方说明](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html)和 [Transformers 聊天模板文档](https://huggingface.co/docs/transformers/v4.57.3/chat_templating)。任务 04 已用 Qwen3.5-4B 的真实 tokenizer 验证两种 thinking 模式、官方模板、思考与行动边界及多轮原始 token 保留（H-11）。
 
 Python 调用者可传入 `ReplayModel(replies, encoding=QwenChatMLEncoding(name, revision=revision, thinking=True))`，用学生编码构造示范；每步仍标注 `replayed`。原生 thinking 需要真实 tokenizer 或调用者提供的编码。以下演示使用本地缓存的 Qwen3-1.7B，思考里的命令不会执行，第二步行动没有说明：
 
@@ -90,11 +90,40 @@ uv run bashlet show runs/<运行 ID>
 uv run bashlet show runs/<运行 ID> --show-thinking
 ```
 
+## PyTRIO 与费用账本
+
+`PyTRIOModel` 使用官方 SDK 0.2.9，模型固定为 `Qwen/Qwen3.5-4B`。API Key 放在忽略的 `.env` 中，建议格式为 `PYTRIO_API_KEY=...`；也支持一行裸 `trio_...` 密钥，环境变量优先。密钥不会写入 YAML、模型上下文或运行记录。
+
+```bash
+uv run bashlet task examples/pytrio-smoke.json -c configs/pytrio-smoke.yaml --output-dir runs/issue04-pytrio
+uv run bashlet spend status
+```
+
+配置固定 tokenizer 的 Hub commit 为 `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a`，默认关闭 thinking；可用 `--set model.thinking=true` 启用。服务端基座模型只暴露别名，无法按 Hub commit 固定权重；`policy_details.server_model_revision` 明确为 `null`，参考 revision 与 tokenizer 文件哈希另行保存。
+
+首次使用前核对实时公开价格、模型权限及上下文上限，再用完整 ChatML 前缀采样一个 token，并用 [`compute_logprobs`](https://docs.pytrio.com/docs/advanced/compute_logprobs) 重评分同一原始序列。返回概率逐位置对应 token，首个位置允许 `None`；新增 token 的两种 logprob 相差超过 0.05 时停止回合。此检查仅覆盖温度 1、top-p 1 与聊天前缀；冻结 SFT 教师及其他参数的训练兼容性留给任务 09。SDK 丢弃原始响应的 request id，因此这个锁定版本的适配器捕获两条固定传输事件，核对发送和返回身份，不采集日志正文。
+
+`configs/spend.yaml` 保留常规 ¥150、预留 ¥50、项目 ¥200，同时用已充值的 ¥10 限制实际提交；`pytrio-smoke` 累计上限 ¥0.50，`opsd-pilot` 累计上限 ¥10。每个模型实例的能力探测另限 ¥0.20，并计入所属子额度。后续付费采样、教师评分、训练、示范和评测都须通过同一个 `SpendLedger.execute`；不同费用类别不会重置额度，上下文和观察全部计价。
+
+账本默认为 `runs/spend.sqlite3`。SQLite 事务在提交前原子检查已发生费用、在途预留与新请求上界；并发进程共用此路径，禁止用新账本规避累计预算。重启检查账本策略与 workspace 身份。SDK 隐式重试关闭；明确重试需要新预留。额度不足、子额度未知或价格无法约束时结束为 `budget_exhausted`。已返回的失败与被丢弃结果保留全部费用上界；超时、中断和网关失败保留在途预留，拒绝重复提交相同未结算工作。
+
+价格来自[官方目录](https://pytrio.cn/api/model-prices)，版本 `2026-08-21`：未缓存 prefill 为 ¥1.49/M token，采样与训练为 ¥4.54/M token。评分归类尚未确认，按最高费率估计，并计入评分接口内部额外生成的一个 token。每个阶段向上预留到 ¥0.01，再乘 2；`billing_basis=upper_bound` 表示保守费用占用，不能当作真实账单。余额查询、最小收费粒度、失败请求计费和缓存收费仍需账单确认。取得对应请求的完成与账单证据后，可人工核对：
+
+```bash
+uv run bashlet spend reconcile <账本请求ID> --actual-cny 0.01 --outcome completed --evidence runs/bill.json
+```
+
+`bill.json` 是操作者核实的非空 JSON 证据，须对应服务请求身份、终态及实际费用。费用未知时不能填零释放预留；实际费用高于原上界后，账本会阻止后续提交。
+
+2026-10-02 的真实 smoke 在 3 步、56 个任务生成 token 内提交，独立函数评分 3/3 通过；聊天前缀的采样与重评分 logprob 差异为 0。完整记录在 `runs/issue04-pytrio/74500de4b2f244868b5cccf297774f66/run.json`，验收与费用假设在上层的 `acceptance.json`。此前裸单 token 探测相差约 4.20，失败证据也保留；原因尚未得到服务端确认。两次运行共占用 ¥0.28 上界、在途 ¥0；账单接口对当前 API Key 返回 401，实际扣费尚未核实。
+
 ## 开发用 vLLM
+
+以下保留任务 20 的历史开发配置和证据。任务 04 起的实际调用统一使用上面的 Qwen3.5-4B 配置。
 
 `VLLMModel`（也可写完整导入路径 `bashlet.vllm.VLLMModel`）只产生开发证据。每个运行的 `policy_details.development_only` 固定为 `true`，实时视图和 `show` 也会注明排除实验结果。该字段同样保留在探针失败、服务失败和中断的记录中；有评分的开发回合也不作为实验结果。
 
-服务环境独立锁定在 `configs/dev-vllm/`，使用 Python 3.12、vLLM 0.11.0、PyTorch 2.8.0 和 CUDA 12.8 wheel；tokenizer 库与宿主版本一致。首次使用先核对 `/version`、`/v1/models`，再用一个 prompt token 采样一个 token。探针结果、实际服务版本、模型 revision、服务报告的权重路径和上下文上限写入 `policy_details`，tokenizer 的文件哈希仍写入 `encoding_details`。探针失败时没有任务生成或命令执行。
+服务环境独立锁定在 `configs/dev-vllm/`，使用 Python 3.12、vLLM 0.11.0、PyTorch 2.8.0 和 CUDA 12.8 wheel。首次使用先核对 `/version`、`/v1/models`，再用一个 prompt token 采样一个 token。探针结果、实际服务版本、模型 revision、服务报告的权重路径和上下文上限写入 `policy_details`，tokenizer 的文件哈希仍写入 `encoding_details`。探针失败时没有任务生成或命令执行。
 
 采样使用 [`/v1/completions` 的 token prompt、`return_token_ids=true` 和 `logprobs=0`](https://github.com/vllm-project/vllm/blob/v0.11.0/vllm/entrypoints/openai/protocol.py)，按[该版本的返回实现](https://github.com/vllm-project/vllm/blob/v0.11.0/vllm/entrypoints/openai/serving_completion.py)读取 `choices[0].token_ids` 与 `logprobs.token_logprobs`，并校验 logprob 标识对应的 token。服务返回的文本不参与生成解析；不对返回 token 重新编码，不补概率。缺失、错位或非法数值结束为 `model_error`。网络错误与 HTTP 408/429/500/502/503/504 默认最多重试两次，最终失败为 `infrastructure_error`；其他 HTTP 错误不重试。请求的生成量按剩余上下文裁剪，达到模型上限或服务报告上下文超限时结束为 `context_exhausted`，已采样的 token 与概率仍保留。
 
@@ -247,3 +276,5 @@ uv run pytest
 ```
 
 测试均通过小型实验入口保留真实隔离、bash 和评分，不调用付费模型。需要在允许 Bubblewrap 创建 namespaces 的节点执行；受限外层沙箱中的隔离测试应失败，不能靠跳过测试宣称节点隔离已验证。
+
+编码测试使用预先缓存的真实 tokenizer：Qwen3-1.7B 的上述 revision 放在默认 Hugging Face 缓存，Qwen3.5-4B 的上述 revision 放在 `runs/tokenizers`。只需 tokenizer、模板和配置文件，不需模型权重。

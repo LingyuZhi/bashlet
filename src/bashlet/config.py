@@ -12,6 +12,7 @@ import yaml
 from jinja2 import Environment, StrictUndefined, TemplateError
 
 from .models import Encoding, InteractionBudget, Model, SamplingParams
+from .pytrio import PyTRIOModel
 from .replay import ReplayModel
 from .vllm import VLLMModel
 
@@ -109,11 +110,14 @@ def load_model(config: ModelConfig) -> Model:
             factory = ReplayModel
         elif name == "VLLMModel":
             factory = VLLMModel
+        elif name == "PyTRIOModel":
+            factory = PyTRIOModel
         else:
             module_name, separator, class_name = name.replace(":", ".").rpartition(".")
             if not separator:
                 raise ValueError(
-                    "Use ReplayModel, VLLMModel or a fully qualified model class"
+                    "Use ReplayModel, VLLMModel, PyTRIOModel "
+                    "or a fully qualified model class"
                 )
             factory = getattr(importlib.import_module(module_name), class_name)
         if not isinstance(factory, type):

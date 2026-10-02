@@ -1,0 +1,26 @@
+# Production backend: Qwen3.5-4B only. Every call shares runs/spend.sqlite3.
+model:
+  class: PyTRIOModel
+  model: Qwen/Qwen3.5-4B
+  model_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  tokenizer: Qwen/Qwen3.5-4B
+  tokenizer_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  tokenizer_cache_dir: runs/tokenizers
+  thinking: false
+  ledger_path: runs/spend.sqlite3
+  api_key_env: PYTRIO_API_KEY
+  dotenv_path: .env
+  timeout_seconds: 60
+  max_retries: 1
+  retry_delay_seconds: 0.5
+  group: pytrio-smoke
+  probe_budget_cny: 0.20
+  sampling:
+    max_tokens: 1024
+    temperature: 1.0
+    top_p: 1.0
+    seed: 4
+budget:
+  max_steps: 6
+  max_generated_tokens: 4096
+  max_seconds: 300.0

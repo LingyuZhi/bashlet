@@ -24,13 +24,16 @@ from .models import (
     Task,
 )
 from .protocol import PROTOCOL_SHA256, PROTOCOL_VERSION
+from .pytrio import PyTRIOModel
 from .replay import ReplayModel, Utf8Encoding
+from .spend import BudgetRefused, SpendLedger, SpendPolicy
 from .vllm import VLLMModel
 
 __all__ = [
     "PROTOCOL_SHA256",
     "PROTOCOL_VERSION",
     "Bash",
+    "BudgetRefused",
     "CommandGrader",
     "ContextExhausted",
     "DecodedReply",
@@ -47,8 +50,11 @@ __all__ = [
     "ModelResponseError",
     "Observation",
     "QwenChatMLEncoding",
+    "PyTRIOModel",
     "ReplayModel",
     "SamplingParams",
+    "SpendLedger",
+    "SpendPolicy",
     "Task",
     "Utf8Encoding",
     "VLLMModel",
