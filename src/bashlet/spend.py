@@ -190,10 +190,12 @@ class SpendLedger:
                 )
 
             total = committed(entries)
-            checks = {
-                "project": (total, _micros(self.policy.project_cny)),
-                "funded": (total, _micros(self.policy.funded_cny)),
-                pool: (
+            # Names describe checks; a sub-budget cannot replace a hard limit.
+            checks = [
+                ("project", total, _micros(self.policy.project_cny)),
+                ("funded", total, _micros(self.policy.funded_cny)),
+                (
+                    pool,
                     committed([row for row in entries if row["pool"] == pool]),
                     _micros(
                         self.policy.regular_cny
@@ -201,13 +203,13 @@ class SpendLedger:
                         else self.policy.reserve_cny
                     ),
                 ),
-            }
-            if group in self.policy.groups:
-                checks[group] = (
+                (
+                    group,
                     committed([row for row in entries if row["budget_group"] == group]),
                     _micros(self.policy.groups[group]),
-                )
-            for name, (used, cap) in checks.items():
+                ),
+            ]
+            for name, used, cap in checks:
                 if used + upper > cap:
                     raise BudgetRefused(
                         f"Cash budget {name!r} cannot cover this request"

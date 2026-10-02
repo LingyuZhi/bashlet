@@ -396,6 +396,8 @@ class PyTRIOModel:
                     code = getattr(error, "code", type(error).__name__)
                     status = getattr(error, "status_code", 0)
                     reason = f"PyTRIO {code} (HTTP {status}, attempt {attempt + 1})"
+                    if code == "actor.invalid_response":
+                        raise ModelResponseError(reason) from None
                     if status == 400 and code in (
                         "context_length_exceeded",
                         "max_context_length_exceeded",

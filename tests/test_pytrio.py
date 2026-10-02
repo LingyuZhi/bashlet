@@ -583,3 +583,38 @@ def test_gateway_failure_keeps_its_reservation_and_is_not_retried(
     assert len(sdk.requests) == 2
     assert ledger.snapshot()["pending_cny"] == 0.04
     assert ledger.snapshot()["charged_cny"] == 0.08
+
+
+def test_named_sub_budget_cannot_replace_the_funded_limit(tmp_path: Path) -> None:
+    sdk = FakeSampling([response([65]), response([65])])
+    ledger = SpendLedger(
+        tmp_path / "spend.sqlite3",
+        policy=SpendPolicy(funded_cny=0.08, groups={"funded": 0.50}),
+    )
+    result = run_experiment(
+        task=double_task(),
+        model=model_for(sdk, ledger, group="funded"),
+        output_dir=tmp_path,
+    )
+    assert result.status == "budget_exhausted", result.reason
+    assert len(sdk.requests) == 1
+    assert ledger.snapshot()["charged_cny"] == 0.08
+
+
+@pytest.mark.parametrize("stage", ["probe", "episode"])
+def test_sdk_invalid_response_maps_to_model_error_and_retains_cost(
+    tmp_path: Path, stage: str
+) -> None:
+    invalid = ActorAPIError(
+        "missing probability evidence", code="actor.invalid_response"
+    )
+    sdk = FakeSampling([invalid] if stage == "probe" else [response([65]), invalid])
+    ledger = SpendLedger(tmp_path / "spend.sqlite3", policy=SpendPolicy())
+    result = run_experiment(
+        task=double_task(), model=model_for(sdk, ledger), output_dir=tmp_path
+    )
+    assert result.status == "model_error", result.reason
+    assert not result.trajectory and result.grade is None
+    assert len(sdk.requests) == (1 if stage == "probe" else 2)
+    assert ledger.snapshot()["pending_cny"] == 0.04
+    assert ledger.snapshot()["charged_cny"] == (0 if stage == "probe" else 0.08)
