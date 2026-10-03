@@ -1,0 +1,23 @@
+{
+  "fixed_point": "93802361db4340b50c5edadb9babf06e42bd85ff",
+  "diff_command": "git diff 93802361db4340b50c5edadb9babf06e42bd85ff...HEAD",
+  "commits": [
+    "acbfc9b",
+    "46158a1",
+    "cbd7e32"
+  ],
+  "standards": {
+    "initial_findings": 2,
+    "initial_report": "2 项 possible Duplicated Code（维护性判断）：旧 MBPP 与多来源读取重复路径、哈希和身份校验；31 份工作区评分脚本重复副本准备逻辑。",
+    "remaining_findings": 0,
+    "final_report": "Standards 复审：0 项硬违规，0 项剩余维护性判断。两种清单共用 _verified_task_path；工作区评分共用 _WORKSPACE_GRADING_DRIVER。31 份评分断言完整保留，来源与锁定哈希一致；新增家族 guard、评分契约检查及配置打包符合现有目录约定和 ADR。"
+  },
+  "spec": {
+    "initial_findings": 2,
+    "initial_report": "2 项 P2：last-record、secret-fields、missing-defaults 的输入不变契约未评分；--cohort 补充任务可以重新引入 mbpp/625 与 dev mbpp/591 的已知重复。",
+    "remaining_findings": 0,
+    "final_report": "Spec 复审通过。三个输入不变任务用已有 CommandGrader 检查返回值及输入状态；家族 guard 在 Harness 准备和多来源加载时生效，拒绝 mbpp/625 的训练归属，保留旧 MBPP 来源划分。118 份任务均可加载，118 个参考通过、118 个错误提交被拒绝，记录与哈希一致。31 份评分用例及分母、重叠与变体归属不变，未发现范围扩张。"
+  },
+  "method": "parallel independent read-only sub-agents; no edits or pytest from reviewers",
+  "summary": "Standards: 0 remaining, worst: none. Spec: 0 remaining, worst: none."
+}
