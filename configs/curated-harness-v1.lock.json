@@ -9,7 +9,10 @@
     "runs/issue24-curated-harness/frozen-v1/data/examples.jsonl": "1fcbf1d54ec2dd5695585b8ef17b9c2c0338a711ca38b20ecfe8b68258faf4ef",
     "runs/issue24-curated-harness/acceptance.json": "09a3df218ad4f35ed193eacb6f7e9c62f082ca6c87fac4958d12ed28aef8c907",
     "runs/issue24-curated-harness/quality-review.json": "b352e870e127ea8b3ec8a94f61a380508132755ed929948662f0ad153b448eef",
-    "runs/issue24-curated-harness/collection/collection.json": "c23c52379272877486393fe3ed7eab7a8a187e8615773a9af15110a1ee840300"
+    "runs/issue24-curated-harness/collection/collection.json": "c23c52379272877486393fe3ed7eab7a8a187e8615773a9af15110a1ee840300",
+    "runs/issue24-curated-harness/verification.json": "839181cc6ce49612099f53726f612bb8235453a2a61b9d163f239368441b3fc8",
+    "runs/issue24-curated-harness/tests.xml": "a932f1e637aceb6eb331ee56cc1373a3a1028e3b5334b319e77f9b0ca8dc37b5",
+    "runs/issue24-curated-harness/review.json": "2949cd6d552de066d10ad33de8abcbb40029f6f8c7a8b2b5bcac05f9e57baf53"
   },
   "counts": {
     "base_sampled_attempts": 60,

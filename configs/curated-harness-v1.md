@@ -107,3 +107,7 @@ uv run --locked bashlet freeze-demonstrations \
 
 `frozen/` 保留首轮导出证据，后续训练使用 `frozen-v1/`。
 生成文件遵循仓库约定保存在 `runs/`；本轮服务结束后恢复原 SFT 服务。
+
+验证结果：全量 361 项测试通过（1096.80 秒），mypy 与 Ruff lint/format
+通过。Standards 与 Spec 独立审查均为 0 项。结果与测试报告哈希保存于
+`runs/issue24-curated-harness/verification.json`，并加入本轮锁文件。
