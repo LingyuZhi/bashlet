@@ -326,6 +326,9 @@ def mbpp_task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     Derived tasks must retain their parent's origin. Published source labels such
     as MBPP+'s `test` do not change the original MBPP family split.
     """
+    # The source owns family rules; the task package owns shared file admission.
+    from .tasks import _verified_task_path
+
     manifest = json.loads(manifest_path.read_text())
     if manifest["status"] != "complete" or manifest["conversion"] != CONVERSION:
         raise ValueError("MBPP task set is incomplete or has an unsupported conversion")
@@ -343,19 +346,6 @@ def mbpp_task_path(manifest_path: Path, task_id: str, split: str) -> Path:
             raise ValueError(f"Duplicate task ID: {entry['task_id']}")
         tasks[entry["task_id"]] = entry
     selected = tasks[task_id]
-    if selected["split"] != split:
-        raise ValueError(
-            f"Task {task_id} belongs to split {selected['split']}, not {split}"
-        )
-    if selected["status"] != "verified":
-        raise ValueError(f"Task {task_id} is excluded: {selected['reason']}")
-    root = manifest_path.parent.resolve()
-    path = (root / Path(selected["task_file"])).resolve()
-    if not path.is_relative_to(root / "private" / "tasks"):
-        raise ValueError("Task file is outside the private task set")
-    if hashlib.sha256(path.read_bytes()).hexdigest() != selected["task_sha256"]:
-        raise ValueError("Prepared Task SHA-256 mismatch")
-    task = json.loads(path.read_text())
     expected = TaskOrigin(
         dataset=manifest["source"]["dataset"],
         revision=manifest["source"]["revision"],
@@ -364,7 +354,4 @@ def mbpp_task_path(manifest_path: Path, task_id: str, split: str) -> Path:
         family_id=selected["family_id"],
         split=selected["split"],
     )
-    if task["task_id"] != task_id or task["origin"] != asdict(expected):
-        raise ValueError("Task identity or origin differs from its family manifest")
-    validate_origin(expected)
-    return path
+    return _verified_task_path(manifest_path, selected, expected, task_id, split)

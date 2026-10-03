@@ -337,8 +337,10 @@ def test_each_task_type_runs_via_existing_cli_without_hidden_observations(
     assert record["passed"] and record["task_type"] == kind
     public_observation = record["trajectory"][0]["observation"]["output"]
     assert "_grading/check.py" not in public_observation
+    assert "_grading/cases.py" not in public_observation
     assert task["reference_implementation"] not in public_observation
     assert "_grading/check.py" not in record["initial_workspace_manifest"]
+    assert "_grading/cases.py" not in record["initial_workspace_manifest"]
     assert record["task_origin"] == task["origin"]
 
 
@@ -517,3 +519,121 @@ def test_existing_evaluation_cli_keeps_each_type_and_the_fixed_denominator(
         "workspace",
     ]
     assert all(r["task_origin"]["split"] == "dev" for r in record["tasks"])
+
+
+@pytest.mark.parametrize(
+    "task_id, code",
+    [
+        (
+            "harness/last-record",
+            "def last_records(records):\n"
+            "    records.reverse()\n    seen = set()\n    result = []\n"
+            "    for r in records:\n        if r['id'] not in seen:\n"
+            "            seen.add(r['id'])\n            result.append(r)\n"
+            "    return result[::-1]\n",
+        ),
+        (
+            "harness/secret-fields",
+            "def redact(values):\n    for key in values:\n"
+            "        if key.lower() in ('token', 'password'):\n"
+            "            values[key] = '[redacted]'\n    return values\n",
+        ),
+        (
+            "harness/missing-defaults",
+            "def with_defaults(settings, defaults):\n"
+            "    defaults.update(settings)\n    return defaults\n",
+        ),
+    ],
+)
+def test_correct_return_values_cannot_hide_forbidden_input_mutation(
+    tmp_path: Path,
+    task_id: str,
+    code: str,
+) -> None:
+    from bashlet.experiment import task_from_record
+
+    source = Path(__file__).parents[1] / "configs/harness-authored-v1.json"
+    catalog = json.loads(source.read_text())
+    family = next(f for f in catalog["families"] if f["family_id"] == task_id)
+    data = family["variants"][0]["task"] | {
+        "origin": {
+            "dataset": catalog["dataset"],
+            "revision": catalog["revision"],
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "original_task_id": family["original_task_id"],
+            "family_id": task_id,
+            "split": "train",
+        }
+    }
+    task = task_from_record(data)
+    script = (
+        "from pathlib import Path; "
+        f"Path({task.implementation_paths[0]!r}).write_text({code!r})"
+    )
+    result = run_experiment(
+        task=task,
+        model=replay([bash("python3 -c " + shlex.quote(script)), submit()]),
+        output_dir=tmp_path,
+    )
+    assert result.status == "completed", result.reason
+    assert not result.passed
+
+
+def test_supplemental_cohort_rejects_known_mbpp_equivalents_across_splits(
+    tmp_path: Path,
+) -> None:
+    row = {
+        "task_id": 625,
+        "prompt": "Swap the first and last list elements.",
+        "code": "def swap(items):\n    result = items[:]\n"
+        "    result[0], result[-1] = result[-1], result[0]\n    return result\n",
+        "test_imports": [],
+        "test_list": [
+            "assert swap([1, 2, 3]) == [3, 2, 1]",
+            "assert swap([8, 9]) == [9, 8]",
+        ],
+    }
+    mbpp = prepare(tmp_path, [row, row | {"task_id": 591}]) / "manifest.json"
+    cohort = tmp_path / "supplement.json"
+    cohort.write_text(
+        json.dumps(
+            {
+                "version": "harness-task-cohort-v1",
+                "name": "unsafe-supplement",
+                "harness_development": {
+                    "task_ids": [
+                        "mbpp/591",
+                        "harness/nested-setting",
+                        "harness/license-audit",
+                    ],
+                    "per_type": 1,
+                },
+                "training_candidates": {
+                    "task_ids": [
+                        "mbpp/625",
+                        "harness/header-key",
+                        "harness/stock-value",
+                    ],
+                    "per_type": 1,
+                },
+                "coding_development": {"task_ids": ["mbpp/591"]},
+                "environment_variants": [],
+                "rules": {},
+            }
+        )
+    )
+    output = tmp_path / "unsafe"
+    process = cli(
+        "prepare-harness",
+        "--mbpp-manifest",
+        str(mbpp),
+        "--cohort",
+        str(cohort),
+        "--output-dir",
+        str(output),
+        cwd=tmp_path,
+        timeout=60,
+    )
+    assert process.returncode == 2
+    assert "equivalent family" in process.stderr
+    assert not output.exists()

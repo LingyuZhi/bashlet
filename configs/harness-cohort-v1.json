@@ -151,6 +151,6 @@
     "demonstrations": "This is a candidate pool, not accepted demonstrations. Later curation targets at most 60 useful trajectories, initially about 20 per type; never relax quality to fill counts.",
     "held_out": "No held-out test task is selected, read, executed, filtered or tuned in this preparation.",
     "variants": "Environment variants and feedback starting points retain parent families; variants are not extra denominator items.",
-    "family_audit": "No authored task is a rewrite of MBPP. The create pool excludes known duplicate train families such as mbpp/625 (dev mbpp/591) and mbpp/728 (dev mbpp/568)."
+    "family_audit": "No authored task is a rewrite of MBPP. The fixed family guard reserves mbpp/625 with development mbpp/591 (same swap-first-and-last question), rejecting that training duplicate in supplemental cohorts too."
   }
 }

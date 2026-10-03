@@ -17,6 +17,7 @@ _CONFIGS = Path(__file__).resolve().parents[3] / "configs"
 if not _CONFIGS.is_dir():
     _CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 AUTHORED_LOCK = _CONFIGS / "harness-authored-v1.lock.json"
+FAMILY_GUARD = _CONFIGS / "harness-family-guard-v1.json"
 
 
 @lru_cache(maxsize=1)
@@ -70,6 +71,73 @@ def validate_origin(origin: TaskOrigin) -> None:
         raise ValueError(f"Authored family split mismatch: {origin.family_id}")
 
 
+@lru_cache(maxsize=1)
+def _family_reservations() -> dict[tuple[str, str], tuple[str, str]]:
+    guard = json.loads(FAMILY_GUARD.read_text())
+    if guard["version"] != "harness-family-guard-v1":
+        raise ValueError("Unsupported family guard version")
+    reservations: dict[tuple[str, str], tuple[str, str]] = {}
+    for group in guard["equivalent_families"]:
+        for member in group["members"]:
+            key = (group["dataset"], member)
+            value = (group["split"], group["family_id"])
+            if key in reservations and reservations[key] != value:
+                raise ValueError("Conflicting equivalent family reservations")
+            reservations[key] = value
+    return reservations
+
+
+def validate_harness_origin(origin: TaskOrigin) -> None:
+    """Apply the frozen cohort's equivalence reservations to supplements too.
+
+    Native MBPP origins retain their original ID/split for legacy data. Harness
+    cohorts additionally reject known train duplicates of reserved dev families.
+    """
+    validate_origin(origin)
+    reservation = _family_reservations().get((origin.dataset, origin.family_id))
+    if reservation is not None and origin.split != reservation[0]:
+        raise ValueError(
+            f"MBPP equivalent family {origin.family_id} is reserved to "
+            f"{reservation[0]} with {reservation[1]}"
+        )
+
+
+def _verified_task_path(
+    manifest_path: Path,
+    selected: dict[str, Any],
+    expected: TaskOrigin,
+    task_id: str,
+    split: str,
+) -> Path:
+    """Shared private-path, content and identity checks for both manifest formats."""
+    if selected["split"] != split:
+        raise ValueError(
+            f"Task {task_id} belongs to split {selected['split']}, not {split}"
+        )
+    if selected["status"] != "verified":
+        reason = selected.get("reason", "not verified")
+        raise ValueError(f"Task {task_id} is excluded: {reason}")
+    root = manifest_path.parent.resolve()
+    path = (root / Path(selected["task_file"])).resolve()
+    if not path.is_relative_to(root / "private/tasks"):
+        raise ValueError("Task file is outside the private task set")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != selected["task_sha256"]:
+        raise ValueError("Prepared Task SHA-256 mismatch")
+    task = json.loads(path.read_text())
+    if task["task_id"] != task_id or task["origin"] != asdict(expected):
+        raise ValueError("Task identity or origin differs from its family manifest")
+    validate_origin(expected)
+    if "task_type" in selected and task.get("task_type") is not None:
+        if task["task_type"] != selected["task_type"]:
+            raise ValueError("Task type differs from its manifest")
+    if (
+        "variant_id" in selected
+        and task.get("variant_id", "base") != selected["variant_id"]
+    ):
+        raise ValueError("Task variant differs from its manifest")
+    return path
+
+
 def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     """Select a verified task after checking every family's source and split.
 
@@ -90,7 +158,7 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     families: dict[str, str] = {}
     for entry in manifest["tasks"]:
         origin = TaskOrigin(**entry["origin"])
-        validate_origin(origin)
+        validate_harness_origin(origin)
         if (origin.dataset, origin.revision, origin.source_sha256) not in sources:
             raise ValueError("Task origin is absent from the admitted manifest sources")
         if entry["family_id"] != origin.family_id or entry["split"] != origin.split:
@@ -106,25 +174,10 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     if task_id not in tasks:
         raise ValueError(f"Unknown task ID: {task_id}")
     selected = tasks[task_id]
-    if selected["split"] != split:
-        raise ValueError(
-            f"Task {task_id} belongs to split {selected['split']}, not {split}"
-        )
-    if selected["status"] != "verified":
-        raise ValueError(f"Task {task_id} is not verified")
-    root = manifest_path.parent.resolve()
-    path = (root / Path(selected["task_file"])).resolve()
-    if not path.is_relative_to(root / "private/tasks"):
-        raise ValueError("Task file is outside the private task set")
-    if hashlib.sha256(path.read_bytes()).hexdigest() != selected["task_sha256"]:
-        raise ValueError("Prepared Task SHA-256 mismatch")
-    task = json.loads(path.read_text())
-    if task["task_id"] != task_id or task["origin"] != asdict(
-        TaskOrigin(**selected["origin"])
-    ):
-        raise ValueError("Task identity or origin differs from its family manifest")
-    if task.get("task_type") is not None and task["task_type"] != selected["task_type"]:
-        raise ValueError("Task type differs from its manifest")
-    if task.get("variant_id", "base") != selected["variant_id"]:
-        raise ValueError("Task variant differs from its manifest")
-    return path
+    return _verified_task_path(
+        manifest_path,
+        selected,
+        TaskOrigin(**selected["origin"]),
+        task_id,
+        split,
+    )

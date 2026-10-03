@@ -220,47 +220,13 @@
             "prompt": "Repair `records/dedup.py`: Given records with an id field, keep the last record for each id, in order of their last appearances. Do not mutate the input.\nThe existing function is `last_records`. Run `python3 check_last_record.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
             "initial_files": {
               "records/dedup.py": "def last_records(records):\n    seen = set()\n    return [r for r in records if not (r['id'] in seen or seen.add(r['id']))]\n",
-              "check_last_record.py": "from records.dedup import last_records\nassert last_records(*[[{'id': 'a', 'v': 1}]]) == [{'id': 'a', 'v': 1}]\nprint('feedback passed')\n"
+              "check_last_record.py": "from copy import deepcopy\nfrom records.dedup import last_records\nargs = [[{'id': 'a', 'v': 1}]]\nbefore = deepcopy(args)\nassert last_records(*args) == [{'id': 'a', 'v': 1}]\nassert args == before\nprint('feedback passed')\n"
             },
             "grader": {
-              "module_path": "records/dedup.py",
-              "function_name": "last_records",
-              "cases": [
-                {
-                  "args": [
-                    [
-                      {
-                        "id": "a",
-                        "v": 1
-                      },
-                      {
-                        "id": "b",
-                        "v": 2
-                      },
-                      {
-                        "id": "a",
-                        "v": 3
-                      }
-                    ]
-                  ],
-                  "expected": [
-                    {
-                      "id": "b",
-                      "v": 2
-                    },
-                    {
-                      "id": "a",
-                      "v": 3
-                    }
-                  ]
-                },
-                {
-                  "args": [
-                    []
-                  ],
-                  "expected": []
-                }
-              ]
+              "command": "python3 -I -B _grading/check.py",
+              "hidden_files": {
+                "_grading/check.py": "import sys\nsys.path.insert(0, '/workspace')\nfrom copy import deepcopy\nfrom records.dedup import last_records\nargs = [[{'id': 'a', 'v': 1}, {'id': 'b', 'v': 2}, {'id': 'a', 'v': 3}]]\nbefore = deepcopy(args)\nassert last_records(*args) == [{'id': 'b', 'v': 2}, {'id': 'a', 'v': 3}]\nassert args == before\nargs = [[]]\nbefore = deepcopy(args)\nassert last_records(*args) == []\nassert args == before\n"
+              }
             },
             "reference_implementation": "def last_records(records):\n    last = {r['id']: i for i, r in enumerate(records)}\n    return [r for i, r in enumerate(records) if last[r['id']] == i]\n",
             "implementation_paths": [
@@ -532,27 +498,13 @@
             "prompt": "Repair `security/redact.py`: Copy a flat dictionary, replacing values whose case-insensitive key is token or password with '[redacted]'. Other values stay unchanged.\nThe existing function is `redact`. Run `python3 check_secret_fields.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
             "initial_files": {
               "security/redact.py": "def redact(values):\n    return {k: '[redacted]' if k in ('token', 'password') else v for k, v in values.items()}\n",
-              "check_secret_fields.py": "from security.redact import redact\nassert redact(*[{'token': 'abc', 'user': 'sam'}]) == {'token': '[redacted]', 'user': 'sam'}\nprint('feedback passed')\n"
+              "check_secret_fields.py": "from copy import deepcopy\nfrom security.redact import redact\nargs = [{'token': 'abc', 'user': 'sam'}]\nbefore = deepcopy(args)\nassert redact(*args) == {'token': '[redacted]', 'user': 'sam'}\nassert args == before\nprint('feedback passed')\n"
             },
             "grader": {
-              "module_path": "security/redact.py",
-              "function_name": "redact",
-              "cases": [
-                {
-                  "args": [
-                    {
-                      "PASSWORD": "xyz",
-                      "Token": "s",
-                      "count": 0
-                    }
-                  ],
-                  "expected": {
-                    "PASSWORD": "[redacted]",
-                    "Token": "[redacted]",
-                    "count": 0
-                  }
-                }
-              ]
+              "command": "python3 -I -B _grading/check.py",
+              "hidden_files": {
+                "_grading/check.py": "import sys\nsys.path.insert(0, '/workspace')\nfrom copy import deepcopy\nfrom security.redact import redact\nargs = [{'PASSWORD': 'xyz', 'Token': 's', 'count': 0}]\nbefore = deepcopy(args)\nassert redact(*args) == {'PASSWORD': '[redacted]', 'Token': '[redacted]', 'count': 0}\nassert args == before\n"
+              }
             },
             "reference_implementation": "def redact(values):\n    return {k: '[redacted]' if k.lower() in ('token', 'password') else v for k, v in values.items()}\n",
             "implementation_paths": [
@@ -988,35 +940,13 @@
             "prompt": "Repair `settings/defaults.py`: Return defaults merged with supplied settings; supplied False, 0, empty strings and None must all override defaults. Do not mutate either input.\nThe existing function is `with_defaults`. Run `python3 check_missing_defaults.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
             "initial_files": {
               "settings/defaults.py": "def with_defaults(settings, defaults):\n    return {k: settings.get(k) or v for k, v in defaults.items()} | {k: v for k, v in settings.items() if k not in defaults}\n",
-              "check_missing_defaults.py": "from settings.defaults import with_defaults\nassert with_defaults(*[{'mode': 'fast'}, {'mode': 'slow', 'n': 2}]) == {'mode': 'fast', 'n': 2}\nprint('feedback passed')\n"
+              "check_missing_defaults.py": "from copy import deepcopy\nfrom settings.defaults import with_defaults\nargs = [{'mode': 'fast'}, {'mode': 'slow', 'n': 2}]\nbefore = deepcopy(args)\nassert with_defaults(*args) == {'mode': 'fast', 'n': 2}\nassert args == before\nprint('feedback passed')\n"
             },
             "grader": {
-              "module_path": "settings/defaults.py",
-              "function_name": "with_defaults",
-              "cases": [
-                {
-                  "args": [
-                    {
-                      "enabled": false,
-                      "n": 0,
-                      "tag": "",
-                      "value": null
-                    },
-                    {
-                      "enabled": true,
-                      "n": 5,
-                      "tag": "x",
-                      "value": 9
-                    }
-                  ],
-                  "expected": {
-                    "enabled": false,
-                    "n": 0,
-                    "tag": "",
-                    "value": null
-                  }
-                }
-              ]
+              "command": "python3 -I -B _grading/check.py",
+              "hidden_files": {
+                "_grading/check.py": "import sys\nsys.path.insert(0, '/workspace')\nfrom copy import deepcopy\nfrom settings.defaults import with_defaults\nargs = [{'enabled': False, 'n': 0, 'tag': '', 'value': None}, {'enabled': True, 'n': 5, 'tag': 'x', 'value': 9}]\nbefore = deepcopy(args)\nassert with_defaults(*args) == {'enabled': False, 'n': 0, 'tag': '', 'value': None}\nassert args == before\n"
+              }
             },
             "reference_implementation": "def with_defaults(settings, defaults):\n    return defaults | settings\n",
             "implementation_paths": [
@@ -1578,7 +1508,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "data/stock.json": "[\n  {\n    \"sku\": \"oak\",\n    \"qty\": 3,\n    \"unit_cents\": 125\n  },\n  {\n    \"sku\": \"elm\",\n    \"qty\": 0,\n    \"unit_cents\": 400\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/stock_value.py'], check=True)\n    assert json.loads(Path('reports/stock-value.json').read_text()) == {'oak': 375, 'elm': 0}\n    Path('data/stock.json').write_text('[{\"sku\": \"ash\", \"qty\": 2, \"unit_cents\": 77}]\\n')\n    subprocess.run([sys.executable, 'tools/stock_value.py'], check=True)\n    assert json.loads(Path('reports/stock-value.json').read_text()) == {'ash': 154}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/stock_value.py'], check=True)\nassert json.loads(Path('reports/stock-value.json').read_text()) == {'oak': 375, 'elm': 0}\nPath('data/stock.json').write_text('[{\"sku\": \"ash\", \"qty\": 2, \"unit_cents\": 77}]\\n')\nsubprocess.run([sys.executable, 'tools/stock_value.py'], check=True)\nassert json.loads(Path('reports/stock-value.json').read_text()) == {'ash': 154}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('data/stock.json').read_text())\nresult = {r['sku']: r['qty'] * r['unit_cents'] for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/stock-value.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1616,7 +1546,7 @@
               "hidden_files": {
                 "config/services.json": "{\n  \"api\": \"blue\",\n  \"ui\": \"red\",\n  \"batch\": \"green\"\n}\n",
                 "config/teams.json": "{\n  \"blue\": \"sam\",\n  \"red\": \"lee\"\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\n    assert json.loads(Path('reports/service-owners.json').read_text()) == {'api': 'sam', 'ui': 'lee', 'batch': None}\n    Path('config/teams.json').write_text('{\"blue\": \"new\", \"green\": \"pat\"}\\n')\n    subprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\n    assert json.loads(Path('reports/service-owners.json').read_text()) == {'api': 'new', 'ui': None, 'batch': 'pat'}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\nassert json.loads(Path('reports/service-owners.json').read_text()) == {'api': 'sam', 'ui': 'lee', 'batch': None}\nPath('config/teams.json').write_text('{\"blue\": \"new\", \"green\": \"pat\"}\\n')\nsubprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\nassert json.loads(Path('reports/service-owners.json').read_text()) == {'api': 'new', 'ui': None, 'batch': 'pat'}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nservices = json.loads(Path('config/services.json').read_text())\nteams = json.loads(Path('config/teams.json').read_text())\nresult = {s: teams.get(t) for s, t in services.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/service-owners.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1652,7 +1582,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "config/build.json": "{\n  \"cache\": true,\n  \"trace\": false,\n  \"metrics\": true,\n  \"legacy\": \"yes\"\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/build_flags.py'], check=True)\n    assert json.loads(Path('reports/build-flags.json').read_text()) == ['cache', 'metrics']\n    Path('config/build.json').write_text('{\"z\": false, \"a\": true, \"b\": 1}\\n')\n    subprocess.run([sys.executable, 'tools/build_flags.py'], check=True)\n    assert json.loads(Path('reports/build-flags.json').read_text()) == ['a']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/build_flags.py'], check=True)\nassert json.loads(Path('reports/build-flags.json').read_text()) == ['cache', 'metrics']\nPath('config/build.json').write_text('{\"z\": false, \"a\": true, \"b\": 1}\\n')\nsubprocess.run([sys.executable, 'tools/build_flags.py'], check=True)\nassert json.loads(Path('reports/build-flags.json').read_text()) == ['a']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nflags = json.loads(Path('config/build.json').read_text())\nresult = sorted(k for k, v in flags.items() if v is True)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/build-flags.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1688,7 +1618,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "data/events.json": "[\n  {\n    \"level\": \"info\"\n  },\n  {\n    \"level\": \"error\"\n  },\n  {\n    \"level\": \"info\"\n  },\n  {}\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/log_counts.py'], check=True)\n    assert json.loads(Path('reports/log-counts.json').read_text()) == {'info': 2, 'error': 1, 'unknown': 1}\n    Path('data/events.json').write_text('[{}, {}, {\"level\": \"debug\"}]\\n')\n    subprocess.run([sys.executable, 'tools/log_counts.py'], check=True)\n    assert json.loads(Path('reports/log-counts.json').read_text()) == {'unknown': 2, 'debug': 1}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/log_counts.py'], check=True)\nassert json.loads(Path('reports/log-counts.json').read_text()) == {'info': 2, 'error': 1, 'unknown': 1}\nPath('data/events.json').write_text('[{}, {}, {\"level\": \"debug\"}]\\n')\nsubprocess.run([sys.executable, 'tools/log_counts.py'], check=True)\nassert json.loads(Path('reports/log-counts.json').read_text()) == {'unknown': 2, 'debug': 1}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nevents = json.loads(Path('data/events.json').read_text())\nresult = dict(Counter(e.get('level', 'unknown') for e in events))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/log-counts.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1724,7 +1654,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "registry/packages.json": "[\n  {\n    \"name\": \"a\",\n    \"version\": \"2.0\"\n  },\n  {\n    \"name\": \"b\",\n    \"version\": \"1.3\"\n  },\n  {\n    \"name\": \"a\",\n    \"version\": \"1.0\"\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/latest_package.py'], check=True)\n    assert json.loads(Path('reports/latest-package.json').read_text()) == {'a': '1.0', 'b': '1.3'}\n    Path('registry/packages.json').write_text('[{\"name\": \"c\", \"version\": \"9\"}, {\"name\": \"c\", \"version\": \"3\"}]\\n')\n    subprocess.run([sys.executable, 'tools/latest_package.py'], check=True)\n    assert json.loads(Path('reports/latest-package.json').read_text()) == {'c': '3'}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/latest_package.py'], check=True)\nassert json.loads(Path('reports/latest-package.json').read_text()) == {'a': '1.0', 'b': '1.3'}\nPath('registry/packages.json').write_text('[{\"name\": \"c\", \"version\": \"9\"}, {\"name\": \"c\", \"version\": \"3\"}]\\n')\nsubprocess.run([sys.executable, 'tools/latest_package.py'], check=True)\nassert json.loads(Path('reports/latest-package.json').read_text()) == {'c': '3'}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('registry/packages.json').read_text())\nresult = {r['name']: r['version'] for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/latest-package.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1760,7 +1690,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "server/routes.json": "[\n  {\n    \"method\": \"GET\",\n    \"path\": \"/z\"\n  },\n  {\n    \"method\": \"POST\",\n    \"path\": \"/a\"\n  },\n  {\n    \"method\": \"GET\",\n    \"path\": \"/z\"\n  },\n  {\n    \"method\": \"GET\",\n    \"path\": \"/b\"\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/route_inventory.py'], check=True)\n    assert json.loads(Path('reports/route-inventory.json').read_text()) == ['/b', '/z']\n    Path('server/routes.json').write_text('[{\"method\": \"get\", \"path\": \"/c\"}, {\"method\": \"GET\", \"path\": \"/x\"}]\\n')\n    subprocess.run([sys.executable, 'tools/route_inventory.py'], check=True)\n    assert json.loads(Path('reports/route-inventory.json').read_text()) == ['/x']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/route_inventory.py'], check=True)\nassert json.loads(Path('reports/route-inventory.json').read_text()) == ['/b', '/z']\nPath('server/routes.json').write_text('[{\"method\": \"get\", \"path\": \"/c\"}, {\"method\": \"GET\", \"path\": \"/x\"}]\\n')\nsubprocess.run([sys.executable, 'tools/route_inventory.py'], check=True)\nassert json.loads(Path('reports/route-inventory.json').read_text()) == ['/x']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nroutes = json.loads(Path('server/routes.json').read_text())\nresult = sorted({r['path'] for r in routes if r['method'] == 'GET'})\nPath('reports').mkdir(exist_ok=True)\nPath('reports/route-inventory.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1798,7 +1728,7 @@
               "hidden_files": {
                 "locales/en.json": "{\n  \"hello\": \"Hello\",\n  \"bye\": \"Bye\",\n  \"empty\": \"Empty\"\n}\n",
                 "locales/fr.json": "{\n  \"hello\": \"Bonjour\",\n  \"empty\": \"\"\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/translation_gaps.py'], check=True)\n    assert json.loads(Path('reports/translation-gaps.json').read_text()) == ['bye']\n    Path('locales/fr.json').write_text('{\"bye\": \"Au revoir\"}\\n')\n    subprocess.run([sys.executable, 'tools/translation_gaps.py'], check=True)\n    assert json.loads(Path('reports/translation-gaps.json').read_text()) == ['empty', 'hello']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/translation_gaps.py'], check=True)\nassert json.loads(Path('reports/translation-gaps.json').read_text()) == ['bye']\nPath('locales/fr.json').write_text('{\"bye\": \"Au revoir\"}\\n')\nsubprocess.run([sys.executable, 'tools/translation_gaps.py'], check=True)\nassert json.loads(Path('reports/translation-gaps.json').read_text()) == ['empty', 'hello']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nbase = json.loads(Path('locales/en.json').read_text())\ntarget = json.loads(Path('locales/fr.json').read_text())\nresult = sorted(set(base) - set(target))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/translation-gaps.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1834,7 +1764,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "queue/jobs.json": "[\n  {\n    \"id\": \"b\",\n    \"status\": \"new\"\n  },\n  {\n    \"id\": \"a\",\n    \"status\": \"done\"\n  },\n  {\n    \"id\": \"c\",\n    \"status\": \"new\"\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/job_buckets.py'], check=True)\n    assert json.loads(Path('reports/job-buckets.json').read_text()) == {'new': ['b', 'c'], 'done': ['a']}\n    Path('queue/jobs.json').write_text('[{\"id\": \"z\", \"status\": \"new\"}, {\"id\": \"a\", \"status\": \"new\"}]\\n')\n    subprocess.run([sys.executable, 'tools/job_buckets.py'], check=True)\n    assert json.loads(Path('reports/job-buckets.json').read_text()) == {'new': ['z', 'a']}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/job_buckets.py'], check=True)\nassert json.loads(Path('reports/job-buckets.json').read_text()) == {'new': ['b', 'c'], 'done': ['a']}\nPath('queue/jobs.json').write_text('[{\"id\": \"z\", \"status\": \"new\"}, {\"id\": \"a\", \"status\": \"new\"}]\\n')\nsubprocess.run([sys.executable, 'tools/job_buckets.py'], check=True)\nassert json.loads(Path('reports/job-buckets.json').read_text()) == {'new': ['z', 'a']}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\njobs = json.loads(Path('queue/jobs.json').read_text())\nresult = {s: [j['id'] for j in jobs if j['status'] == s] for s in {j['status'] for j in jobs}}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/job-buckets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1870,7 +1800,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "billing/invoices.json": "[\n  {\n    \"id\": \"i1\",\n    \"total_cents\": 700,\n    \"paid_cents\": 200\n  },\n  {\n    \"id\": \"i2\",\n    \"total_cents\": 300,\n    \"paid_cents\": 450\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/invoice_balance.py'], check=True)\n    assert json.loads(Path('reports/invoice-balance.json').read_text()) == {'i1': 500, 'i2': -150}\n    Path('billing/invoices.json').write_text('[{\"id\": \"i3\", \"total_cents\": 0, \"paid_cents\": 10}]\\n')\n    subprocess.run([sys.executable, 'tools/invoice_balance.py'], check=True)\n    assert json.loads(Path('reports/invoice-balance.json').read_text()) == {'i3': -10}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/invoice_balance.py'], check=True)\nassert json.loads(Path('reports/invoice-balance.json').read_text()) == {'i1': 500, 'i2': -150}\nPath('billing/invoices.json').write_text('[{\"id\": \"i3\", \"total_cents\": 0, \"paid_cents\": 10}]\\n')\nsubprocess.run([sys.executable, 'tools/invoice_balance.py'], check=True)\nassert json.loads(Path('reports/invoice-balance.json').read_text()) == {'i3': -10}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('billing/invoices.json').read_text())\nresult = {r['id']: r['total_cents'] - r['paid_cents'] for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/invoice-balance.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1906,7 +1836,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "schedule/shifts.json": "[\n  {\n    \"id\": \"am\",\n    \"start\": \"09:45\",\n    \"end\": \"10:15\"\n  },\n  {\n    \"id\": \"pm\",\n    \"start\": \"13:00\",\n    \"end\": \"15:30\"\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/schedule_minutes.py'], check=True)\n    assert json.loads(Path('reports/schedule-minutes.json').read_text()) == {'am': 30, 'pm': 150}\n    Path('schedule/shifts.json').write_text('[{\"id\": \"x\", \"start\": \"00:50\", \"end\": \"01:05\"}]\\n')\n    subprocess.run([sys.executable, 'tools/schedule_minutes.py'], check=True)\n    assert json.loads(Path('reports/schedule-minutes.json').read_text()) == {'x': 15}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/schedule_minutes.py'], check=True)\nassert json.loads(Path('reports/schedule-minutes.json').read_text()) == {'am': 30, 'pm': 150}\nPath('schedule/shifts.json').write_text('[{\"id\": \"x\", \"start\": \"00:50\", \"end\": \"01:05\"}]\\n')\nsubprocess.run([sys.executable, 'tools/schedule_minutes.py'], check=True)\nassert json.loads(Path('reports/schedule-minutes.json').read_text()) == {'x': 15}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('schedule/shifts.json').read_text())\nresult = {r['id']: (int(r['end'][:2]) - int(r['start'][:2])) * 60 + int(r['end'][3:]) - int(r['start'][3:]) for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/schedule-minutes.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1942,7 +1872,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "content/posts.json": "[\n  {\n    \"id\": \"p2\",\n    \"tags\": [\n      \"code\",\n      \"code\"\n    ]\n  },\n  {\n    \"id\": \"p1\",\n    \"tags\": [\n      \"code\",\n      \"news\"\n    ]\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/label_index.py'], check=True)\n    assert json.loads(Path('reports/label-index.json').read_text()) == {'code': ['p1', 'p2'], 'news': ['p1']}\n    Path('content/posts.json').write_text('[{\"id\": \"p3\", \"tags\": []}]\\n')\n    subprocess.run([sys.executable, 'tools/label_index.py'], check=True)\n    assert json.loads(Path('reports/label-index.json').read_text()) == {}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/label_index.py'], check=True)\nassert json.loads(Path('reports/label-index.json').read_text()) == {'code': ['p1', 'p2'], 'news': ['p1']}\nPath('content/posts.json').write_text('[{\"id\": \"p3\", \"tags\": []}]\\n')\nsubprocess.run([sys.executable, 'tools/label_index.py'], check=True)\nassert json.loads(Path('reports/label-index.json').read_text()) == {}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nposts = json.loads(Path('content/posts.json').read_text())\nresult = {t: sorted({p['id'] for p in posts if t in p['tags']}) for t in {t for p in posts for t in p['tags']}}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/label-index.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -1978,7 +1908,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "artifacts/manifest.json": "[\n  {\n    \"kind\": \"file\",\n    \"bytes\": 13\n  },\n  {\n    \"kind\": \"directory\",\n    \"bytes\": 4096\n  },\n  {\n    \"kind\": \"file\",\n    \"bytes\": 7\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/manifest_size.py'], check=True)\n    assert json.loads(Path('reports/manifest-size.json').read_text()) == {'file_count': 2, 'total_bytes': 20}\n    Path('artifacts/manifest.json').write_text('[{\"kind\": \"directory\", \"bytes\": 100}]\\n')\n    subprocess.run([sys.executable, 'tools/manifest_size.py'], check=True)\n    assert json.loads(Path('reports/manifest-size.json').read_text()) == {'file_count': 0, 'total_bytes': 0}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/manifest_size.py'], check=True)\nassert json.loads(Path('reports/manifest-size.json').read_text()) == {'file_count': 2, 'total_bytes': 20}\nPath('artifacts/manifest.json').write_text('[{\"kind\": \"directory\", \"bytes\": 100}]\\n')\nsubprocess.run([sys.executable, 'tools/manifest_size.py'], check=True)\nassert json.loads(Path('reports/manifest-size.json').read_text()) == {'file_count': 0, 'total_bytes': 0}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nentries = json.loads(Path('artifacts/manifest.json').read_text())\nresult = {'file_count': sum(e['kind'] == 'file' for e in entries), 'total_bytes': sum(e['bytes'] for e in entries if e['kind'] == 'file')}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/manifest-size.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2016,7 +1946,7 @@
               "hidden_files": {
                 "metrics/readings.json": "{\n  \"cpu\": 80,\n  \"mem\": 70,\n  \"disk\": 12\n}\n",
                 "config/limits.json": "{\n  \"cpu\": 80,\n  \"mem\": 60\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/threshold_alerts.py'], check=True)\n    assert json.loads(Path('reports/threshold-alerts.json').read_text()) == ['mem']\n    Path('metrics/readings.json').write_text('{\"cpu\": 81, \"mem\": 60}\\n')\n    subprocess.run([sys.executable, 'tools/threshold_alerts.py'], check=True)\n    assert json.loads(Path('reports/threshold-alerts.json').read_text()) == ['cpu']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/threshold_alerts.py'], check=True)\nassert json.loads(Path('reports/threshold-alerts.json').read_text()) == ['mem']\nPath('metrics/readings.json').write_text('{\"cpu\": 81, \"mem\": 60}\\n')\nsubprocess.run([sys.executable, 'tools/threshold_alerts.py'], check=True)\nassert json.loads(Path('reports/threshold-alerts.json').read_text()) == ['cpu']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nreadings = json.loads(Path('metrics/readings.json').read_text())\nlimits = json.loads(Path('config/limits.json').read_text())\nresult = sorted(k for k, v in readings.items() if k in limits and v > limits[k])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/threshold-alerts.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2054,7 +1984,7 @@
               "hidden_files": {
                 "files/list.json": "[\n  \"b.TXT\",\n  \"a.py\",\n  \"c.tar.gz\",\n  \"README\"\n]\n",
                 "config/extensions.json": "[\n  \".txt\",\n  \".py\"\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/extension_policy.py'], check=True)\n    assert json.loads(Path('reports/extension-policy.json').read_text()) == ['a.py', 'b.TXT']\n    Path('config/extensions.json').write_text('[\".gz\"]\\n')\n    subprocess.run([sys.executable, 'tools/extension_policy.py'], check=True)\n    assert json.loads(Path('reports/extension-policy.json').read_text()) == ['c.tar.gz']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/extension_policy.py'], check=True)\nassert json.loads(Path('reports/extension-policy.json').read_text()) == ['a.py', 'b.TXT']\nPath('config/extensions.json').write_text('[\".gz\"]\\n')\nsubprocess.run([sys.executable, 'tools/extension_policy.py'], check=True)\nassert json.loads(Path('reports/extension-policy.json').read_text()) == ['c.tar.gz']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\npaths = json.loads(Path('files/list.json').read_text())\nallowed = json.loads(Path('config/extensions.json').read_text())\nresult = sorted(p for p in paths if Path(p).suffix.lower() in allowed)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/extension-policy.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2090,7 +2020,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "contacts/people.json": "[\n  {\n    \"email\": \" ADA@X \"\n  },\n  {\n    \"email\": \"ada@x\"\n  },\n  {\n    \"email\": \"\"\n  },\n  {}\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/deduplicated_mail.py'], check=True)\n    assert json.loads(Path('reports/deduplicated-mail.json').read_text()) == ['ada@x']\n    Path('contacts/people.json').write_text('[{\"email\": \"Z@Y\"}, {\"email\": \" A@B \"}]\\n')\n    subprocess.run([sys.executable, 'tools/deduplicated_mail.py'], check=True)\n    assert json.loads(Path('reports/deduplicated-mail.json').read_text()) == ['a@b', 'z@y']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/deduplicated_mail.py'], check=True)\nassert json.loads(Path('reports/deduplicated-mail.json').read_text()) == ['ada@x']\nPath('contacts/people.json').write_text('[{\"email\": \"Z@Y\"}, {\"email\": \" A@B \"}]\\n')\nsubprocess.run([sys.executable, 'tools/deduplicated_mail.py'], check=True)\nassert json.loads(Path('reports/deduplicated-mail.json').read_text()) == ['a@b', 'z@y']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\npeople = json.loads(Path('contacts/people.json').read_text())\nresult = sorted({p.get('email', '').strip().lower() for p in people} - {''})\nPath('reports').mkdir(exist_ok=True)\nPath('reports/deduplicated-mail.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2128,7 +2058,7 @@
               "hidden_files": {
                 "data/records.json": "[\n  {\n    \"name\": \"Ada\",\n    \"age\": 32,\n    \"extra\": 1\n  },\n  {\n    \"name\": \"Lin\"\n  }\n]\n",
                 "schema/columns.json": "[\n  \"age\",\n  \"name\"\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/column_projection.py'], check=True)\n    assert json.loads(Path('reports/column-projection.json').read_text()) == [{'age': 32, 'name': 'Ada'}, {'age': None, 'name': 'Lin'}]\n    Path('schema/columns.json').write_text('[\"name\"]\\n')\n    subprocess.run([sys.executable, 'tools/column_projection.py'], check=True)\n    assert json.loads(Path('reports/column-projection.json').read_text()) == [{'name': 'Ada'}, {'name': 'Lin'}]\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/column_projection.py'], check=True)\nassert json.loads(Path('reports/column-projection.json').read_text()) == [{'age': 32, 'name': 'Ada'}, {'age': None, 'name': 'Lin'}]\nPath('schema/columns.json').write_text('[\"name\"]\\n')\nsubprocess.run([sys.executable, 'tools/column_projection.py'], check=True)\nassert json.loads(Path('reports/column-projection.json').read_text()) == [{'name': 'Ada'}, {'name': 'Lin'}]\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('data/records.json').read_text())\ncolumns = json.loads(Path('schema/columns.json').read_text())\nresult = [{k: r.get(k) for k in columns} for r in rows]\nPath('reports').mkdir(exist_ok=True)\nPath('reports/column-projection.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2166,7 +2096,7 @@
               "hidden_files": {
                 "auth/sessions.json": "[\n  {\n    \"id\": \"b\",\n    \"expires_at\": 30\n  },\n  {\n    \"id\": \"a\",\n    \"expires_at\": 20\n  },\n  {\n    \"id\": \"c\",\n    \"expires_at\": 31\n  }\n]\n",
                 "clock/now.json": "30\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/expired_sessions.py'], check=True)\n    assert json.loads(Path('reports/expired-sessions.json').read_text()) == ['a', 'b']\n    Path('clock/now.json').write_text('20\\n')\n    subprocess.run([sys.executable, 'tools/expired_sessions.py'], check=True)\n    assert json.loads(Path('reports/expired-sessions.json').read_text()) == ['a']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/expired_sessions.py'], check=True)\nassert json.loads(Path('reports/expired-sessions.json').read_text()) == ['a', 'b']\nPath('clock/now.json').write_text('20\\n')\nsubprocess.run([sys.executable, 'tools/expired_sessions.py'], check=True)\nassert json.loads(Path('reports/expired-sessions.json').read_text()) == ['a']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nsessions = json.loads(Path('auth/sessions.json').read_text())\nnow = json.loads(Path('clock/now.json').read_text())\nresult = sorted(s['id'] for s in sessions if s['expires_at'] <= now)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/expired-sessions.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2202,7 +2132,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "build/dependencies.json": "{\n  \"app\": [\n    \"core\",\n    \"util\",\n    \"core\"\n  ],\n  \"util\": [\n    \"core\"\n  ],\n  \"core\": []\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/dependency_edges.py'], check=True)\n    assert json.loads(Path('reports/dependency-edges.json').read_text()) == [['app', 'core'], ['app', 'util'], ['util', 'core']]\n    Path('build/dependencies.json').write_text('{\"z\": [\"a\", \"a\"]}\\n')\n    subprocess.run([sys.executable, 'tools/dependency_edges.py'], check=True)\n    assert json.loads(Path('reports/dependency-edges.json').read_text()) == [['z', 'a']]\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/dependency_edges.py'], check=True)\nassert json.loads(Path('reports/dependency-edges.json').read_text()) == [['app', 'core'], ['app', 'util'], ['util', 'core']]\nPath('build/dependencies.json').write_text('{\"z\": [\"a\", \"a\"]}\\n')\nsubprocess.run([sys.executable, 'tools/dependency_edges.py'], check=True)\nassert json.loads(Path('reports/dependency-edges.json').read_text()) == [['z', 'a']]\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\ndeps = json.loads(Path('build/dependencies.json').read_text())\nresult = [list(pair) for pair in sorted({(name, dep) for name, values in deps.items() for dep in values})]\nPath('reports').mkdir(exist_ok=True)\nPath('reports/dependency-edges.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2240,7 +2170,7 @@
               "hidden_files": {
                 "features/requirements.json": "{\n  \"fast\": [\n    \"avx\",\n    \"ssd\"\n  ],\n  \"plain\": [],\n  \"gpu\": [\n    \"cuda\"\n  ]\n}\n",
                 "machine/capabilities.json": "[\n  \"avx\"\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/feature_requirements.py'], check=True)\n    assert json.loads(Path('reports/feature-requirements.json').read_text()) == ['plain']\n    Path('machine/capabilities.json').write_text('[\"avx\", \"ssd\"]\\n')\n    subprocess.run([sys.executable, 'tools/feature_requirements.py'], check=True)\n    assert json.loads(Path('reports/feature-requirements.json').read_text()) == ['fast', 'plain']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/feature_requirements.py'], check=True)\nassert json.loads(Path('reports/feature-requirements.json').read_text()) == ['plain']\nPath('machine/capabilities.json').write_text('[\"avx\", \"ssd\"]\\n')\nsubprocess.run([sys.executable, 'tools/feature_requirements.py'], check=True)\nassert json.loads(Path('reports/feature-requirements.json').read_text()) == ['fast', 'plain']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrequirements = json.loads(Path('features/requirements.json').read_text())\ncapabilities = json.loads(Path('machine/capabilities.json').read_text())\nresult = sorted(k for k, values in requirements.items() if set(values) <= set(capabilities))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/feature-requirements.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2278,7 +2208,7 @@
               "hidden_files": {
                 "cache/entries.json": "[\n  {\n    \"bytes\": 14\n  },\n  {\n    \"bytes\": 6\n  }\n]\n",
                 "config/cache.json": "{\n  \"max_bytes\": 20\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/cache_budget.py'], check=True)\n    assert json.loads(Path('reports/cache-budget.json').read_text()) == {'total_bytes': 20, 'max_bytes': 20, 'over_budget': False}\n    Path('config/cache.json').write_text('{\"max_bytes\": 19}\\n')\n    subprocess.run([sys.executable, 'tools/cache_budget.py'], check=True)\n    assert json.loads(Path('reports/cache-budget.json').read_text()) == {'total_bytes': 20, 'max_bytes': 19, 'over_budget': True}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/cache_budget.py'], check=True)\nassert json.loads(Path('reports/cache-budget.json').read_text()) == {'total_bytes': 20, 'max_bytes': 20, 'over_budget': False}\nPath('config/cache.json').write_text('{\"max_bytes\": 19}\\n')\nsubprocess.run([sys.executable, 'tools/cache_budget.py'], check=True)\nassert json.loads(Path('reports/cache-budget.json').read_text()) == {'total_bytes': 20, 'max_bytes': 19, 'over_budget': True}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nentries = json.loads(Path('cache/entries.json').read_text())\nconfig = json.loads(Path('config/cache.json').read_text())\nresult = {'total_bytes': sum(e['bytes'] for e in entries), 'max_bytes': config['max_bytes'], 'over_budget': sum(e['bytes'] for e in entries) > config['max_bytes']}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/cache-budget.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2316,7 +2246,7 @@
               "hidden_files": {
                 "registry/dependencies.json": "[\n  {\n    \"name\": \"birch\",\n    \"license\": \"MIT\"\n  },\n  {\n    \"name\": \"cedar\",\n    \"license\": \"Custom-Blue\"\n  },\n  {\n    \"name\": \"spruce\",\n    \"license\": \"Apache-2.0\"\n  }\n]\n",
                 "policy/licenses.json": "[\n  \"MIT\",\n  \"Custom-Blue\"\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\n    assert json.loads(Path('reports/license-audit.json').read_text()) == ['spruce']\n    Path('policy/licenses.json').write_text('[\"Apache-2.0\"]\\n')\n    subprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\n    assert json.loads(Path('reports/license-audit.json').read_text()) == ['birch', 'cedar']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\nassert json.loads(Path('reports/license-audit.json').read_text()) == ['spruce']\nPath('policy/licenses.json').write_text('[\"Apache-2.0\"]\\n')\nsubprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\nassert json.loads(Path('reports/license-audit.json').read_text()) == ['birch', 'cedar']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\npackages = json.loads(Path('registry/dependencies.json').read_text())\nallowed = json.loads(Path('policy/licenses.json').read_text())\nresult = sorted(p['name'] for p in packages if p['license'] not in allowed)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/license-audit.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2346,7 +2276,7 @@
               "hidden_files": {
                 "registry/dependencies.json": "[\n  {\n    \"name\": \"willow\",\n    \"license\": \"Custom-Green\"\n  },\n  {\n    \"name\": \"maple\",\n    \"license\": \"MIT\"\n  }\n]\n",
                 "policy/licenses.json": "[\n  \"Custom-Green\"\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\n    assert json.loads(Path('reports/license-audit.json').read_text()) == ['maple']\n    Path('policy/licenses.json').write_text('[\"MIT\"]\\n')\n    subprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\n    assert json.loads(Path('reports/license-audit.json').read_text()) == ['willow']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\nassert json.loads(Path('reports/license-audit.json').read_text()) == ['maple']\nPath('policy/licenses.json').write_text('[\"MIT\"]\\n')\nsubprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\nassert json.loads(Path('reports/license-audit.json').read_text()) == ['willow']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\npackages = json.loads(Path('registry/dependencies.json').read_text())\nallowed = json.loads(Path('policy/licenses.json').read_text())\nresult = sorted(p['name'] for p in packages if p['license'] not in allowed)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/license-audit.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2384,7 +2314,7 @@
               "hidden_files": {
                 "deploy/targets.json": "[\n  {\n    \"name\": \"edge\",\n    \"channels\": [\n      \"canary\"\n    ],\n    \"paused\": false\n  },\n  {\n    \"name\": \"core\",\n    \"channels\": [\n      \"stable\",\n      \"canary\"\n    ],\n    \"paused\": true\n  },\n  {\n    \"name\": \"web\",\n    \"channels\": [\n      \"stable\"\n    ],\n    \"paused\": false\n  }\n]\n",
                 "deploy/release.json": "{\n  \"channel\": \"canary\"\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/deployment_targets.py'], check=True)\n    assert json.loads(Path('reports/deployment-targets.json').read_text()) == ['edge']\n    Path('deploy/release.json').write_text('{\"channel\": \"stable\"}\\n')\n    subprocess.run([sys.executable, 'tools/deployment_targets.py'], check=True)\n    assert json.loads(Path('reports/deployment-targets.json').read_text()) == ['web']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/deployment_targets.py'], check=True)\nassert json.loads(Path('reports/deployment-targets.json').read_text()) == ['edge']\nPath('deploy/release.json').write_text('{\"channel\": \"stable\"}\\n')\nsubprocess.run([sys.executable, 'tools/deployment_targets.py'], check=True)\nassert json.loads(Path('reports/deployment-targets.json').read_text()) == ['web']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\ntargets = json.loads(Path('deploy/targets.json').read_text())\nrelease = json.loads(Path('deploy/release.json').read_text())\nresult = sorted(t['name'] for t in targets if release['channel'] in t['channels'] and not t['paused'])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/deployment-targets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2422,7 +2352,7 @@
               "hidden_files": {
                 "testing/platforms.json": "[\n  \"linux\",\n  \"mac\"\n]\n",
                 "testing/versions.json": "[\n  \"3.10\",\n  \"3.13\"\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/test_matrix.py'], check=True)\n    assert json.loads(Path('reports/test-matrix.json').read_text()) == ['linux:3.10', 'linux:3.13', 'mac:3.10', 'mac:3.13']\n    Path('testing/platforms.json').write_text('[\"win\"]\\n')\n    Path('testing/versions.json').write_text('[\"3.11\", \"3.12\", \"3.13\"]\\n')\n    subprocess.run([sys.executable, 'tools/test_matrix.py'], check=True)\n    assert json.loads(Path('reports/test-matrix.json').read_text()) == ['win:3.11', 'win:3.12', 'win:3.13']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/test_matrix.py'], check=True)\nassert json.loads(Path('reports/test-matrix.json').read_text()) == ['linux:3.10', 'linux:3.13', 'mac:3.10', 'mac:3.13']\nPath('testing/platforms.json').write_text('[\"win\"]\\n')\nPath('testing/versions.json').write_text('[\"3.11\", \"3.12\", \"3.13\"]\\n')\nsubprocess.run([sys.executable, 'tools/test_matrix.py'], check=True)\nassert json.loads(Path('reports/test-matrix.json').read_text()) == ['win:3.11', 'win:3.12', 'win:3.13']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nplatforms = json.loads(Path('testing/platforms.json').read_text())\nversions = json.loads(Path('testing/versions.json').read_text())\nresult = sorted(p + ':' + v for p in platforms for v in versions)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/test-matrix.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2458,7 +2388,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "zones/offsets.json": "{\n  \"east\": \"+05:30\",\n  \"west\": \"-03:45\",\n  \"zero\": \"+00:00\"\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/timezone_offsets.py'], check=True)\n    assert json.loads(Path('reports/timezone-offsets.json').read_text()) == {'east': 330, 'west': -225, 'zero': 0}\n    Path('zones/offsets.json').write_text('{\"x\": \"-00:30\"}\\n')\n    subprocess.run([sys.executable, 'tools/timezone_offsets.py'], check=True)\n    assert json.loads(Path('reports/timezone-offsets.json').read_text()) == {'x': -30}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/timezone_offsets.py'], check=True)\nassert json.loads(Path('reports/timezone-offsets.json').read_text()) == {'east': 330, 'west': -225, 'zero': 0}\nPath('zones/offsets.json').write_text('{\"x\": \"-00:30\"}\\n')\nsubprocess.run([sys.executable, 'tools/timezone_offsets.py'], check=True)\nassert json.loads(Path('reports/timezone-offsets.json').read_text()) == {'x': -30}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nzones = json.loads(Path('zones/offsets.json').read_text())\nresult = {k: (1 if v[0] == '+' else -1) * (int(v[1:3]) * 60 + int(v[4:])) for k, v in zones.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/timezone-offsets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2496,7 +2426,7 @@
               "hidden_files": {
                 "sales/codes.json": "[\n  {\n    \"name\": \"five\",\n    \"active\": true,\n    \"min_cents\": 500\n  },\n  {\n    \"name\": \"old\",\n    \"active\": false,\n    \"min_cents\": 0\n  },\n  {\n    \"name\": \"ten\",\n    \"active\": true,\n    \"min_cents\": 1000\n  }\n]\n",
                 "sales/cart.json": "{\n  \"subtotal_cents\": 500\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/discount_codes.py'], check=True)\n    assert json.loads(Path('reports/discount-codes.json').read_text()) == ['five']\n    Path('sales/cart.json').write_text('{\"subtotal_cents\": 1000}\\n')\n    subprocess.run([sys.executable, 'tools/discount_codes.py'], check=True)\n    assert json.loads(Path('reports/discount-codes.json').read_text()) == ['five', 'ten']\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/discount_codes.py'], check=True)\nassert json.loads(Path('reports/discount-codes.json').read_text()) == ['five']\nPath('sales/cart.json').write_text('{\"subtotal_cents\": 1000}\\n')\nsubprocess.run([sys.executable, 'tools/discount_codes.py'], check=True)\nassert json.loads(Path('reports/discount-codes.json').read_text()) == ['five', 'ten']\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\ncodes = json.loads(Path('sales/codes.json').read_text())\ncart = json.loads(Path('sales/cart.json').read_text())\nresult = sorted(c['name'] for c in codes if c['active'] and c['min_cents'] <= cart['subtotal_cents'])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/discount-codes.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2532,7 +2462,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "files/links.json": "[\n  {\n    \"link\": \"bin/tool\",\n    \"target\": \"lib/tool.py\"\n  },\n  {\n    \"link\": \"docs/latest\",\n    \"target\": \"docs/v2\"\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/symlink_plan.py'], check=True)\n    assert json.loads(Path('reports/symlink-plan.json').read_text()) == {'bin/tool': '../lib/tool.py', 'docs/latest': 'v2'}\n    Path('files/links.json').write_text('[{\"link\": \"a/b/c\", \"target\": \"x\"}]\\n')\n    subprocess.run([sys.executable, 'tools/symlink_plan.py'], check=True)\n    assert json.loads(Path('reports/symlink-plan.json').read_text()) == {'a/b/c': '../../x'}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/symlink_plan.py'], check=True)\nassert json.loads(Path('reports/symlink-plan.json').read_text()) == {'bin/tool': '../lib/tool.py', 'docs/latest': 'v2'}\nPath('files/links.json').write_text('[{\"link\": \"a/b/c\", \"target\": \"x\"}]\\n')\nsubprocess.run([sys.executable, 'tools/symlink_plan.py'], check=True)\nassert json.loads(Path('reports/symlink-plan.json').read_text()) == {'a/b/c': '../../x'}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nlinks = json.loads(Path('files/links.json').read_text())\nresult = {e['link']: __import__('os').path.relpath(e['target'], str(Path(e['link']).parent)) for e in links}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/symlink-plan.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2568,7 +2498,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "commands/spec.json": "{\n  \"show\": [\n    \"s\",\n    \"ls\"\n  ],\n  \"start\": [\n    \"s\",\n    \"run\"\n  ]\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/cli_aliases.py'], check=True)\n    assert json.loads(Path('reports/cli-aliases.json').read_text()) == {'s': 'start', 'ls': 'show', 'run': 'start'}\n    Path('commands/spec.json').write_text('{\"quit\": [\"q\"], \"query\": [\"q\", \"find\"]}\\n')\n    subprocess.run([sys.executable, 'tools/cli_aliases.py'], check=True)\n    assert json.loads(Path('reports/cli-aliases.json').read_text()) == {'q': 'query', 'find': 'query'}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/cli_aliases.py'], check=True)\nassert json.loads(Path('reports/cli-aliases.json').read_text()) == {'s': 'start', 'ls': 'show', 'run': 'start'}\nPath('commands/spec.json').write_text('{\"quit\": [\"q\"], \"query\": [\"q\", \"find\"]}\\n')\nsubprocess.run([sys.executable, 'tools/cli_aliases.py'], check=True)\nassert json.loads(Path('reports/cli-aliases.json').read_text()) == {'q': 'query', 'find': 'query'}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\ncommands = json.loads(Path('commands/spec.json').read_text())\nresult = {alias: name for name, aliases in commands.items() for alias in aliases}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/cli-aliases.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2606,7 +2536,7 @@
               "hidden_files": {
                 "users/quotas.json": "{\n  \"ada\": 100,\n  \"lin\": 40,\n  \"sam\": 30\n}\n",
                 "usage/bytes.json": "{\n  \"ada\": 70,\n  \"lin\": 55,\n  \"unknown\": 3\n}\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/quota_remaining.py'], check=True)\n    assert json.loads(Path('reports/quota-remaining.json').read_text()) == {'ada': 30, 'lin': 0, 'sam': 30}\n    Path('usage/bytes.json').write_text('{\"sam\": 30}\\n')\n    subprocess.run([sys.executable, 'tools/quota_remaining.py'], check=True)\n    assert json.loads(Path('reports/quota-remaining.json').read_text()) == {'ada': 100, 'lin': 40, 'sam': 0}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/quota_remaining.py'], check=True)\nassert json.loads(Path('reports/quota-remaining.json').read_text()) == {'ada': 30, 'lin': 0, 'sam': 30}\nPath('usage/bytes.json').write_text('{\"sam\": 30}\\n')\nsubprocess.run([sys.executable, 'tools/quota_remaining.py'], check=True)\nassert json.loads(Path('reports/quota-remaining.json').read_text()) == {'ada': 100, 'lin': 40, 'sam': 0}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nquotas = json.loads(Path('users/quotas.json').read_text())\nusage = json.loads(Path('usage/bytes.json').read_text())\nresult = {u: max(0, q - usage.get(u, 0)) for u, q in quotas.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/quota-remaining.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2644,7 +2574,7 @@
               "hidden_files": {
                 "downloads/files.json": "[\n  {\n    \"name\": \"a\",\n    \"checksums\": {\n      \"sha256\": \"abc\",\n      \"md5\": \"def\"\n    }\n  },\n  {\n    \"name\": \"b\",\n    \"checksums\": {\n      \"md5\": \"ghi\"\n    }\n  },\n  {\n    \"name\": \"c\",\n    \"checksums\": {}\n  }\n]\n",
                 "config/preference.json": "[\n  \"sha256\",\n  \"md5\"\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/checksum_selection.py'], check=True)\n    assert json.loads(Path('reports/checksum-selection.json').read_text()) == {'a': 'abc', 'b': 'ghi', 'c': None}\n    Path('config/preference.json').write_text('[\"md5\", \"sha256\"]\\n')\n    subprocess.run([sys.executable, 'tools/checksum_selection.py'], check=True)\n    assert json.loads(Path('reports/checksum-selection.json').read_text()) == {'a': 'def', 'b': 'ghi', 'c': None}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/checksum_selection.py'], check=True)\nassert json.loads(Path('reports/checksum-selection.json').read_text()) == {'a': 'abc', 'b': 'ghi', 'c': None}\nPath('config/preference.json').write_text('[\"md5\", \"sha256\"]\\n')\nsubprocess.run([sys.executable, 'tools/checksum_selection.py'], check=True)\nassert json.loads(Path('reports/checksum-selection.json').read_text()) == {'a': 'def', 'b': 'ghi', 'c': None}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nfiles = json.loads(Path('downloads/files.json').read_text())\npreference = json.loads(Path('config/preference.json').read_text())\nresult = {f['name']: next((f['checksums'][a] for a in preference if a in f['checksums']), None) for f in files}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/checksum-selection.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
@@ -2680,7 +2610,7 @@
               "command": "python3 _grading/check.py",
               "hidden_files": {
                 "retries/jobs.json": "[\n  {\n    \"id\": \"a\",\n    \"started_at\": 100,\n    \"attempts\": 0,\n    \"delay_seconds\": 7\n  },\n  {\n    \"id\": \"b\",\n    \"started_at\": 120,\n    \"attempts\": 3,\n    \"delay_seconds\": 5\n  }\n]\n",
-                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/retry_deadlines.py'], check=True)\n    assert json.loads(Path('reports/retry-deadlines.json').read_text()) == {'a': 100, 'b': 135}\n    Path('retries/jobs.json').write_text('[{\"id\": \"c\", \"started_at\": 0, \"attempts\": 2, \"delay_seconds\": 11}]\\n')\n    subprocess.run([sys.executable, 'tools/retry_deadlines.py'], check=True)\n    assert json.loads(Path('reports/retry-deadlines.json').read_text()) == {'c': 22}\n"
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/retry_deadlines.py'], check=True)\nassert json.loads(Path('reports/retry-deadlines.json').read_text()) == {'a': 100, 'b': 135}\nPath('retries/jobs.json').write_text('[{\"id\": \"c\", \"started_at\": 0, \"attempts\": 2, \"delay_seconds\": 11}]\\n')\nsubprocess.run([sys.executable, 'tools/retry_deadlines.py'], check=True)\nassert json.loads(Path('reports/retry-deadlines.json').read_text()) == {'c': 22}\n"
               }
             },
             "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\njobs = json.loads(Path('retries/jobs.json').read_text())\nresult = {j['id']: j['started_at'] + j['attempts'] * j['delay_seconds'] for j in jobs}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/retry-deadlines.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",

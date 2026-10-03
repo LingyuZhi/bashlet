@@ -13,10 +13,29 @@ from ..experiment import run_experiment, serialize_task, task_from_record
 from ..models import FunctionGrader, Task, TaskOrigin
 from ..protocol import fingerprint
 from ..replay import ReplayModel, Utf8Encoding
-from . import _CONFIGS, AUTHORED_LOCK, CONVERSION, authored_source, task_path
+from . import (
+    _CONFIGS,
+    AUTHORED_LOCK,
+    CONVERSION,
+    FAMILY_GUARD,
+    authored_source,
+    task_path,
+    validate_harness_origin,
+)
 
 DEFAULT_COHORT = _CONFIGS / "harness-cohort-v1.json"
 _TYPES = ("short_program", "code_edit", "workspace")
+
+_WORKSPACE_GRADING_DRIVER = """import os, shutil, tempfile
+from pathlib import Path
+with tempfile.TemporaryDirectory() as directory:
+    shutil.copytree('/workspace', directory + '/task')
+    os.chdir(directory + '/task')
+    for path in Path('.').rglob('*'):
+        if path.is_file(): path.chmod(0o600)
+    source = Path('_grading/cases.py').read_text()
+    exec(compile(source, '_grading/cases.py', 'exec'))
+"""
 
 
 def _family(task: Task) -> str:
@@ -151,6 +170,13 @@ def _definitions(
                 "variant_id": variant["variant_id"],
                 "environment_id": config.environment.id,
             }
+            if family["task_type"] == "workspace":
+                data["grader"] = data["grader"] | {
+                    "hidden_files": (
+                        data["grader"]["hidden_files"]
+                        | {"_grading/check.py": _WORKSPACE_GRADING_DRIVER}
+                    )
+                }
             definition = _Definition(
                 _identities(task_from_record(data)),
                 variant["wrong_files"],
@@ -160,6 +186,8 @@ def _definitions(
         else:
             raise ValueError(f"Unregistered task: {task_id}")
         task = definition.task
+        assert task.origin is not None
+        validate_harness_origin(task.origin)
         if task.environment_id != config.environment.id:
             raise ValueError("Prepared task environment differs from validation config")
         if not task.reference_implementation or not task.feedback_command:
@@ -266,6 +294,7 @@ def prepare_harness(
         (AUTHORED_LOCK.parent / lock["file"]).read_bytes()
     )
     (private / "cohort.json").write_bytes(cohort_bytes)
+    (private / "family-guard.json").write_bytes(FAMILY_GUARD.read_bytes())
     by_id = {d.task.task_id: d.task for d in definitions}
     harness_ids = cohort["harness_development"]["task_ids"]
     coding_ids = cohort["coding_development"]["task_ids"]
@@ -284,6 +313,7 @@ def prepare_harness(
         },
         "sources": sources,
         "cohort": cohort,
+        "family_guard_sha256": hashlib.sha256(FAMILY_GUARD.read_bytes()).hexdigest(),
         "upstream_manifest_sha256": hashlib.sha256(
             mbpp_manifest.read_bytes()
         ).hexdigest(),

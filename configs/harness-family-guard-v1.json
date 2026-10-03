@@ -1,0 +1,13 @@
+{
+  "version": "harness-family-guard-v1",
+  "rules": "Harness cohorts retain native source origins and additionally reserve known equivalent tasks to a single split, including supplemental cohorts.",
+  "equivalent_families": [
+    {
+      "dataset": "google-research/mbpp",
+      "family_id": "mbpp/591",
+      "split": "dev",
+      "members": ["mbpp/591", "mbpp/625"],
+      "reason": "Both original questions interchange the first and last list elements. The development family is reserved; its training duplicate is inadmissible in Harness cohorts."
+    }
+  ]
+}
