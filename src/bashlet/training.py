@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from .demonstrations import EXECUTED_SOURCE, SOURCE, validate_executed_example
+from .encoding import QwenChatMLEncoding
 from .models import TaskOrigin
 from .monitoring import (
     MonitorConfig,
@@ -25,6 +26,7 @@ from .monitoring import (
     write_document,
 )
 from .pytrio import MODEL, SDK_VERSION, _credential
+from .snapshots import encoding_condition
 from .spend import (
     DEFAULT_POLICY,
     SpendLedger,
@@ -124,6 +126,7 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
             or meta["on_policy_eligible"] is not False
             or not meta["grade"]["passed"]
             or meta["encoding"] != manifest["encoding"]
+            or meta["encoding_details"] != manifest["encoding_details"]
             or meta["fingerprints"] != manifest["fingerprints"]
             or meta["task_id"] in seen
             or meta["task_id"] not in accepted
@@ -355,11 +358,22 @@ def _train_sft(
         raise ValueError("stop_after must be a positive optimizer step")
     config = SFTConfig.read(config_path)
     manifest, datums = load_demonstrations(Path(config.dataset))
-    if (
-        manifest["encoding_details"].get("tokenizer") != config.base_model
-        or manifest["encoding_details"].get("revision") != config.model_revision
-    ):
+    details = manifest["encoding_details"]
+    if details.get("revision") != config.model_revision:
         raise ValueError("Training model and demonstration tokenizer identity differ")
+    if details.get("tokenizer") != config.base_model:
+        if manifest["source"] != EXECUTED_SOURCE:
+            raise ValueError(
+                "Training model and demonstration tokenizer identity differ"
+            )
+        canonical = QwenChatMLEncoding(
+            config.base_model,
+            revision=config.model_revision,
+            thinking=details["thinking"],
+            cache_dir=manifest.get("tokenizer_cache_dir"),
+        )
+        if encoding_condition(canonical.describe()) != encoding_condition(details):
+            raise ValueError("Training model and demonstration encoding assets differ")
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = output_dir / "training.json"

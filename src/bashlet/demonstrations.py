@@ -19,6 +19,7 @@ from .models import (
     Generation,
     InvalidAction,
     Model,
+    ModelResponseError,
     Observation,
     SamplingParams,
     Submission,
@@ -154,7 +155,12 @@ def validate_history(
             request_id=raw["request_id"],
             source=raw["source"],
         )
-        generation.validate(SamplingParams(**call["sampling"]))
+        try:
+            generation.validate(SamplingParams(**call["sampling"]))
+        except ModelResponseError as error:
+            raise ValueError(
+                f"Invalid trajectory sampling evidence: {error}"
+            ) from error
         reply = encoding.reply(generation.tokens)
         if call["text"] != encoding.decode(generation.tokens) or call[
             "reply"
@@ -336,6 +342,28 @@ def export_demonstration(
     """Export executed reference or reviewed trajectories, preserving raw tokens."""
     source = SOURCE if supervision is None else EXECUTED_SOURCE
     result.demonstration = {"source": source, "status": "rejected", "reason": ""}
+    try:
+        validate_sft_request(task, model, adapter, executed=supervision is not None)
+        from .experiment import serialize_task
+
+        task_bytes = serialize_task(task).encode()
+        if (
+            hashlib.sha256(task_bytes).hexdigest() != result.task_sha256
+            or (result.run_dir / "private/task.json").read_bytes() != task_bytes
+            or task.task_id != result.task_id
+        ):
+            raise ValueError("Export task identity differs from its executed evidence")
+        if (
+            model.identity != result.policy
+            or model.encoding.identity != result.encoding
+        ):
+            raise ValueError("Export model identity differs from its executed evidence")
+        recorded = json.loads((result.run_dir / "run.json").read_text())
+        if recorded["fingerprints"] != fingerprints(config):
+            raise ValueError("Export condition differs from its executed evidence")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        result.demonstration["reason"] = str(error)
+        return
     if (
         result.status != "completed"
         or not result.passed
@@ -564,6 +592,25 @@ class _DatasetWriter:
             )
             stream.write("\n")
 
+    def save_manifest(
+        self,
+        manifest: dict[str, Any],
+        destination: Path,
+        *,
+        final: bool = False,
+    ) -> None:
+        """Keep counts, content hashes and interrupted status in one lifecycle."""
+        if final and manifest["status"] != "complete":
+            manifest["status"] = "incomplete"
+        manifest["counts"] = {
+            status: sum(entry["status"] == status for entry in manifest["tasks"])
+            for status in ("accepted", "rejected")
+        }
+        manifest["examples_sha256"] = hashlib.sha256(self.path.read_bytes()).hexdigest()
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(json.dumps(manifest, indent=2, ensure_ascii=True) + "\n")
+        temporary.replace(destination)
+
 
 def prepare_sft(
     *,
@@ -645,19 +692,7 @@ def prepare_sft(
     }
     destination = output_dir / "manifest.json"
 
-    def save() -> None:
-        manifest["counts"] = {
-            status: sum(entry["status"] == status for entry in manifest["tasks"])
-            for status in ("accepted", "rejected")
-        }
-        manifest["examples_sha256"] = hashlib.sha256(
-            writer.path.read_bytes()
-        ).hexdigest()
-        temporary = destination.with_suffix(".tmp")
-        temporary.write_text(json.dumps(manifest, indent=2, ensure_ascii=True) + "\n")
-        temporary.replace(destination)
-
-    save()
+    writer.save_manifest(manifest, destination)
     try:
         for task in tasks:
             result = run_experiment(
@@ -682,14 +717,12 @@ def prepare_sft(
                     **result.demonstration,
                 }
             )
-            save()
+            writer.save_manifest(manifest, destination)
             if result.status in ("infrastructure_error", "interrupted"):
                 raise ValueError(f"Demonstration execution incomplete: {result.reason}")
         manifest["status"] = "complete"
     finally:
-        if manifest["status"] != "complete":
-            manifest["status"] = "incomplete"
-        save()
+        writer.save_manifest(manifest, destination, final=True)
     return destination
 
 
@@ -728,6 +761,7 @@ def _prepare_trajectories(
             task_manifest.read_bytes()
         ).hexdigest(),
         "review_sha256": hashlib.sha256(review_data).hexdigest(),
+        "tokenizer_cache_dir": encoding.cache_dir,
         "encoding": encoding.identity,
         "encoding_details": encoding.describe(),
         "config": config_record(config),
@@ -746,19 +780,7 @@ def _prepare_trajectories(
     (output_dir / "review.json").write_bytes(review_data)
     destination = output_dir / "manifest.json"
 
-    def save() -> None:
-        manifest["counts"] = {
-            status: sum(entry["status"] == status for entry in manifest["tasks"])
-            for status in ("accepted", "rejected")
-        }
-        manifest["examples_sha256"] = hashlib.sha256(
-            writer.path.read_bytes()
-        ).hexdigest()
-        temporary = destination.with_suffix(".tmp")
-        temporary.write_text(json.dumps(manifest, indent=2) + "\n")
-        temporary.replace(destination)
-
-    save()
+    writer.save_manifest(manifest, destination)
     try:
         for index, item in enumerate(review["trajectories"]):
             entry: dict[str, Any] = {
@@ -869,10 +891,8 @@ def _prepare_trajectories(
                 entry["reason"] = str(error)
                 raise
             finally:
-                save()
+                writer.save_manifest(manifest, destination)
         manifest["status"] = "complete"
     finally:
-        if manifest["status"] != "complete":
-            manifest["status"] = "incomplete"
-        save()
+        writer.save_manifest(manifest, destination, final=True)
     return destination

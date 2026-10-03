@@ -147,7 +147,7 @@ def executed_manifest(root: Path) -> Path:
 
 
 @pytest.mark.parametrize(
-    "fault", ["none", "forged_observation", "wrong_author", "overlong"]
+    "fault", ["none", "forged_observation", "wrong_author", "overlong", "forged_source"]
 )
 def test_cli_exports_a_short_sampled_success_without_repair_or_reference(
     tmp_path: Path,
@@ -172,6 +172,10 @@ def test_cli_exports_a_short_sampled_success_without_repair_or_reference(
         raw["trajectory"][0]["observation"]["output"] = (
             "invented successful observation"
         )
+        (result.run_dir / "run.json").write_text(json.dumps(raw))
+    elif fault == "forged_source":
+        raw = json.loads((result.run_dir / "run.json").read_text())
+        raw["trajectory"][0]["model_call"]["generation"]["source"] = "forged-source"
         (result.run_dir / "run.json").write_text(json.dumps(raw))
     review = tmp_path / "review.json"
     review.write_text(
@@ -486,6 +490,58 @@ def test_non_executable_syntax_is_kept_as_context_with_zero_weight(
             invalid["end"] - invalid["start"]
         )
         assert "syntax error" in encoding.decode(result.context_tokens)
+
+
+@pytest.mark.parametrize(
+    "fault", ["missing_origin", "dev", "encoding", "task_identity"]
+)
+def test_reviewed_export_checks_admission_before_submitting(
+    tmp_path: Path,
+    fault: str,
+) -> None:
+    from bashlet.demonstrations import ActionSupervision, export_demonstration
+
+    task = executed_task()
+    encoding = QwenChatMLEncoding(
+        "Qwen/Qwen3.5-4B",
+        revision="851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        cache_dir="runs/tokenizers",
+    )
+    model = SampledTrajectory(encoding, [REPAIR, SUBMIT])
+    result = run_experiment(task=task, model=model, output_dir=tmp_path)
+    adapter = TrainingAdapter(encoding.identity)
+    if fault == "missing_origin":
+        task = replace(task, origin=None)
+    elif fault == "dev":
+        assert task.origin is not None
+        task = replace(
+            task,
+            origin=replace(
+                task.origin,
+                original_task_id="header-value",
+                family_id="harness/header-value",
+                split="dev",
+            ),
+        )
+    elif fault == "encoding":
+        adapter.encoding = "wrong/encoding"
+    else:
+        task = replace(task, task_id="harness/header-key/another-task")
+    export_demonstration(
+        result,
+        task,
+        model,
+        load_config(),
+        adapter,
+        supervision=[
+            ActionSupervision(True, "repair"),
+            ActionSupervision(True, "submit"),
+        ],
+    )
+    assert adapter.requests == []
+    assert result.demonstration is not None
+    assert result.demonstration["status"] == "rejected"
+    assert result.demonstration["reason"]
 
 
 def training_task() -> Task:

@@ -14,6 +14,8 @@ uv run --locked bashlet train-sft configs/my-sft-training.yaml \
 
 训练配置的 `dataset` 指向导出的 `manifest.json`。沿用现有 `train-sft`、
 交叉熵损失和手动自回归移位；不新增训练后端。
+本地 tokenizer 路径可保留；新轨迹的编码资产须与训练基模核验一致，
+不会为了路径别名改写原始编码身份。
 
 审阅文件示例：
 

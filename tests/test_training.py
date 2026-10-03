@@ -23,10 +23,24 @@ from bashlet.config import load_config
 from bashlet.demonstrations import ActionSupervision, reference_demonstration
 
 
-def training_input(tmp_path: Path, *, executed: bool = False) -> Path:
+def training_input(
+    tmp_path: Path,
+    *,
+    executed: bool = False,
+    local_tokenizer: bool = False,
+) -> Path:
     task = executed_task() if executed else training_task()
+    tokenizer = (
+        str(
+            Path(
+                "runs/tokenizers/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+            ).resolve()
+        )
+        if local_tokenizer
+        else "Qwen/Qwen3.5-4B"
+    )
     encoding = QwenChatMLEncoding(
-        "Qwen/Qwen3.5-4B",
+        tokenizer,
         revision="851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
         cache_dir="runs/tokenizers",
     )
@@ -70,6 +84,7 @@ def training_input(tmp_path: Path, *, executed: bool = False) -> Path:
                 "source": metadata["source"],
                 "encoding": encoding.identity,
                 "encoding_details": encoding.describe(),
+                "tokenizer_cache_dir": encoding.cache_dir,
                 "fingerprints": metadata["fingerprints"],
                 "source_manifest_sha256": "a" * 64,
                 "examples": "examples.jsonl",
@@ -92,11 +107,13 @@ def training_input(tmp_path: Path, *, executed: bool = False) -> Path:
     return manifest
 
 
+@pytest.mark.parametrize("local_tokenizer", [False, True])
 def test_executed_supervision_reaches_the_actual_training_request(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    local_tokenizer: bool,
 ) -> None:
-    manifest = training_input(tmp_path, executed=True)
+    manifest = training_input(tmp_path, executed=True, local_tokenizer=local_tokenizer)
     config = training_config(tmp_path, manifest)
     external_sdks(tmp_path, monkeypatch)
     with (tmp_path / "sitecustomize.py").open("a") as stream:
