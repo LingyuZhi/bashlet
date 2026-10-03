@@ -14,7 +14,6 @@ from .analysis import analyze_episode
 from .config import ExperimentConfig, load_config
 from .demonstrations import SFTAdapter, export_demonstration, validate_sft_request
 from .episode import run_episode, save_record
-from .mbpp import validate_origin
 from .models import (
     CaseResult,
     CommandGrader,
@@ -29,6 +28,7 @@ from .models import (
     TaskOrigin,
 )
 from .sandbox import Sandbox
+from .tasks import validate_origin
 from .workspace import snapshot_workspace, validate_workspace_path
 
 _GRADING_DRIVER = """
@@ -279,6 +279,10 @@ def run_experiment(
         target.write_text(content)
     metadata: dict[str, object] = {
         "task_id": task.task_id,
+        "task_type": task.task_type,
+        "variant_id": task.variant_id,
+        "feedback_start_id": task.feedback_start_id,
+        "environment_variant_id": task.environment_variant_id,
         "task_origin": asdict(task.origin) if task.origin else None,
         "task_sha256": hashlib.sha256(task_json.encode()).hexdigest(),
         "environment_id": task.environment_id,
@@ -355,6 +359,10 @@ def run_experiment(
                 {
                     "grading_protocol": grading_protocol,
                     "task_origin": asdict(task.origin) if task.origin else None,
+                    "task_type": task.task_type,
+                    "variant_id": task.variant_id,
+                    "feedback_start_id": task.feedback_start_id,
+                    "environment_variant_id": task.environment_variant_id,
                     "passed": result.passed,
                 },
             )

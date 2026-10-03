@@ -58,6 +58,10 @@ class Task:
     implementation_paths: tuple[str, ...] = ()
     feedback_command: str | None = None
     origin: TaskOrigin | None = None
+    task_type: Literal["short_program", "code_edit", "workspace"] | None = None
+    variant_id: str = "base"
+    feedback_start_id: str | None = None
+    environment_variant_id: str | None = None
 
 
 @dataclass(frozen=True)

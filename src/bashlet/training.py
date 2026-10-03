@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from .demonstrations import SOURCE
-from .mbpp import validate_origin
 from .models import TaskOrigin
 from .monitoring import (
     MonitorConfig,
@@ -33,6 +32,7 @@ from .spend import (
     TokenPricing,
     summarize_cost,
 )
+from .tasks import validate_origin
 
 if TYPE_CHECKING:
     import pytrio as trio

@@ -16,7 +16,7 @@ from .demonstrations import prepare_sft
 from .episode import run_episode, save_record
 from .evaluation import evaluate
 from .experiment import run_experiment, task_from_record
-from .mbpp import mbpp_task_path, prepare_mbpp
+from .mbpp import prepare_mbpp
 from .models import (
     EpisodeResult,
     ExperimentResult,
@@ -25,6 +25,8 @@ from .models import (
 )
 from .sandbox import Sandbox
 from .spend import DEFAULT_POLICY, BudgetRefused, SpendLedger, SpendPolicy
+from .tasks import task_path as select_task_path
+from .tasks.preparation import DEFAULT_COHORT, prepare_harness
 from .view import RunView
 from .workspace import capture_workspace
 
@@ -125,7 +127,7 @@ def _run_task(options: argparse.Namespace, view: RunView) -> ExperimentResult:
     if options.task_id is not None:
         if options.split is None:
             raise ValueError("Task-set selection requires --split")
-        task_path = mbpp_task_path(task_path, options.task_id, options.split)
+        task_path = select_task_path(task_path, options.task_id, options.split)
     elif options.split is not None:
         raise ValueError("--split requires a task set and --task-id")
     data = json.loads(task_path.read_text())
@@ -182,7 +184,7 @@ def main() -> None:
     task.add_argument(
         "task", type=Path, help="Task JSON or a legacy task/replies request"
     )
-    task.add_argument("--task-id", help="Select a task from a prepared MBPP manifest")
+    task.add_argument("--task-id", help="Select a task from a prepared task manifest")
     task.add_argument("--split", choices=("train", "dev", "test"))
     _execution_options(task)
     evaluation = commands.add_parser(
@@ -204,6 +206,12 @@ def main() -> None:
     prepare.add_argument("--source-lock", type=Path, required=True)
     prepare.add_argument("--source-file", type=Path)
     _execution_options(prepare)
+    harness_tasks = commands.add_parser(
+        "prepare-harness", help="Freeze mixed-source tasks with real grading validation"
+    )
+    harness_tasks.add_argument("--mbpp-manifest", type=Path, required=True)
+    harness_tasks.add_argument("--cohort", type=Path, default=DEFAULT_COHORT)
+    _execution_options(harness_tasks)
     demonstrations = commands.add_parser(
         "prepare-sft", help="Execute verified training references and export SFT data"
     )
@@ -364,6 +372,15 @@ def main() -> None:
                 f"missing={summary['missing_task_ids']}\n{path}"
             )
             raise SystemExit(2 if record["status"] != "complete" else 0)
+        if options.command == "prepare-harness":
+            manifest = prepare_harness(
+                mbpp_manifest=options.mbpp_manifest,
+                cohort_path=options.cohort,
+                output_dir=options.output_dir,
+                config=load_config(options.config, options.overrides),
+            )
+            print(manifest)
+            return
         if options.command == "prepare-mbpp":
             manifest = prepare_mbpp(
                 source_lock=options.source_lock,

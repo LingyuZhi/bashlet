@@ -11,11 +11,11 @@ from typing import Any
 
 from .config import ExperimentConfig, config_record, load_model
 from .experiment import run_experiment, serialize_task, task_from_record
-from .mbpp import mbpp_task_path
 from .models import EpisodeResult, Model, ModelBackend, Task
 from .monitoring import MonitorConfig, RunMonitor, code_revision, evaluation_metrics
 from .protocol import fingerprints
 from .spend import summarize_cost
+from .tasks import task_path
 from .vllm import VLLMModel
 
 VERSION = "development-evaluation-v1"
@@ -87,10 +87,16 @@ def _tasks(plan_path: Path) -> tuple[dict[str, Any], list[Task]]:
     manifest_path = (plan_path.parent / plan["manifest"]).resolve()
     tasks = [
         task_from_record(
-            json.loads(mbpp_task_path(manifest_path, task_id, "dev").read_text())
+            json.loads(task_path(manifest_path, task_id, "dev").read_text())
         )
         for task_id in task_ids
     ]
+    families = [task.origin.family_id for task in tasks if task.origin is not None]
+    if len(families) != len(set(families)):
+        raise ValueError(
+            "Evaluation requires independent task families; a family variant "
+            "cannot add an independent task to the denominator"
+        )
     manifest = json.loads(manifest_path.read_text())
     return plan | {
         "manifest": str(manifest_path),
@@ -216,6 +222,10 @@ def evaluate(
             "task_id": task.task_id,
             "task_sha256": hashlib.sha256(serialize_task(task).encode()).hexdigest(),
             "task_origin": asdict(task.origin) if task.origin else None,
+            "task_type": task.task_type,
+            "variant_id": task.variant_id,
+            "feedback_start_id": task.feedback_start_id,
+            "environment_variant_id": task.environment_variant_id,
             "feedback_command": task.feedback_command,
             "implementation_paths": list(task.implementation_paths),
             "outcome": "not_started",

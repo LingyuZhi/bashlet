@@ -210,15 +210,31 @@ uv run bashlet task runs/mbpp-sanitized-v1/manifest.json \
   --task-id mbpp/602 --split train -c configs/dev-vllm.yaml
 ```
 
-选择入口检查整份清单的原题号、家族和 split，校验所选 Task 的内容哈希和来源。即使增强来源把 `Mbpp/602` 标成 `test`，其家族仍为 `mbpp/602`，归属 train；错误的目标 split 会在模型启动前被拒绝。直接 Task JSON 和 `run_experiment` 同样校验来源中的家族与原始划分。`Task.origin`（`TaskOrigin`）保存数据来源和家族身份，目前支持 MBPP 来源；派生任务用 `dataclasses.replace(task, task_id=..., prompt=..., initial_files=...)` 保留它。每次实验的 `run.json.task_origin` 同样保留该身份，供示范和 rollout 继承；修改衍生内容不产生新的原题家族。
+选择入口检查整份清单的原题号、家族和 split，校验所选 Task 的内容哈希和来源。即使增强来源把 `Mbpp/602` 标成 `test`，其家族仍为 `mbpp/602`，归属 train；错误的目标 split 会在模型启动前被拒绝。直接 Task JSON 和 `run_experiment` 同样校验来源中的家族与原始划分。`Task.origin`（`TaskOrigin`）保存数据来源和家族身份，支持 MBPP 和明确登记的自编任务；派生任务用 `dataclasses.replace(task, task_id=..., prompt=..., initial_files=...)` 保留它。每次实验的 `run.json.task_origin` 同样保留该身份，供示范和 rollout 继承；修改衍生内容不产生新的原题家族。
 
 2026-10-02 已真实完成全部 427 题的数据验证：训练 95、开发 37、最终测试 197，共 329 项可用任务；其余 98 项为提示示例或不支持的转换格式，均记录理由，未发现可转换参考解验证失败。清单与全部参考验证证据位于 `runs/mbpp-sanitized-v1-verified/`。真实训练题 `mbpp/602` 通过清单选择、v3 回放、反馈测试和独立评分（2/2），使用的实现与原参考程序不同；验收摘要为 `runs/issue03-mbpp-smoke/acceptance.json`。这些是数据与入口验收，不是模型能力评测。
+
+## 三类任务清单
+
+`prepare-harness` 从已有 MBPP 验证清单和固定自编来源建立多来源清单，复用原有 Harness 与评分器：
+
+```bash
+uv run --locked bashlet prepare-harness \
+  --mbpp-manifest runs/mbpp-sanitized-v1-verified/manifest.json \
+  --output-dir runs/harness-tasks-v1
+uv run --locked bashlet task runs/harness-tasks-v1/manifest.json \
+  --task-id harness/license-audit --split dev -c configs/local-base.yaml
+```
+
+[Harness 开发清单](configs/harness-dev-30-v1.json) 固定三类各 10 项；[MBPP 编程检查清单](configs/mbpp-dev-37-v1.json) 单独用于编程检查。训练候选覆盖三类各 20 项。来源、重叠家族、变体和复跑方法见[任务配置说明](configs/harness-tasks-v1.md)。输出目录须为新目录；准备过程会实际验证参考解与针对性错误实现。
+
+`task`、`evaluate`、`prepare-sft` 共用来源及家族校验；未知来源拒绝准入，评测清单不能将同一家族的多个变体作为独立题目。
 
 ## 执行验证的 SFT 示范
 
 任务 06 使用当前已冻结的 **bash-block-v3**；Task v2 仍是独立的任务数据格式。示范复用 `ReplayModel`、`QwenChatMLEncoding` 和 `run_experiment`，依次写入参考实现、运行任务声明的反馈命令、显式提交，再接受独立评分。每步均为 `replayed`，没有采样 logprob，来源记录为 `reference-implementation-v1`，不能用作 on-policy 更新。
 
-从已验证的 MBPP 清单生成训练数据：
+从已验证的任务清单生成训练数据（也支持多来源清单）：
 
 ```bash
 uv run bashlet prepare-sft runs/mbpp-sanitized-v1-verified/manifest.json \

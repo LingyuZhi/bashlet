@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from .config import ExperimentConfig, config_record, load_model
 from .encoding import QwenChatMLEncoding
-from .mbpp import mbpp_task_path, validate_origin
 from .models import ExperimentResult, Model, Task
 from .protocol import fingerprints
 from .replay import ReplayModel
+from .tasks import task_path, validate_origin
 from .workspace import validate_workspace_path
 
 if TYPE_CHECKING:
@@ -148,6 +148,10 @@ def export_demonstration(
         "task_id": task.task_id,
         "task_sha256": result.task_sha256,
         "origin": asdict(task.origin) if task.origin else None,
+        "task_type": task.task_type,
+        "variant_id": task.variant_id,
+        "feedback_start_id": task.feedback_start_id,
+        "environment_variant_id": task.environment_variant_id,
         "reference_sha256": hashlib.sha256(
             task.reference_implementation.encode()
         ).hexdigest(),
@@ -226,7 +230,7 @@ def prepare_sft(
         raise ValueError("Select a non-empty list of distinct training task IDs")
     tasks = [
         task_from_record(
-            json.loads(mbpp_task_path(manifest_path, task_id, "train").read_text())
+            json.loads(task_path(manifest_path, task_id, "train").read_text())
         )
         for task_id in selected
     ]

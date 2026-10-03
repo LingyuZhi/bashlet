@@ -1,0 +1,2700 @@
+{
+  "dataset": "bashlet/harness-authored",
+  "revision": "harness-authored-v1",
+  "rules": {
+    "admission": "Only families explicitly registered in this SHA-256-locked source; unknown sources, families and revisions are rejected.",
+    "lineage": "Renames, rewrites, broken starts, environment variants and trajectories inherit the registered original family and split. New source families require a new frozen catalog version and the same admission checks.",
+    "selection": "Fixed before model or SFT results. Basic Python, standard library and local-file operations only. No held-out tasks.",
+    "grading": "Public feedback and host-held grading are separate. Every reference must pass feedback and independent grading; every targeted wrong implementation must fail grading in a real sandbox."
+  },
+  "families": [
+    {
+      "original_task_id": "header-key",
+      "family_id": "harness/header-key",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/header-key",
+            "prompt": "Repair `app/headers.py`: Trim outer whitespace, lowercase the header key, and replace underscores with hyphens.\nThe existing function is `normalize_header`. Run `python3 check_header_key.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "app/headers.py": "def normalize_header(text):\n    return text.lower()\n",
+              "check_header_key.py": "from app.headers import normalize_header\nassert normalize_header(*['Content_Type']) == 'content-type'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "app/headers.py",
+              "function_name": "normalize_header",
+              "cases": [
+                {
+                  "args": [
+                    " X_ID "
+                  ],
+                  "expected": "x-id"
+                },
+                {
+                  "args": [
+                    "Accept"
+                  ],
+                  "expected": "accept"
+                }
+              ]
+            },
+            "reference_implementation": "def normalize_header(text):\n    return text.strip().lower().replace('_', '-')\n",
+            "implementation_paths": [
+              "app/headers.py"
+            ],
+            "feedback_command": "python3 check_header_key.py"
+          },
+          "wrong_files": {
+            "app/headers.py": "def normalize_header(text):\n    return text.lower()\n"
+          },
+          "wrong_reason": "Leaves whitespace and underscores unchanged."
+        }
+      ]
+    },
+    {
+      "original_task_id": "csv-field",
+      "family_id": "harness/csv-field",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/csv-field",
+            "prompt": "Repair `export/fields.py`: Return a CSV field: quote fields containing comma, quote, or newline and double embedded quotes; otherwise return the text unchanged.\nThe existing function is `csv_field`. Run `python3 check_csv_field.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "export/fields.py": "def csv_field(text):\n    return '\"' + text + '\"' if ',' in text else text\n",
+              "check_csv_field.py": "from export.fields import csv_field\nassert csv_field(*['a,b']) == '\"a,b\"'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "export/fields.py",
+              "function_name": "csv_field",
+              "cases": [
+                {
+                  "args": [
+                    "a\"b"
+                  ],
+                  "expected": "\"a\"\"b\""
+                },
+                {
+                  "args": [
+                    "one\ntwo"
+                  ],
+                  "expected": "\"one\ntwo\""
+                },
+                {
+                  "args": [
+                    "abc"
+                  ],
+                  "expected": "abc"
+                }
+              ]
+            },
+            "reference_implementation": "def csv_field(text):\n    if any(c in text for c in ',\"\\n'):\n        return '\"' + text.replace('\"', '\"\"') + '\"'\n    return text\n",
+            "implementation_paths": [
+              "export/fields.py"
+            ],
+            "feedback_command": "python3 check_csv_field.py"
+          },
+          "wrong_files": {
+            "export/fields.py": "def csv_field(text):\n    return '\"' + text + '\"' if ',' in text else text\n"
+          },
+          "wrong_reason": "Fails to escape embedded quotes and newlines."
+        }
+      ]
+    },
+    {
+      "original_task_id": "log-level",
+      "family_id": "harness/log-level",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/log-level",
+            "prompt": "Repair `logging_utils/levels.py`: Map stripped, case-insensitive DEBUG, INFO, WARNING and ERROR to 10, 20, 30 and 40. Unknown names return None.\nThe existing function is `level_number`. Run `python3 check_log_level.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "logging_utils/levels.py": "def level_number(name):\n    return {'DEBUG': 10, 'INFO': 20, 'WARNING': 30, 'ERROR': 40}.get(name)\n",
+              "check_log_level.py": "from logging_utils.levels import level_number\nassert level_number(*['INFO']) == 20\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "logging_utils/levels.py",
+              "function_name": "level_number",
+              "cases": [
+                {
+                  "args": [
+                    " error "
+                  ],
+                  "expected": 40
+                },
+                {
+                  "args": [
+                    "warning"
+                  ],
+                  "expected": 30
+                },
+                {
+                  "args": [
+                    "trace"
+                  ],
+                  "expected": null
+                }
+              ]
+            },
+            "reference_implementation": "def level_number(name):\n    return {'debug': 10, 'info': 20, 'warning': 30, 'error': 40}.get(name.strip().lower())\n",
+            "implementation_paths": [
+              "logging_utils/levels.py"
+            ],
+            "feedback_command": "python3 check_log_level.py"
+          },
+          "wrong_files": {
+            "logging_utils/levels.py": "def level_number(name):\n    return {'DEBUG': 10, 'INFO': 20, 'WARNING': 30, 'ERROR': 40}.get(name)\n"
+          },
+          "wrong_reason": "Only handles exact uppercase names."
+        }
+      ]
+    },
+    {
+      "original_task_id": "env-assignment",
+      "family_id": "harness/env-assignment",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/env-assignment",
+            "prompt": "Repair `settings/env.py`: Ignore blank lines and lines beginning with # after stripping. Split assignments at the first =, strip the key and value, and return [key, value]; malformed lines return None.\nThe existing function is `parse_assignment`. Run `python3 check_env_assignment.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "settings/env.py": "def parse_assignment(line):\n    if '=' not in line: return None\n    return line.split('=')\n",
+              "check_env_assignment.py": "from settings.env import parse_assignment\nassert parse_assignment(*['MODE=fast']) == ['MODE', 'fast']\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "settings/env.py",
+              "function_name": "parse_assignment",
+              "cases": [
+                {
+                  "args": [
+                    " TOKEN = a=b "
+                  ],
+                  "expected": [
+                    "TOKEN",
+                    "a=b"
+                  ]
+                },
+                {
+                  "args": [
+                    " #X=1"
+                  ],
+                  "expected": null
+                }
+              ]
+            },
+            "reference_implementation": "def parse_assignment(line):\n    line = line.strip()\n    if not line or line.startswith('#') or '=' not in line:\n        return None\n    key, value = line.split('=', 1)\n    return [key.strip(), value.strip()]\n",
+            "implementation_paths": [
+              "settings/env.py"
+            ],
+            "feedback_command": "python3 check_env_assignment.py"
+          },
+          "wrong_files": {
+            "settings/env.py": "def parse_assignment(line):\n    if '=' not in line: return None\n    return line.split('=')\n"
+          },
+          "wrong_reason": "Splits every equals sign and treats comments as assignments."
+        }
+      ]
+    },
+    {
+      "original_task_id": "last-record",
+      "family_id": "harness/last-record",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/last-record",
+            "prompt": "Repair `records/dedup.py`: Given records with an id field, keep the last record for each id, in order of their last appearances. Do not mutate the input.\nThe existing function is `last_records`. Run `python3 check_last_record.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "records/dedup.py": "def last_records(records):\n    seen = set()\n    return [r for r in records if not (r['id'] in seen or seen.add(r['id']))]\n",
+              "check_last_record.py": "from records.dedup import last_records\nassert last_records(*[[{'id': 'a', 'v': 1}]]) == [{'id': 'a', 'v': 1}]\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "records/dedup.py",
+              "function_name": "last_records",
+              "cases": [
+                {
+                  "args": [
+                    [
+                      {
+                        "id": "a",
+                        "v": 1
+                      },
+                      {
+                        "id": "b",
+                        "v": 2
+                      },
+                      {
+                        "id": "a",
+                        "v": 3
+                      }
+                    ]
+                  ],
+                  "expected": [
+                    {
+                      "id": "b",
+                      "v": 2
+                    },
+                    {
+                      "id": "a",
+                      "v": 3
+                    }
+                  ]
+                },
+                {
+                  "args": [
+                    []
+                  ],
+                  "expected": []
+                }
+              ]
+            },
+            "reference_implementation": "def last_records(records):\n    last = {r['id']: i for i, r in enumerate(records)}\n    return [r for i, r in enumerate(records) if last[r['id']] == i]\n",
+            "implementation_paths": [
+              "records/dedup.py"
+            ],
+            "feedback_command": "python3 check_last_record.py"
+          },
+          "wrong_files": {
+            "records/dedup.py": "def last_records(records):\n    seen = set()\n    return [r for r in records if not (r['id'] in seen or seen.add(r['id']))]\n"
+          },
+          "wrong_reason": "Keeps the first record instead of the last."
+        }
+      ]
+    },
+    {
+      "original_task_id": "slug-key",
+      "family_id": "harness/slug-key",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/slug-key",
+            "prompt": "Repair `web/slugs.py`: Lowercase ASCII text, replace each run of non-ASCII-alphanumeric characters with a hyphen, and remove leading and trailing hyphens.\nThe existing function is `slug_key`. Run `python3 check_slug_key.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "web/slugs.py": "def slug_key(text):\n    return text.lower().replace(' ', '-')\n",
+              "check_slug_key.py": "from web.slugs import slug_key\nassert slug_key(*['Hello World']) == 'hello-world'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "web/slugs.py",
+              "function_name": "slug_key",
+              "cases": [
+                {
+                  "args": [
+                    " -- Hello__WORLD!! "
+                  ],
+                  "expected": "hello-world"
+                },
+                {
+                  "args": [
+                    "!!!"
+                  ],
+                  "expected": ""
+                }
+              ]
+            },
+            "reference_implementation": "import re\ndef slug_key(text):\n    return re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')\n",
+            "implementation_paths": [
+              "web/slugs.py"
+            ],
+            "feedback_command": "python3 check_slug_key.py"
+          },
+          "wrong_files": {
+            "web/slugs.py": "def slug_key(text):\n    return text.lower().replace(' ', '-')\n"
+          },
+          "wrong_reason": "Does not normalize punctuation runs or boundaries."
+        }
+      ]
+    },
+    {
+      "original_task_id": "binary-size",
+      "family_id": "harness/binary-size",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/binary-size",
+            "prompt": "Repair `display/sizes.py`: For nonnegative integer byte counts below 1 MiB, return 'N B' below 1024 or a one-decimal 'N.N KiB' at and above 1024.\nThe existing function is `format_size`. Run `python3 check_binary_size.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "display/sizes.py": "def format_size(n):\n    return f'{n / 1024:.1f} KiB' if n > 1024 else f'{n} B'\n",
+              "check_binary_size.py": "from display.sizes import format_size\nassert format_size(*[512]) == '512 B'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "display/sizes.py",
+              "function_name": "format_size",
+              "cases": [
+                {
+                  "args": [
+                    1024
+                  ],
+                  "expected": "1.0 KiB"
+                },
+                {
+                  "args": [
+                    1536
+                  ],
+                  "expected": "1.5 KiB"
+                },
+                {
+                  "args": [
+                    0
+                  ],
+                  "expected": "0 B"
+                }
+              ]
+            },
+            "reference_implementation": "def format_size(n):\n    return f'{n / 1024:.1f} KiB' if n >= 1024 else f'{n} B'\n",
+            "implementation_paths": [
+              "display/sizes.py"
+            ],
+            "feedback_command": "python3 check_binary_size.py"
+          },
+          "wrong_files": {
+            "display/sizes.py": "def format_size(n):\n    return f'{n / 1024:.1f} KiB' if n > 1024 else f'{n} B'\n"
+          },
+          "wrong_reason": "Uses a strict threshold at exactly 1024 bytes."
+        }
+      ]
+    },
+    {
+      "original_task_id": "escaped-comment",
+      "family_id": "harness/escaped-comment",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/escaped-comment",
+            "prompt": "Repair `parsing/comments.py`: Remove text from the first # not immediately preceded by a backslash. Keep backslashes; remove trailing whitespace from the remaining text.\nThe existing function is `strip_comment`. Run `python3 check_escaped_comment.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "parsing/comments.py": "def strip_comment(text):\n    return text.split('#', 1)[0].rstrip()\n",
+              "check_escaped_comment.py": "from parsing.comments import strip_comment\nassert strip_comment(*['value # comment']) == 'value'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "parsing/comments.py",
+              "function_name": "strip_comment",
+              "cases": [
+                {
+                  "args": [
+                    "value\\#tag # comment"
+                  ],
+                  "expected": "value\\#tag"
+                },
+                {
+                  "args": [
+                    "# only"
+                  ],
+                  "expected": ""
+                }
+              ]
+            },
+            "reference_implementation": "def strip_comment(text):\n    for i, c in enumerate(text):\n        if c == '#' and (i == 0 or text[i-1] != chr(92)):\n            return text[:i].rstrip()\n    return text.rstrip()\n",
+            "implementation_paths": [
+              "parsing/comments.py"
+            ],
+            "feedback_command": "python3 check_escaped_comment.py"
+          },
+          "wrong_files": {
+            "parsing/comments.py": "def strip_comment(text):\n    return text.split('#', 1)[0].rstrip()\n"
+          },
+          "wrong_reason": "Treats escaped hashes as comments."
+        }
+      ]
+    },
+    {
+      "original_task_id": "url-boundary",
+      "family_id": "harness/url-boundary",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/url-boundary",
+            "prompt": "Repair `web/paths.py`: Join a nonempty base URL and a path with exactly one boundary slash, preserving internal slashes. Strip all trailing slashes from the base and leading slashes from the path.\nThe existing function is `join_url`. Run `python3 check_url_boundary.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "web/paths.py": "def join_url(base, path):\n    return base + '/' + path\n",
+              "check_url_boundary.py": "from web.paths import join_url\nassert join_url(*['https://host', 'x']) == 'https://host/x'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "web/paths.py",
+              "function_name": "join_url",
+              "cases": [
+                {
+                  "args": [
+                    "https://host///",
+                    "//a/b"
+                  ],
+                  "expected": "https://host/a/b"
+                },
+                {
+                  "args": [
+                    "https://host/",
+                    ""
+                  ],
+                  "expected": "https://host/"
+                }
+              ]
+            },
+            "reference_implementation": "def join_url(base, path):\n    return base.rstrip('/') + '/' + path.lstrip('/')\n",
+            "implementation_paths": [
+              "web/paths.py"
+            ],
+            "feedback_command": "python3 check_url_boundary.py"
+          },
+          "wrong_files": {
+            "web/paths.py": "def join_url(base, path):\n    return base + '/' + path\n"
+          },
+          "wrong_reason": "Duplicates boundary slashes."
+        }
+      ]
+    },
+    {
+      "original_task_id": "boolean-setting",
+      "family_id": "harness/boolean-setting",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/boolean-setting",
+            "prompt": "Repair `settings/booleans.py`: Parse stripped case-insensitive true/yes/1 as True and false/no/0 as False. Return None for other strings.\nThe existing function is `parse_bool`. Run `python3 check_boolean_setting.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "settings/booleans.py": "def parse_bool(text):\n    return {'true': True, 'false': False}.get(text)\n",
+              "check_boolean_setting.py": "from settings.booleans import parse_bool\nassert parse_bool(*['true']) == True\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "settings/booleans.py",
+              "function_name": "parse_bool",
+              "cases": [
+                {
+                  "args": [
+                    " YES "
+                  ],
+                  "expected": true
+                },
+                {
+                  "args": [
+                    "0"
+                  ],
+                  "expected": false
+                },
+                {
+                  "args": [
+                    "maybe"
+                  ],
+                  "expected": null
+                }
+              ]
+            },
+            "reference_implementation": "def parse_bool(text):\n    text = text.strip().lower()\n    if text in ('true', 'yes', '1'): return True\n    if text in ('false', 'no', '0'): return False\n    return None\n",
+            "implementation_paths": [
+              "settings/booleans.py"
+            ],
+            "feedback_command": "python3 check_boolean_setting.py"
+          },
+          "wrong_files": {
+            "settings/booleans.py": "def parse_bool(text):\n    return {'true': True, 'false': False}.get(text)\n"
+          },
+          "wrong_reason": "Ignores alternate spellings and whitespace."
+        }
+      ]
+    },
+    {
+      "original_task_id": "secret-fields",
+      "family_id": "harness/secret-fields",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/secret-fields",
+            "prompt": "Repair `security/redact.py`: Copy a flat dictionary, replacing values whose case-insensitive key is token or password with '[redacted]'. Other values stay unchanged.\nThe existing function is `redact`. Run `python3 check_secret_fields.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "security/redact.py": "def redact(values):\n    return {k: '[redacted]' if k in ('token', 'password') else v for k, v in values.items()}\n",
+              "check_secret_fields.py": "from security.redact import redact\nassert redact(*[{'token': 'abc', 'user': 'sam'}]) == {'token': '[redacted]', 'user': 'sam'}\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "security/redact.py",
+              "function_name": "redact",
+              "cases": [
+                {
+                  "args": [
+                    {
+                      "PASSWORD": "xyz",
+                      "Token": "s",
+                      "count": 0
+                    }
+                  ],
+                  "expected": {
+                    "PASSWORD": "[redacted]",
+                    "Token": "[redacted]",
+                    "count": 0
+                  }
+                }
+              ]
+            },
+            "reference_implementation": "def redact(values):\n    return {k: '[redacted]' if k.lower() in ('token', 'password') else v for k, v in values.items()}\n",
+            "implementation_paths": [
+              "security/redact.py"
+            ],
+            "feedback_command": "python3 check_secret_fields.py"
+          },
+          "wrong_files": {
+            "security/redact.py": "def redact(values):\n    return {k: '[redacted]' if k in ('token', 'password') else v for k, v in values.items()}\n"
+          },
+          "wrong_reason": "Leaks secrets under mixed-case keys."
+        }
+      ]
+    },
+    {
+      "original_task_id": "release-core",
+      "family_id": "harness/release-core",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/release-core",
+            "prompt": "Repair `releases/version.py`: Given a version such as 1.2.3-rc.1+build.4, return the numeric core before the first - or +.\nThe existing function is `release_core`. Run `python3 check_release_core.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "releases/version.py": "def release_core(version):\n    return version.split('-', 1)[0]\n",
+              "check_release_core.py": "from releases.version import release_core\nassert release_core(*['1.2.3-rc.1']) == '1.2.3'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "releases/version.py",
+              "function_name": "release_core",
+              "cases": [
+                {
+                  "args": [
+                    "2.0.1+build.8"
+                  ],
+                  "expected": "2.0.1"
+                },
+                {
+                  "args": [
+                    "3.4.5"
+                  ],
+                  "expected": "3.4.5"
+                }
+              ]
+            },
+            "reference_implementation": "import re\ndef release_core(version):\n    return re.split(r'[-+]', version, maxsplit=1)[0]\n",
+            "implementation_paths": [
+              "releases/version.py"
+            ],
+            "feedback_command": "python3 check_release_core.py"
+          },
+          "wrong_files": {
+            "releases/version.py": "def release_core(version):\n    return version.split('-', 1)[0]\n"
+          },
+          "wrong_reason": "Leaves build metadata attached."
+        }
+      ]
+    },
+    {
+      "original_task_id": "page-windows",
+      "family_id": "harness/page-windows",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/page-windows",
+            "prompt": "Repair `pagination/windows.py`: For n >= 0 and width > 0 return half-open [start, end] windows covering 0..n without overlap, clipping the last end to n.\nThe existing function is `page_windows`. Run `python3 check_page_windows.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "pagination/windows.py": "def page_windows(n, width):\n    return [[i, i + width] for i in range(0, n, width)]\n",
+              "check_page_windows.py": "from pagination.windows import page_windows\nassert page_windows(*[4, 2]) == [[0, 2], [2, 4]]\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "pagination/windows.py",
+              "function_name": "page_windows",
+              "cases": [
+                {
+                  "args": [
+                    5,
+                    2
+                  ],
+                  "expected": [
+                    [
+                      0,
+                      2
+                    ],
+                    [
+                      2,
+                      4
+                    ],
+                    [
+                      4,
+                      5
+                    ]
+                  ]
+                },
+                {
+                  "args": [
+                    0,
+                    3
+                  ],
+                  "expected": []
+                }
+              ]
+            },
+            "reference_implementation": "def page_windows(n, width):\n    return [[i, min(i + width, n)] for i in range(0, n, width)]\n",
+            "implementation_paths": [
+              "pagination/windows.py"
+            ],
+            "feedback_command": "python3 check_page_windows.py"
+          },
+          "wrong_files": {
+            "pagination/windows.py": "def page_windows(n, width):\n    return [[i, i + width] for i in range(0, n, width)]\n"
+          },
+          "wrong_reason": "Does not clip the final partial window."
+        }
+      ]
+    },
+    {
+      "original_task_id": "form-value",
+      "family_id": "harness/form-value",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/form-value",
+            "prompt": "Repair `web/forms.py`: Decode URL form encoding, including percent escapes and plus signs as spaces, using UTF-8.\nThe existing function is `decode_form`. Run `python3 check_form_value.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "web/forms.py": "from urllib.parse import unquote\ndef decode_form(text):\n    return unquote(text)\n",
+              "check_form_value.py": "from web.forms import decode_form\nassert decode_form(*['a%2Fb']) == 'a/b'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "web/forms.py",
+              "function_name": "decode_form",
+              "cases": [
+                {
+                  "args": [
+                    "hello+world"
+                  ],
+                  "expected": "hello world"
+                },
+                {
+                  "args": [
+                    "%E4%BD%A0"
+                  ],
+                  "expected": "\u4f60"
+                }
+              ]
+            },
+            "reference_implementation": "from urllib.parse import unquote_plus\ndef decode_form(text):\n    return unquote_plus(text)\n",
+            "implementation_paths": [
+              "web/forms.py"
+            ],
+            "feedback_command": "python3 check_form_value.py"
+          },
+          "wrong_files": {
+            "web/forms.py": "from urllib.parse import unquote\ndef decode_form(text):\n    return unquote(text)\n"
+          },
+          "wrong_reason": "Leaves plus signs instead of form spaces."
+        }
+      ]
+    },
+    {
+      "original_task_id": "directory-name",
+      "family_id": "harness/directory-name",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/directory-name",
+            "prompt": "Repair `files/names.py`: Return the final POSIX path component after removing trailing slashes; an all-slash or empty path returns the empty string.\nThe existing function is `directory_name`. Run `python3 check_directory_name.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "files/names.py": "import posixpath\ndef directory_name(path):\n    return posixpath.basename(path)\n",
+              "check_directory_name.py": "from files.names import directory_name\nassert directory_name(*['a/b']) == 'b'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "files/names.py",
+              "function_name": "directory_name",
+              "cases": [
+                {
+                  "args": [
+                    "a/b///"
+                  ],
+                  "expected": "b"
+                },
+                {
+                  "args": [
+                    "///"
+                  ],
+                  "expected": ""
+                }
+              ]
+            },
+            "reference_implementation": "import posixpath\ndef directory_name(path):\n    return posixpath.basename(path.rstrip('/'))\n",
+            "implementation_paths": [
+              "files/names.py"
+            ],
+            "feedback_command": "python3 check_directory_name.py"
+          },
+          "wrong_files": {
+            "files/names.py": "import posixpath\ndef directory_name(path):\n    return posixpath.basename(path)\n"
+          },
+          "wrong_reason": "Returns empty for directory paths ending in slash."
+        }
+      ]
+    },
+    {
+      "original_task_id": "label-column",
+      "family_id": "harness/label-column",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/label-column",
+            "prompt": "Repair `display/columns.py`: Given [label, value] rows, left-pad no text; instead right-pad each label to the widest label, then ': ' and the value. Return lines as a list; no rows gives [].\nThe existing function is `label_lines`. Run `python3 check_label_column.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "display/columns.py": "def label_lines(rows):\n    return [label + ': ' + value for label, value in rows]\n",
+              "check_label_column.py": "from display.columns import label_lines\nassert label_lines(*[[['id', '7']]]) == ['id: 7']\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "display/columns.py",
+              "function_name": "label_lines",
+              "cases": [
+                {
+                  "args": [
+                    [
+                      [
+                        "id",
+                        "7"
+                      ],
+                      [
+                        "name",
+                        "Ada"
+                      ]
+                    ]
+                  ],
+                  "expected": [
+                    "id  : 7",
+                    "name: Ada"
+                  ]
+                },
+                {
+                  "args": [
+                    []
+                  ],
+                  "expected": []
+                }
+              ]
+            },
+            "reference_implementation": "def label_lines(rows):\n    width = max((len(r[0]) for r in rows), default=0)\n    return [label.ljust(width) + ': ' + value for label, value in rows]\n",
+            "implementation_paths": [
+              "display/columns.py"
+            ],
+            "feedback_command": "python3 check_label_column.py"
+          },
+          "wrong_files": {
+            "display/columns.py": "def label_lines(rows):\n    return [label + ': ' + value for label, value in rows]\n"
+          },
+          "wrong_reason": "Does not align labels of different lengths."
+        }
+      ]
+    },
+    {
+      "original_task_id": "message-margin",
+      "family_id": "harness/message-margin",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/message-margin",
+            "prompt": "Repair `display/messages.py`: Remove the common indentation of a multiline message (textwrap.dedent semantics) and strip only leading/trailing newlines.\nThe existing function is `remove_margin`. Run `python3 check_message_margin.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "display/messages.py": "def remove_margin(text):\n    return text.strip()\n",
+              "check_message_margin.py": "from display.messages import remove_margin\nassert remove_margin(*[' hello ']) == 'hello '\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "display/messages.py",
+              "function_name": "remove_margin",
+              "cases": [
+                {
+                  "args": [
+                    "\n  first\n    second\n"
+                  ],
+                  "expected": "first\n  second"
+                },
+                {
+                  "args": [
+                    "\n\n"
+                  ],
+                  "expected": ""
+                }
+              ]
+            },
+            "reference_implementation": "import textwrap\ndef remove_margin(text):\n    return textwrap.dedent(text).strip('\\n')\n",
+            "implementation_paths": [
+              "display/messages.py"
+            ],
+            "feedback_command": "python3 check_message_margin.py"
+          },
+          "wrong_files": {
+            "display/messages.py": "def remove_margin(text):\n    return text.strip()\n"
+          },
+          "wrong_reason": "Strips significant spaces and leaves interior indentation."
+        }
+      ]
+    },
+    {
+      "original_task_id": "open-jobs",
+      "family_id": "harness/open-jobs",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/open-jobs",
+            "prompt": "Repair `jobs/filtering.py`: Return job records whose status is neither done nor cancelled, preserving order; missing status counts as open.\nThe existing function is `open_jobs`. Run `python3 check_open_jobs.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "jobs/filtering.py": "def open_jobs(jobs):\n    return [j for j in jobs if j.get('status') != 'done']\n",
+              "check_open_jobs.py": "from jobs.filtering import open_jobs\nassert open_jobs(*[[{'id': 1, 'status': 'done'}, {'id': 2, 'status': 'new'}]]) == [{'id': 2, 'status': 'new'}]\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "jobs/filtering.py",
+              "function_name": "open_jobs",
+              "cases": [
+                {
+                  "args": [
+                    [
+                      {
+                        "id": 1,
+                        "status": "cancelled"
+                      },
+                      {
+                        "id": 2
+                      }
+                    ]
+                  ],
+                  "expected": [
+                    {
+                      "id": 2
+                    }
+                  ]
+                }
+              ]
+            },
+            "reference_implementation": "def open_jobs(jobs):\n    return [j for j in jobs if j.get('status') not in ('done', 'cancelled')]\n",
+            "implementation_paths": [
+              "jobs/filtering.py"
+            ],
+            "feedback_command": "python3 check_open_jobs.py"
+          },
+          "wrong_files": {
+            "jobs/filtering.py": "def open_jobs(jobs):\n    return [j for j in jobs if j.get('status') != 'done']\n"
+          },
+          "wrong_reason": "Keeps cancelled jobs."
+        }
+      ]
+    },
+    {
+      "original_task_id": "locale-fallback",
+      "family_id": "harness/locale-fallback",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/locale-fallback",
+            "prompt": "Repair `i18n/messages.py`: Look up the exact locale; otherwise try its language before '-', then the 'default' key, then None. Existing empty strings are valid translations.\nThe existing function is `localize`. Run `python3 check_locale_fallback.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "i18n/messages.py": "def localize(messages, locale):\n    return messages.get(locale, messages.get('default'))\n",
+              "check_locale_fallback.py": "from i18n.messages import localize\nassert localize(*[{'en-US': 'Howdy', 'default': 'Hi'}, 'en-US']) == 'Howdy'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "i18n/messages.py",
+              "function_name": "localize",
+              "cases": [
+                {
+                  "args": [
+                    {
+                      "en": "Hello",
+                      "default": "Hi"
+                    },
+                    "en-GB"
+                  ],
+                  "expected": "Hello"
+                },
+                {
+                  "args": [
+                    {
+                      "fr": ""
+                    },
+                    "fr-FR"
+                  ],
+                  "expected": ""
+                }
+              ]
+            },
+            "reference_implementation": "def localize(messages, locale):\n    for key in (locale, locale.split('-', 1)[0], 'default'):\n        if key in messages: return messages[key]\n    return None\n",
+            "implementation_paths": [
+              "i18n/messages.py"
+            ],
+            "feedback_command": "python3 check_locale_fallback.py"
+          },
+          "wrong_files": {
+            "i18n/messages.py": "def localize(messages, locale):\n    return messages.get(locale, messages.get('default'))\n"
+          },
+          "wrong_reason": "Skips the language fallback."
+        }
+      ]
+    },
+    {
+      "original_task_id": "missing-defaults",
+      "family_id": "harness/missing-defaults",
+      "split": "train",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/missing-defaults",
+            "prompt": "Repair `settings/defaults.py`: Return defaults merged with supplied settings; supplied False, 0, empty strings and None must all override defaults. Do not mutate either input.\nThe existing function is `with_defaults`. Run `python3 check_missing_defaults.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "settings/defaults.py": "def with_defaults(settings, defaults):\n    return {k: settings.get(k) or v for k, v in defaults.items()} | {k: v for k, v in settings.items() if k not in defaults}\n",
+              "check_missing_defaults.py": "from settings.defaults import with_defaults\nassert with_defaults(*[{'mode': 'fast'}, {'mode': 'slow', 'n': 2}]) == {'mode': 'fast', 'n': 2}\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "settings/defaults.py",
+              "function_name": "with_defaults",
+              "cases": [
+                {
+                  "args": [
+                    {
+                      "enabled": false,
+                      "n": 0,
+                      "tag": "",
+                      "value": null
+                    },
+                    {
+                      "enabled": true,
+                      "n": 5,
+                      "tag": "x",
+                      "value": 9
+                    }
+                  ],
+                  "expected": {
+                    "enabled": false,
+                    "n": 0,
+                    "tag": "",
+                    "value": null
+                  }
+                }
+              ]
+            },
+            "reference_implementation": "def with_defaults(settings, defaults):\n    return defaults | settings\n",
+            "implementation_paths": [
+              "settings/defaults.py"
+            ],
+            "feedback_command": "python3 check_missing_defaults.py"
+          },
+          "wrong_files": {
+            "settings/defaults.py": "def with_defaults(settings, defaults):\n    return {k: settings.get(k) or v for k, v in defaults.items()} | {k: v for k, v in settings.items() if k not in defaults}\n"
+          },
+          "wrong_reason": "Replaces valid falsey settings with defaults."
+        }
+      ]
+    },
+    {
+      "original_task_id": "nested-setting",
+      "family_id": "harness/nested-setting",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/nested-setting",
+            "prompt": "Repair `settings/lookup.py`: Traverse a nonempty dot-separated key path through nested dictionaries. Return None when a key is absent or an intermediate value is not a dictionary.\nThe existing function is `lookup`. Run `python3 check_nested_setting.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "settings/lookup.py": "def lookup(data, path):\n    return data.get(path)\n",
+              "check_nested_setting.py": "from settings.lookup import lookup\nassert lookup(*[{'x': 1}, 'x']) == 1\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "settings/lookup.py",
+              "function_name": "lookup",
+              "cases": [
+                {
+                  "args": [
+                    {
+                      "db": {
+                        "port": 5432
+                      }
+                    },
+                    "db.port"
+                  ],
+                  "expected": 5432
+                },
+                {
+                  "args": [
+                    {
+                      "db": 3
+                    },
+                    "db.port"
+                  ],
+                  "expected": null
+                }
+              ]
+            },
+            "reference_implementation": "def lookup(data, path):\n    for key in path.split('.'):\n        if not isinstance(data, dict) or key not in data: return None\n        data = data[key]\n    return data\n",
+            "implementation_paths": [
+              "settings/lookup.py"
+            ],
+            "feedback_command": "python3 check_nested_setting.py"
+          },
+          "wrong_files": {
+            "settings/lookup.py": "def lookup(data, path):\n    return data.get(path)\n"
+          },
+          "wrong_reason": "Only handles top-level keys."
+        }
+      ]
+    },
+    {
+      "original_task_id": "duration-units",
+      "family_id": "harness/duration-units",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/duration-units",
+            "prompt": "Repair `timing/durations.py`: Convert one nonnegative integer followed by s, m or h to seconds, allowing surrounding whitespace. Return None for invalid text.\nThe existing function is `duration_seconds`. Run `python3 check_duration_units.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "timing/durations.py": "import re\ndef duration_seconds(text):\n    match = re.fullmatch(r'(\\d+)([smh])', text.strip())\n    return int(match[1]) if match else None\n",
+              "check_duration_units.py": "from timing.durations import duration_seconds\nassert duration_seconds(*['12s']) == 12\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "timing/durations.py",
+              "function_name": "duration_seconds",
+              "cases": [
+                {
+                  "args": [
+                    " 2m "
+                  ],
+                  "expected": 120
+                },
+                {
+                  "args": [
+                    "1h"
+                  ],
+                  "expected": 3600
+                },
+                {
+                  "args": [
+                    "-2m"
+                  ],
+                  "expected": null
+                }
+              ]
+            },
+            "reference_implementation": "import re\ndef duration_seconds(text):\n    match = re.fullmatch(r'(\\d+)([smh])', text.strip())\n    return int(match[1]) * {'s': 1, 'm': 60, 'h': 3600}[match[2]] if match else None\n",
+            "implementation_paths": [
+              "timing/durations.py"
+            ],
+            "feedback_command": "python3 check_duration_units.py"
+          },
+          "wrong_files": {
+            "timing/durations.py": "import re\ndef duration_seconds(text):\n    match = re.fullmatch(r'(\\d+)([smh])', text.strip())\n    return int(match[1]) if match else None\n"
+          },
+          "wrong_reason": "Ignores the unit multiplier."
+        }
+      ]
+    },
+    {
+      "original_task_id": "query-encoding",
+      "family_id": "harness/query-encoding",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/query-encoding",
+            "prompt": "Repair `web/query.py`: Return URL query encoding of a flat string dictionary with keys sorted lexically. Apply standard form escaping; an empty dictionary gives an empty string.\nThe existing function is `encode_query`. Run `python3 check_query_encoding.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "web/query.py": "def encode_query(values):\n    return '&'.join(k + '=' + v for k, v in sorted(values.items()))\n",
+              "check_query_encoding.py": "from web.query import encode_query\nassert encode_query(*[{'a': '1'}]) == 'a=1'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "web/query.py",
+              "function_name": "encode_query",
+              "cases": [
+                {
+                  "args": [
+                    {
+                      "z": "a&b",
+                      "a": "hello world"
+                    }
+                  ],
+                  "expected": "a=hello+world&z=a%26b"
+                },
+                {
+                  "args": [
+                    {}
+                  ],
+                  "expected": ""
+                }
+              ]
+            },
+            "reference_implementation": "from urllib.parse import urlencode\ndef encode_query(values):\n    return urlencode(sorted(values.items()))\n",
+            "implementation_paths": [
+              "web/query.py"
+            ],
+            "feedback_command": "python3 check_query_encoding.py"
+          },
+          "wrong_files": {
+            "web/query.py": "def encode_query(values):\n    return '&'.join(k + '=' + v for k, v in sorted(values.items()))\n"
+          },
+          "wrong_reason": "Does not escape reserved characters."
+        }
+      ]
+    },
+    {
+      "original_task_id": "currency-rounding",
+      "family_id": "harness/currency-rounding",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/currency-rounding",
+            "prompt": "Repair `billing/decimal.py`: Round a decimal string to two decimal places using decimal ROUND_HALF_UP and return exactly two fractional digits.\nThe existing function is `money`. Run `python3 check_currency_rounding.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "billing/decimal.py": "def money(text):\n    return f'{float(text):.2f}'\n",
+              "check_currency_rounding.py": "from billing.decimal import money\nassert money(*['1.2']) == '1.20'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "billing/decimal.py",
+              "function_name": "money",
+              "cases": [
+                {
+                  "args": [
+                    "2.675"
+                  ],
+                  "expected": "2.68"
+                },
+                {
+                  "args": [
+                    "1.005"
+                  ],
+                  "expected": "1.01"
+                },
+                {
+                  "args": [
+                    "-1.005"
+                  ],
+                  "expected": "-1.01"
+                }
+              ]
+            },
+            "reference_implementation": "from decimal import Decimal, ROUND_HALF_UP\ndef money(text):\n    return str(Decimal(text).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))\n",
+            "implementation_paths": [
+              "billing/decimal.py"
+            ],
+            "feedback_command": "python3 check_currency_rounding.py"
+          },
+          "wrong_files": {
+            "billing/decimal.py": "def money(text):\n    return f'{float(text):.2f}'\n"
+          },
+          "wrong_reason": "Uses binary floating-point and the wrong tie rounding."
+        }
+      ]
+    },
+    {
+      "original_task_id": "header-value",
+      "family_id": "harness/header-value",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/header-value",
+            "prompt": "Repair `parsing/header.py`: Split a header at the first colon and return the stripped value, including any later colons; lines with no colon return None.\nThe existing function is `header_value`. Run `python3 check_header_value.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "parsing/header.py": "def header_value(line):\n    return line.split(':')[1].strip() if ':' in line else None\n",
+              "check_header_value.py": "from parsing.header import header_value\nassert header_value(*['Name: Ada']) == 'Ada'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "parsing/header.py",
+              "function_name": "header_value",
+              "cases": [
+                {
+                  "args": [
+                    "Time: 12:30:00"
+                  ],
+                  "expected": "12:30:00"
+                },
+                {
+                  "args": [
+                    "bad"
+                  ],
+                  "expected": null
+                }
+              ]
+            },
+            "reference_implementation": "def header_value(line):\n    return line.split(':', 1)[1].strip() if ':' in line else None\n",
+            "implementation_paths": [
+              "parsing/header.py"
+            ],
+            "feedback_command": "python3 check_header_value.py"
+          },
+          "wrong_files": {
+            "parsing/header.py": "def header_value(line):\n    return line.split(':')[1].strip() if ':' in line else None\n"
+          },
+          "wrong_reason": "Drops colons inside the value."
+        }
+      ]
+    },
+    {
+      "original_task_id": "tab-stops",
+      "family_id": "harness/tab-stops",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/tab-stops",
+            "prompt": "Repair `display/tabs.py`: Expand tabs to the next multiple-of-four column using standard str.expandtabs semantics, including after non-tab characters.\nThe existing function is `expand_tabs`. Run `python3 check_tab_stops.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "display/tabs.py": "def expand_tabs(text):\n    return text.replace('\\t', '    ')\n",
+              "check_tab_stops.py": "from display.tabs import expand_tabs\nassert expand_tabs(*['\\tx']) == '    x'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "display/tabs.py",
+              "function_name": "expand_tabs",
+              "cases": [
+                {
+                  "args": [
+                    "ab\tx"
+                  ],
+                  "expected": "ab  x"
+                },
+                {
+                  "args": [
+                    "a\tb\tc"
+                  ],
+                  "expected": "a   b   c"
+                }
+              ]
+            },
+            "reference_implementation": "def expand_tabs(text):\n    return text.expandtabs(4)\n",
+            "implementation_paths": [
+              "display/tabs.py"
+            ],
+            "feedback_command": "python3 check_tab_stops.py"
+          },
+          "wrong_files": {
+            "display/tabs.py": "def expand_tabs(text):\n    return text.replace('\\t', '    ')\n"
+          },
+          "wrong_reason": "Uses fixed spaces instead of tab stops."
+        }
+      ]
+    },
+    {
+      "original_task_id": "named-template",
+      "family_id": "harness/named-template",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/named-template",
+            "prompt": "Repair `templates/render.py`: Replace {name} placeholders when name is in the supplied dictionary; keep unknown placeholders verbatim. Names contain only ASCII letters, digits and underscores. Values are strings.\nThe existing function is `render`. Run `python3 check_named_template.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "templates/render.py": "import re\ndef render(text, values):\n    return re.sub(r'\\{([A-Za-z0-9_]+)\\}', lambda m: values.get(m[1], ''), text)\n",
+              "check_named_template.py": "from templates.render import render\nassert render(*['Hi {user}', {'user': 'Ada'}]) == 'Hi Ada'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "templates/render.py",
+              "function_name": "render",
+              "cases": [
+                {
+                  "args": [
+                    "{user}:{missing}",
+                    {
+                      "user": "Ada"
+                    }
+                  ],
+                  "expected": "Ada:{missing}"
+                },
+                {
+                  "args": [
+                    "{x}{x}",
+                    {
+                      "x": "!"
+                    }
+                  ],
+                  "expected": "!!"
+                }
+              ]
+            },
+            "reference_implementation": "import re\ndef render(text, values):\n    return re.sub(r'\\{([A-Za-z0-9_]+)\\}', lambda m: values.get(m[1], m[0]), text)\n",
+            "implementation_paths": [
+              "templates/render.py"
+            ],
+            "feedback_command": "python3 check_named_template.py"
+          },
+          "wrong_files": {
+            "templates/render.py": "import re\ndef render(text, values):\n    return re.sub(r'\\{([A-Za-z0-9_]+)\\}', lambda m: values.get(m[1], ''), text)\n"
+          },
+          "wrong_reason": "Deletes unknown placeholders."
+        }
+      ]
+    },
+    {
+      "original_task_id": "ansi-colors",
+      "family_id": "harness/ansi-colors",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/ansi-colors",
+            "prompt": "Repair `terminal/colors.py`: Remove ANSI SGR color sequences ESC[ followed by zero or more digits/semicolons and m. Preserve ordinary bracket text and other escape sequences.\nThe existing function is `strip_colors`. Run `python3 check_ansi_colors.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "terminal/colors.py": "import re\ndef strip_colors(text):\n    return re.sub(r'\\x1b\\[[0-9]+m', '', text)\n",
+              "check_ansi_colors.py": "from terminal.colors import strip_colors\nassert strip_colors(*['\\x1b[31mred\\x1b[0m']) == 'red'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "terminal/colors.py",
+              "function_name": "strip_colors",
+              "cases": [
+                {
+                  "args": [
+                    "\u001b[1;32mgreen\u001b[m"
+                  ],
+                  "expected": "green"
+                },
+                {
+                  "args": [
+                    "[31m plain"
+                  ],
+                  "expected": "[31m plain"
+                }
+              ]
+            },
+            "reference_implementation": "import re\ndef strip_colors(text):\n    return re.sub(r'\\x1b\\[[0-9;]*m', '', text)\n",
+            "implementation_paths": [
+              "terminal/colors.py"
+            ],
+            "feedback_command": "python3 check_ansi_colors.py"
+          },
+          "wrong_files": {
+            "terminal/colors.py": "import re\ndef strip_colors(text):\n    return re.sub(r'\\x1b\\[[0-9]+m', '', text)\n"
+          },
+          "wrong_reason": "Misses empty resets and multi-parameter colors."
+        }
+      ]
+    },
+    {
+      "original_task_id": "network-port",
+      "family_id": "harness/network-port",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/network-port",
+            "prompt": "Repair `network/ports.py`: Accept ASCII digit strings representing integers 1..65535 inclusive. Return that integer; other strings return None. Leading zeroes are permitted, whitespace is not.\nThe existing function is `valid_port`. Run `python3 check_network_port.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "network/ports.py": "def valid_port(text):\n    return int(text) if text.isdigit() else None\n",
+              "check_network_port.py": "from network.ports import valid_port\nassert valid_port(*['8080']) == 8080\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "network/ports.py",
+              "function_name": "valid_port",
+              "cases": [
+                {
+                  "args": [
+                    "0"
+                  ],
+                  "expected": null
+                },
+                {
+                  "args": [
+                    "65536"
+                  ],
+                  "expected": null
+                },
+                {
+                  "args": [
+                    "65535"
+                  ],
+                  "expected": 65535
+                },
+                {
+                  "args": [
+                    " 80"
+                  ],
+                  "expected": null
+                }
+              ]
+            },
+            "reference_implementation": "def valid_port(text):\n    if not text or not text.isascii() or not text.isdigit(): return None\n    value = int(text)\n    return value if 1 <= value <= 65535 else None\n",
+            "implementation_paths": [
+              "network/ports.py"
+            ],
+            "feedback_command": "python3 check_network_port.py"
+          },
+          "wrong_files": {
+            "network/ports.py": "def valid_port(text):\n    return int(text) if text.isdigit() else None\n"
+          },
+          "wrong_reason": "Does not enforce the port range."
+        }
+      ]
+    },
+    {
+      "original_task_id": "priority-queue",
+      "family_id": "harness/priority-queue",
+      "split": "dev",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/priority-queue",
+            "prompt": "Repair `jobs/priorities.py`: Sort records stably by urgent, normal, low priority in that order; missing or unknown priorities sort after low.\nThe existing function is `priority_order`. Run `python3 check_priority_queue.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+            "initial_files": {
+              "jobs/priorities.py": "def priority_order(records):\n    return sorted(records, key=lambda r: r.get('priority', ''))\n",
+              "check_priority_queue.py": "from jobs.priorities import priority_order\nassert priority_order(*[[{'id': 'a', 'priority': 'normal'}]]) == [{'id': 'a', 'priority': 'normal'}]\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "module_path": "jobs/priorities.py",
+              "function_name": "priority_order",
+              "cases": [
+                {
+                  "args": [
+                    [
+                      {
+                        "id": "l",
+                        "priority": "low"
+                      },
+                      {
+                        "id": "u",
+                        "priority": "urgent"
+                      },
+                      {
+                        "id": "n",
+                        "priority": "normal"
+                      },
+                      {
+                        "id": "x"
+                      }
+                    ]
+                  ],
+                  "expected": [
+                    {
+                      "id": "u",
+                      "priority": "urgent"
+                    },
+                    {
+                      "id": "n",
+                      "priority": "normal"
+                    },
+                    {
+                      "id": "l",
+                      "priority": "low"
+                    },
+                    {
+                      "id": "x"
+                    }
+                  ]
+                }
+              ]
+            },
+            "reference_implementation": "def priority_order(records):\n    order = {'urgent': 0, 'normal': 1, 'low': 2}\n    return sorted(records, key=lambda r: order.get(r.get('priority'), 3))\n",
+            "implementation_paths": [
+              "jobs/priorities.py"
+            ],
+            "feedback_command": "python3 check_priority_queue.py"
+          },
+          "wrong_files": {
+            "jobs/priorities.py": "def priority_order(records):\n    return sorted(records, key=lambda r: r.get('priority', ''))\n"
+          },
+          "wrong_reason": "Sorts priorities alphabetically."
+        }
+      ]
+    },
+    {
+      "original_task_id": "stock-value",
+      "family_id": "harness/stock-value",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/stock-value",
+            "prompt": "Complete the workspace task described in `docs/stock-value.md` using the actual files here. Implement `tools/stock_value.py` and run `python3 verify_stock_value.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "data/stock.json": "[\n  {\n    \"sku\": \"oak\",\n    \"qty\": 3,\n    \"unit_cents\": 125\n  },\n  {\n    \"sku\": \"elm\",\n    \"qty\": 0,\n    \"unit_cents\": 400\n  }\n]\n",
+              "docs/stock-value.md": "Read data/stock.json. Return a mapping of SKU to quantity * unit_cents.\nWrite the JSON result to reports/stock-value.json.\n",
+              "verify_stock_value.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/stock_value.py'], check=True)\nresult = json.loads(Path('reports/stock-value.json').read_text())\nassert result['oak'] == 375\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "data/stock.json": "[\n  {\n    \"sku\": \"oak\",\n    \"qty\": 3,\n    \"unit_cents\": 125\n  },\n  {\n    \"sku\": \"elm\",\n    \"qty\": 0,\n    \"unit_cents\": 400\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/stock_value.py'], check=True)\n    assert json.loads(Path('reports/stock-value.json').read_text()) == {'oak': 375, 'elm': 0}\n    Path('data/stock.json').write_text('[{\"sku\": \"ash\", \"qty\": 2, \"unit_cents\": 77}]\\n')\n    subprocess.run([sys.executable, 'tools/stock_value.py'], check=True)\n    assert json.loads(Path('reports/stock-value.json').read_text()) == {'ash': 154}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('data/stock.json').read_text())\nresult = {r['sku']: r['qty'] * r['unit_cents'] for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/stock-value.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/stock_value.py"
+            ],
+            "feedback_command": "python3 verify_stock_value.py"
+          },
+          "wrong_files": {
+            "tools/stock_value.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('data/stock.json').read_text())\nresult = {r['sku']: r['unit_cents'] for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/stock-value.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Ignores quantities."
+        }
+      ]
+    },
+    {
+      "original_task_id": "service-owners",
+      "family_id": "harness/service-owners",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/service-owners",
+            "prompt": "Complete the workspace task described in `docs/service-owners.md` using the actual files here. Implement `tools/service_owners.py` and run `python3 verify_service_owners.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "config/services.json": "{\n  \"api\": \"blue\",\n  \"ui\": \"red\",\n  \"batch\": \"green\"\n}\n",
+              "config/teams.json": "{\n  \"blue\": \"sam\",\n  \"red\": \"lee\"\n}\n",
+              "docs/service-owners.md": "Read config/services.json and config/teams.json. Return each service mapped to its team's contact; missing teams map to null.\nWrite the JSON result to reports/service-owners.json.\n",
+              "verify_service_owners.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\nresult = json.loads(Path('reports/service-owners.json').read_text())\nassert result['api'] == 'sam'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "config/services.json": "{\n  \"api\": \"blue\",\n  \"ui\": \"red\",\n  \"batch\": \"green\"\n}\n",
+                "config/teams.json": "{\n  \"blue\": \"sam\",\n  \"red\": \"lee\"\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\n    assert json.loads(Path('reports/service-owners.json').read_text()) == {'api': 'sam', 'ui': 'lee', 'batch': None}\n    Path('config/teams.json').write_text('{\"blue\": \"new\", \"green\": \"pat\"}\\n')\n    subprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\n    assert json.loads(Path('reports/service-owners.json').read_text()) == {'api': 'new', 'ui': None, 'batch': 'pat'}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nservices = json.loads(Path('config/services.json').read_text())\nteams = json.loads(Path('config/teams.json').read_text())\nresult = {s: teams.get(t) for s, t in services.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/service-owners.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/service_owners.py"
+            ],
+            "feedback_command": "python3 verify_service_owners.py"
+          },
+          "wrong_files": {
+            "tools/service_owners.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nservices = json.loads(Path('config/services.json').read_text())\nteams = json.loads(Path('config/teams.json').read_text())\nresult = {s: t for s, t in services.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/service-owners.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Reports team names instead of contacts."
+        }
+      ]
+    },
+    {
+      "original_task_id": "build-flags",
+      "family_id": "harness/build-flags",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/build-flags",
+            "prompt": "Complete the workspace task described in `docs/build-flags.md` using the actual files here. Implement `tools/build_flags.py` and run `python3 verify_build_flags.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "config/build.json": "{\n  \"cache\": true,\n  \"trace\": false,\n  \"metrics\": true,\n  \"legacy\": \"yes\"\n}\n",
+              "docs/build-flags.md": "Read config/build.json. Output sorted feature names whose enabled value is exactly true.\nWrite the JSON result to reports/build-flags.json.\n",
+              "verify_build_flags.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/build_flags.py'], check=True)\nresult = json.loads(Path('reports/build-flags.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'cache'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "config/build.json": "{\n  \"cache\": true,\n  \"trace\": false,\n  \"metrics\": true,\n  \"legacy\": \"yes\"\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/build_flags.py'], check=True)\n    assert json.loads(Path('reports/build-flags.json').read_text()) == ['cache', 'metrics']\n    Path('config/build.json').write_text('{\"z\": false, \"a\": true, \"b\": 1}\\n')\n    subprocess.run([sys.executable, 'tools/build_flags.py'], check=True)\n    assert json.loads(Path('reports/build-flags.json').read_text()) == ['a']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nflags = json.loads(Path('config/build.json').read_text())\nresult = sorted(k for k, v in flags.items() if v is True)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/build-flags.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/build_flags.py"
+            ],
+            "feedback_command": "python3 verify_build_flags.py"
+          },
+          "wrong_files": {
+            "tools/build_flags.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nflags = json.loads(Path('config/build.json').read_text())\nresult = sorted(k for k, v in flags.items() if v)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/build-flags.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Treats truthy non-boolean values as enabled."
+        }
+      ]
+    },
+    {
+      "original_task_id": "log-counts",
+      "family_id": "harness/log-counts",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/log-counts",
+            "prompt": "Complete the workspace task described in `docs/log-counts.md` using the actual files here. Implement `tools/log_counts.py` and run `python3 verify_log_counts.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "data/events.json": "[\n  {\n    \"level\": \"info\"\n  },\n  {\n    \"level\": \"error\"\n  },\n  {\n    \"level\": \"info\"\n  },\n  {}\n]\n",
+              "docs/log-counts.md": "Read data/events.json. Count records by their level; missing levels count as unknown.\nWrite the JSON result to reports/log-counts.json.\n",
+              "verify_log_counts.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/log_counts.py'], check=True)\nresult = json.loads(Path('reports/log-counts.json').read_text())\nassert result['info'] == 2\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "data/events.json": "[\n  {\n    \"level\": \"info\"\n  },\n  {\n    \"level\": \"error\"\n  },\n  {\n    \"level\": \"info\"\n  },\n  {}\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/log_counts.py'], check=True)\n    assert json.loads(Path('reports/log-counts.json').read_text()) == {'info': 2, 'error': 1, 'unknown': 1}\n    Path('data/events.json').write_text('[{}, {}, {\"level\": \"debug\"}]\\n')\n    subprocess.run([sys.executable, 'tools/log_counts.py'], check=True)\n    assert json.loads(Path('reports/log-counts.json').read_text()) == {'unknown': 2, 'debug': 1}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nevents = json.loads(Path('data/events.json').read_text())\nresult = dict(Counter(e.get('level', 'unknown') for e in events))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/log-counts.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/log_counts.py"
+            ],
+            "feedback_command": "python3 verify_log_counts.py"
+          },
+          "wrong_files": {
+            "tools/log_counts.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nevents = json.loads(Path('data/events.json').read_text())\nresult = dict(Counter(e['level'] for e in events if 'level' in e))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/log-counts.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Drops records without a level."
+        }
+      ]
+    },
+    {
+      "original_task_id": "latest-package",
+      "family_id": "harness/latest-package",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/latest-package",
+            "prompt": "Complete the workspace task described in `docs/latest-package.md` using the actual files here. Implement `tools/latest_package.py` and run `python3 verify_latest_package.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "registry/packages.json": "[\n  {\n    \"name\": \"a\",\n    \"version\": \"2.0\"\n  },\n  {\n    \"name\": \"b\",\n    \"version\": \"1.3\"\n  },\n  {\n    \"name\": \"a\",\n    \"version\": \"1.0\"\n  }\n]\n",
+              "docs/latest-package.md": "Read registry/packages.json. For each package, choose the version string on its last record in file order; do not sort versions.\nWrite the JSON result to reports/latest-package.json.\n",
+              "verify_latest_package.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/latest_package.py'], check=True)\nresult = json.loads(Path('reports/latest-package.json').read_text())\nassert result['a'] == '1.0'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "registry/packages.json": "[\n  {\n    \"name\": \"a\",\n    \"version\": \"2.0\"\n  },\n  {\n    \"name\": \"b\",\n    \"version\": \"1.3\"\n  },\n  {\n    \"name\": \"a\",\n    \"version\": \"1.0\"\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/latest_package.py'], check=True)\n    assert json.loads(Path('reports/latest-package.json').read_text()) == {'a': '1.0', 'b': '1.3'}\n    Path('registry/packages.json').write_text('[{\"name\": \"c\", \"version\": \"9\"}, {\"name\": \"c\", \"version\": \"3\"}]\\n')\n    subprocess.run([sys.executable, 'tools/latest_package.py'], check=True)\n    assert json.loads(Path('reports/latest-package.json').read_text()) == {'c': '3'}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('registry/packages.json').read_text())\nresult = {r['name']: r['version'] for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/latest-package.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/latest_package.py"
+            ],
+            "feedback_command": "python3 verify_latest_package.py"
+          },
+          "wrong_files": {
+            "tools/latest_package.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('registry/packages.json').read_text())\nresult = {r['name']: r['version'] for r in reversed(rows)}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/latest-package.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Keeps first package records."
+        }
+      ]
+    },
+    {
+      "original_task_id": "route-inventory",
+      "family_id": "harness/route-inventory",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/route-inventory",
+            "prompt": "Complete the workspace task described in `docs/route-inventory.md` using the actual files here. Implement `tools/route_inventory.py` and run `python3 verify_route_inventory.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "server/routes.json": "[\n  {\n    \"method\": \"GET\",\n    \"path\": \"/z\"\n  },\n  {\n    \"method\": \"POST\",\n    \"path\": \"/a\"\n  },\n  {\n    \"method\": \"GET\",\n    \"path\": \"/z\"\n  },\n  {\n    \"method\": \"GET\",\n    \"path\": \"/b\"\n  }\n]\n",
+              "docs/route-inventory.md": "Read server/routes.json. Return sorted distinct paths for routes whose method is GET, with exact uppercase matching.\nWrite the JSON result to reports/route-inventory.json.\n",
+              "verify_route_inventory.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/route_inventory.py'], check=True)\nresult = json.loads(Path('reports/route-inventory.json').read_text())\nassert isinstance(result, list)\nassert result[0] == '/b'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "server/routes.json": "[\n  {\n    \"method\": \"GET\",\n    \"path\": \"/z\"\n  },\n  {\n    \"method\": \"POST\",\n    \"path\": \"/a\"\n  },\n  {\n    \"method\": \"GET\",\n    \"path\": \"/z\"\n  },\n  {\n    \"method\": \"GET\",\n    \"path\": \"/b\"\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/route_inventory.py'], check=True)\n    assert json.loads(Path('reports/route-inventory.json').read_text()) == ['/b', '/z']\n    Path('server/routes.json').write_text('[{\"method\": \"get\", \"path\": \"/c\"}, {\"method\": \"GET\", \"path\": \"/x\"}]\\n')\n    subprocess.run([sys.executable, 'tools/route_inventory.py'], check=True)\n    assert json.loads(Path('reports/route-inventory.json').read_text()) == ['/x']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nroutes = json.loads(Path('server/routes.json').read_text())\nresult = sorted({r['path'] for r in routes if r['method'] == 'GET'})\nPath('reports').mkdir(exist_ok=True)\nPath('reports/route-inventory.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/route_inventory.py"
+            ],
+            "feedback_command": "python3 verify_route_inventory.py"
+          },
+          "wrong_files": {
+            "tools/route_inventory.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nroutes = json.loads(Path('server/routes.json').read_text())\nresult = sorted(r['path'] for r in routes if r['method'] == 'GET')\nPath('reports').mkdir(exist_ok=True)\nPath('reports/route-inventory.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Retains duplicate routes."
+        }
+      ]
+    },
+    {
+      "original_task_id": "translation-gaps",
+      "family_id": "harness/translation-gaps",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/translation-gaps",
+            "prompt": "Complete the workspace task described in `docs/translation-gaps.md` using the actual files here. Implement `tools/translation_gaps.py` and run `python3 verify_translation_gaps.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "locales/en.json": "{\n  \"hello\": \"Hello\",\n  \"bye\": \"Bye\",\n  \"empty\": \"Empty\"\n}\n",
+              "locales/fr.json": "{\n  \"hello\": \"Bonjour\",\n  \"empty\": \"\"\n}\n",
+              "docs/translation-gaps.md": "Read locales/en.json and locales/fr.json. Return sorted English keys absent in French; empty French values are present.\nWrite the JSON result to reports/translation-gaps.json.\n",
+              "verify_translation_gaps.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/translation_gaps.py'], check=True)\nresult = json.loads(Path('reports/translation-gaps.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'bye'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "locales/en.json": "{\n  \"hello\": \"Hello\",\n  \"bye\": \"Bye\",\n  \"empty\": \"Empty\"\n}\n",
+                "locales/fr.json": "{\n  \"hello\": \"Bonjour\",\n  \"empty\": \"\"\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/translation_gaps.py'], check=True)\n    assert json.loads(Path('reports/translation-gaps.json').read_text()) == ['bye']\n    Path('locales/fr.json').write_text('{\"bye\": \"Au revoir\"}\\n')\n    subprocess.run([sys.executable, 'tools/translation_gaps.py'], check=True)\n    assert json.loads(Path('reports/translation-gaps.json').read_text()) == ['empty', 'hello']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nbase = json.loads(Path('locales/en.json').read_text())\ntarget = json.loads(Path('locales/fr.json').read_text())\nresult = sorted(set(base) - set(target))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/translation-gaps.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/translation_gaps.py"
+            ],
+            "feedback_command": "python3 verify_translation_gaps.py"
+          },
+          "wrong_files": {
+            "tools/translation_gaps.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nbase = json.loads(Path('locales/en.json').read_text())\ntarget = json.loads(Path('locales/fr.json').read_text())\nresult = sorted(k for k in base if not target.get(k))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/translation-gaps.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Treats empty translations as missing."
+        }
+      ]
+    },
+    {
+      "original_task_id": "job-buckets",
+      "family_id": "harness/job-buckets",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/job-buckets",
+            "prompt": "Complete the workspace task described in `docs/job-buckets.md` using the actual files here. Implement `tools/job_buckets.py` and run `python3 verify_job_buckets.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "queue/jobs.json": "[\n  {\n    \"id\": \"b\",\n    \"status\": \"new\"\n  },\n  {\n    \"id\": \"a\",\n    \"status\": \"done\"\n  },\n  {\n    \"id\": \"c\",\n    \"status\": \"new\"\n  }\n]\n",
+              "docs/job-buckets.md": "Read queue/jobs.json. Group ids by status, preserving input order within each group.\nWrite the JSON result to reports/job-buckets.json.\n",
+              "verify_job_buckets.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/job_buckets.py'], check=True)\nresult = json.loads(Path('reports/job-buckets.json').read_text())\nassert result['new'] == ['b', 'c']\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "queue/jobs.json": "[\n  {\n    \"id\": \"b\",\n    \"status\": \"new\"\n  },\n  {\n    \"id\": \"a\",\n    \"status\": \"done\"\n  },\n  {\n    \"id\": \"c\",\n    \"status\": \"new\"\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/job_buckets.py'], check=True)\n    assert json.loads(Path('reports/job-buckets.json').read_text()) == {'new': ['b', 'c'], 'done': ['a']}\n    Path('queue/jobs.json').write_text('[{\"id\": \"z\", \"status\": \"new\"}, {\"id\": \"a\", \"status\": \"new\"}]\\n')\n    subprocess.run([sys.executable, 'tools/job_buckets.py'], check=True)\n    assert json.loads(Path('reports/job-buckets.json').read_text()) == {'new': ['z', 'a']}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\njobs = json.loads(Path('queue/jobs.json').read_text())\nresult = {s: [j['id'] for j in jobs if j['status'] == s] for s in {j['status'] for j in jobs}}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/job-buckets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/job_buckets.py"
+            ],
+            "feedback_command": "python3 verify_job_buckets.py"
+          },
+          "wrong_files": {
+            "tools/job_buckets.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\njobs = json.loads(Path('queue/jobs.json').read_text())\nresult = {s: sorted(j['id'] for j in jobs if j['status'] == s) for s in {j['status'] for j in jobs}}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/job-buckets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Sorts ids instead of preserving file order."
+        }
+      ]
+    },
+    {
+      "original_task_id": "invoice-balance",
+      "family_id": "harness/invoice-balance",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/invoice-balance",
+            "prompt": "Complete the workspace task described in `docs/invoice-balance.md` using the actual files here. Implement `tools/invoice_balance.py` and run `python3 verify_invoice_balance.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "billing/invoices.json": "[\n  {\n    \"id\": \"i1\",\n    \"total_cents\": 700,\n    \"paid_cents\": 200\n  },\n  {\n    \"id\": \"i2\",\n    \"total_cents\": 300,\n    \"paid_cents\": 450\n  }\n]\n",
+              "docs/invoice-balance.md": "Read billing/invoices.json. Map each id to total_cents - paid_cents, including overpaid negative balances.\nWrite the JSON result to reports/invoice-balance.json.\n",
+              "verify_invoice_balance.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/invoice_balance.py'], check=True)\nresult = json.loads(Path('reports/invoice-balance.json').read_text())\nassert result['i1'] == 500\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "billing/invoices.json": "[\n  {\n    \"id\": \"i1\",\n    \"total_cents\": 700,\n    \"paid_cents\": 200\n  },\n  {\n    \"id\": \"i2\",\n    \"total_cents\": 300,\n    \"paid_cents\": 450\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/invoice_balance.py'], check=True)\n    assert json.loads(Path('reports/invoice-balance.json').read_text()) == {'i1': 500, 'i2': -150}\n    Path('billing/invoices.json').write_text('[{\"id\": \"i3\", \"total_cents\": 0, \"paid_cents\": 10}]\\n')\n    subprocess.run([sys.executable, 'tools/invoice_balance.py'], check=True)\n    assert json.loads(Path('reports/invoice-balance.json').read_text()) == {'i3': -10}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('billing/invoices.json').read_text())\nresult = {r['id']: r['total_cents'] - r['paid_cents'] for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/invoice-balance.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/invoice_balance.py"
+            ],
+            "feedback_command": "python3 verify_invoice_balance.py"
+          },
+          "wrong_files": {
+            "tools/invoice_balance.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('billing/invoices.json').read_text())\nresult = {r['id']: max(0, r['total_cents'] - r['paid_cents']) for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/invoice-balance.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Clamps overpaid balances to zero."
+        }
+      ]
+    },
+    {
+      "original_task_id": "schedule-minutes",
+      "family_id": "harness/schedule-minutes",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/schedule-minutes",
+            "prompt": "Complete the workspace task described in `docs/schedule-minutes.md` using the actual files here. Implement `tools/schedule_minutes.py` and run `python3 verify_schedule_minutes.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "schedule/shifts.json": "[\n  {\n    \"id\": \"am\",\n    \"start\": \"09:45\",\n    \"end\": \"10:15\"\n  },\n  {\n    \"id\": \"pm\",\n    \"start\": \"13:00\",\n    \"end\": \"15:30\"\n  }\n]\n",
+              "docs/schedule-minutes.md": "Read schedule/shifts.json, with same-day start/end HH:MM values. Map each id to its duration in minutes.\nWrite the JSON result to reports/schedule-minutes.json.\n",
+              "verify_schedule_minutes.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/schedule_minutes.py'], check=True)\nresult = json.loads(Path('reports/schedule-minutes.json').read_text())\nassert result['am'] == 30\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "schedule/shifts.json": "[\n  {\n    \"id\": \"am\",\n    \"start\": \"09:45\",\n    \"end\": \"10:15\"\n  },\n  {\n    \"id\": \"pm\",\n    \"start\": \"13:00\",\n    \"end\": \"15:30\"\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/schedule_minutes.py'], check=True)\n    assert json.loads(Path('reports/schedule-minutes.json').read_text()) == {'am': 30, 'pm': 150}\n    Path('schedule/shifts.json').write_text('[{\"id\": \"x\", \"start\": \"00:50\", \"end\": \"01:05\"}]\\n')\n    subprocess.run([sys.executable, 'tools/schedule_minutes.py'], check=True)\n    assert json.loads(Path('reports/schedule-minutes.json').read_text()) == {'x': 15}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('schedule/shifts.json').read_text())\nresult = {r['id']: (int(r['end'][:2]) - int(r['start'][:2])) * 60 + int(r['end'][3:]) - int(r['start'][3:]) for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/schedule-minutes.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/schedule_minutes.py"
+            ],
+            "feedback_command": "python3 verify_schedule_minutes.py"
+          },
+          "wrong_files": {
+            "tools/schedule_minutes.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('schedule/shifts.json').read_text())\nresult = {r['id']: (int(r['end'][:2]) - int(r['start'][:2])) * 60 for r in rows}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/schedule-minutes.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Ignores minute components."
+        }
+      ]
+    },
+    {
+      "original_task_id": "label-index",
+      "family_id": "harness/label-index",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/label-index",
+            "prompt": "Complete the workspace task described in `docs/label-index.md` using the actual files here. Implement `tools/label_index.py` and run `python3 verify_label_index.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "content/posts.json": "[\n  {\n    \"id\": \"p2\",\n    \"tags\": [\n      \"code\",\n      \"code\"\n    ]\n  },\n  {\n    \"id\": \"p1\",\n    \"tags\": [\n      \"code\",\n      \"news\"\n    ]\n  }\n]\n",
+              "docs/label-index.md": "Read content/posts.json. Map each tag to sorted distinct post ids; repeated tags in one post count once.\nWrite the JSON result to reports/label-index.json.\n",
+              "verify_label_index.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/label_index.py'], check=True)\nresult = json.loads(Path('reports/label-index.json').read_text())\nassert result['code'] == ['p1', 'p2']\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "content/posts.json": "[\n  {\n    \"id\": \"p2\",\n    \"tags\": [\n      \"code\",\n      \"code\"\n    ]\n  },\n  {\n    \"id\": \"p1\",\n    \"tags\": [\n      \"code\",\n      \"news\"\n    ]\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/label_index.py'], check=True)\n    assert json.loads(Path('reports/label-index.json').read_text()) == {'code': ['p1', 'p2'], 'news': ['p1']}\n    Path('content/posts.json').write_text('[{\"id\": \"p3\", \"tags\": []}]\\n')\n    subprocess.run([sys.executable, 'tools/label_index.py'], check=True)\n    assert json.loads(Path('reports/label-index.json').read_text()) == {}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nposts = json.loads(Path('content/posts.json').read_text())\nresult = {t: sorted({p['id'] for p in posts if t in p['tags']}) for t in {t for p in posts for t in p['tags']}}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/label-index.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/label_index.py"
+            ],
+            "feedback_command": "python3 verify_label_index.py"
+          },
+          "wrong_files": {
+            "tools/label_index.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nposts = json.loads(Path('content/posts.json').read_text())\nresult = {t: [p['id'] for p in posts for tag in p['tags'] if tag == t] for t in {t for p in posts for t in p['tags']}}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/label-index.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Duplicates ids for repeated tags and keeps unsorted order."
+        }
+      ]
+    },
+    {
+      "original_task_id": "manifest-size",
+      "family_id": "harness/manifest-size",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/manifest-size",
+            "prompt": "Complete the workspace task described in `docs/manifest-size.md` using the actual files here. Implement `tools/manifest_size.py` and run `python3 verify_manifest_size.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "artifacts/manifest.json": "[\n  {\n    \"kind\": \"file\",\n    \"bytes\": 13\n  },\n  {\n    \"kind\": \"directory\",\n    \"bytes\": 4096\n  },\n  {\n    \"kind\": \"file\",\n    \"bytes\": 7\n  }\n]\n",
+              "docs/manifest-size.md": "Read artifacts/manifest.json. Sum bytes of file entries only, excluding directory entries, and report file_count and total_bytes.\nWrite the JSON result to reports/manifest-size.json.\n",
+              "verify_manifest_size.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/manifest_size.py'], check=True)\nresult = json.loads(Path('reports/manifest-size.json').read_text())\nassert result['file_count'] == 2\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "artifacts/manifest.json": "[\n  {\n    \"kind\": \"file\",\n    \"bytes\": 13\n  },\n  {\n    \"kind\": \"directory\",\n    \"bytes\": 4096\n  },\n  {\n    \"kind\": \"file\",\n    \"bytes\": 7\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/manifest_size.py'], check=True)\n    assert json.loads(Path('reports/manifest-size.json').read_text()) == {'file_count': 2, 'total_bytes': 20}\n    Path('artifacts/manifest.json').write_text('[{\"kind\": \"directory\", \"bytes\": 100}]\\n')\n    subprocess.run([sys.executable, 'tools/manifest_size.py'], check=True)\n    assert json.loads(Path('reports/manifest-size.json').read_text()) == {'file_count': 0, 'total_bytes': 0}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nentries = json.loads(Path('artifacts/manifest.json').read_text())\nresult = {'file_count': sum(e['kind'] == 'file' for e in entries), 'total_bytes': sum(e['bytes'] for e in entries if e['kind'] == 'file')}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/manifest-size.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/manifest_size.py"
+            ],
+            "feedback_command": "python3 verify_manifest_size.py"
+          },
+          "wrong_files": {
+            "tools/manifest_size.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nentries = json.loads(Path('artifacts/manifest.json').read_text())\nresult = {'file_count': sum(e['kind'] == 'file' for e in entries), 'total_bytes': sum(e['bytes'] for e in entries)}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/manifest-size.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Adds directory sizes."
+        }
+      ]
+    },
+    {
+      "original_task_id": "threshold-alerts",
+      "family_id": "harness/threshold-alerts",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/threshold-alerts",
+            "prompt": "Complete the workspace task described in `docs/threshold-alerts.md` using the actual files here. Implement `tools/threshold_alerts.py` and run `python3 verify_threshold_alerts.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "metrics/readings.json": "{\n  \"cpu\": 80,\n  \"mem\": 70,\n  \"disk\": 12\n}\n",
+              "config/limits.json": "{\n  \"cpu\": 80,\n  \"mem\": 60\n}\n",
+              "docs/threshold-alerts.md": "Read metrics/readings.json and config/limits.json. Return sorted metric names whose value is strictly above their configured limit. Ignore unconfigured metrics.\nWrite the JSON result to reports/threshold-alerts.json.\n",
+              "verify_threshold_alerts.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/threshold_alerts.py'], check=True)\nresult = json.loads(Path('reports/threshold-alerts.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'mem'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "metrics/readings.json": "{\n  \"cpu\": 80,\n  \"mem\": 70,\n  \"disk\": 12\n}\n",
+                "config/limits.json": "{\n  \"cpu\": 80,\n  \"mem\": 60\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/threshold_alerts.py'], check=True)\n    assert json.loads(Path('reports/threshold-alerts.json').read_text()) == ['mem']\n    Path('metrics/readings.json').write_text('{\"cpu\": 81, \"mem\": 60}\\n')\n    subprocess.run([sys.executable, 'tools/threshold_alerts.py'], check=True)\n    assert json.loads(Path('reports/threshold-alerts.json').read_text()) == ['cpu']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nreadings = json.loads(Path('metrics/readings.json').read_text())\nlimits = json.loads(Path('config/limits.json').read_text())\nresult = sorted(k for k, v in readings.items() if k in limits and v > limits[k])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/threshold-alerts.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/threshold_alerts.py"
+            ],
+            "feedback_command": "python3 verify_threshold_alerts.py"
+          },
+          "wrong_files": {
+            "tools/threshold_alerts.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nreadings = json.loads(Path('metrics/readings.json').read_text())\nlimits = json.loads(Path('config/limits.json').read_text())\nresult = sorted(k for k, v in readings.items() if k in limits and v >= limits[k])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/threshold-alerts.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Alerts at equality."
+        }
+      ]
+    },
+    {
+      "original_task_id": "extension-policy",
+      "family_id": "harness/extension-policy",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/extension-policy",
+            "prompt": "Complete the workspace task described in `docs/extension-policy.md` using the actual files here. Implement `tools/extension_policy.py` and run `python3 verify_extension_policy.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "files/list.json": "[\n  \"b.TXT\",\n  \"a.py\",\n  \"c.tar.gz\",\n  \"README\"\n]\n",
+              "config/extensions.json": "[\n  \".txt\",\n  \".py\"\n]\n",
+              "docs/extension-policy.md": "Read files/list.json and config/extensions.json (an allowed-extension list). Return sorted paths whose lowercase final suffix is allowed.\nWrite the JSON result to reports/extension-policy.json.\n",
+              "verify_extension_policy.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/extension_policy.py'], check=True)\nresult = json.loads(Path('reports/extension-policy.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'a.py'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "files/list.json": "[\n  \"b.TXT\",\n  \"a.py\",\n  \"c.tar.gz\",\n  \"README\"\n]\n",
+                "config/extensions.json": "[\n  \".txt\",\n  \".py\"\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/extension_policy.py'], check=True)\n    assert json.loads(Path('reports/extension-policy.json').read_text()) == ['a.py', 'b.TXT']\n    Path('config/extensions.json').write_text('[\".gz\"]\\n')\n    subprocess.run([sys.executable, 'tools/extension_policy.py'], check=True)\n    assert json.loads(Path('reports/extension-policy.json').read_text()) == ['c.tar.gz']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\npaths = json.loads(Path('files/list.json').read_text())\nallowed = json.loads(Path('config/extensions.json').read_text())\nresult = sorted(p for p in paths if Path(p).suffix.lower() in allowed)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/extension-policy.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/extension_policy.py"
+            ],
+            "feedback_command": "python3 verify_extension_policy.py"
+          },
+          "wrong_files": {
+            "tools/extension_policy.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\npaths = json.loads(Path('files/list.json').read_text())\nallowed = json.loads(Path('config/extensions.json').read_text())\nresult = sorted(p for p in paths if Path(p).suffix in allowed)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/extension-policy.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Uses case-sensitive extensions."
+        }
+      ]
+    },
+    {
+      "original_task_id": "deduplicated-mail",
+      "family_id": "harness/deduplicated-mail",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/deduplicated-mail",
+            "prompt": "Complete the workspace task described in `docs/deduplicated-mail.md` using the actual files here. Implement `tools/deduplicated_mail.py` and run `python3 verify_deduplicated_mail.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "contacts/people.json": "[\n  {\n    \"email\": \" ADA@X \"\n  },\n  {\n    \"email\": \"ada@x\"\n  },\n  {\n    \"email\": \"\"\n  },\n  {}\n]\n",
+              "docs/deduplicated-mail.md": "Read contacts/people.json. Output sorted lowercase email addresses, stripping whitespace and dropping empty or absent emails, with duplicates removed.\nWrite the JSON result to reports/deduplicated-mail.json.\n",
+              "verify_deduplicated_mail.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/deduplicated_mail.py'], check=True)\nresult = json.loads(Path('reports/deduplicated-mail.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'ada@x'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "contacts/people.json": "[\n  {\n    \"email\": \" ADA@X \"\n  },\n  {\n    \"email\": \"ada@x\"\n  },\n  {\n    \"email\": \"\"\n  },\n  {}\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/deduplicated_mail.py'], check=True)\n    assert json.loads(Path('reports/deduplicated-mail.json').read_text()) == ['ada@x']\n    Path('contacts/people.json').write_text('[{\"email\": \"Z@Y\"}, {\"email\": \" A@B \"}]\\n')\n    subprocess.run([sys.executable, 'tools/deduplicated_mail.py'], check=True)\n    assert json.loads(Path('reports/deduplicated-mail.json').read_text()) == ['a@b', 'z@y']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\npeople = json.loads(Path('contacts/people.json').read_text())\nresult = sorted({p.get('email', '').strip().lower() for p in people} - {''})\nPath('reports').mkdir(exist_ok=True)\nPath('reports/deduplicated-mail.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/deduplicated_mail.py"
+            ],
+            "feedback_command": "python3 verify_deduplicated_mail.py"
+          },
+          "wrong_files": {
+            "tools/deduplicated_mail.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\npeople = json.loads(Path('contacts/people.json').read_text())\nresult = sorted({p.get('email', '').lower() for p in people} - {''})\nPath('reports').mkdir(exist_ok=True)\nPath('reports/deduplicated-mail.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Does not strip email whitespace."
+        }
+      ]
+    },
+    {
+      "original_task_id": "column-projection",
+      "family_id": "harness/column-projection",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/column-projection",
+            "prompt": "Complete the workspace task described in `docs/column-projection.md` using the actual files here. Implement `tools/column_projection.py` and run `python3 verify_column_projection.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "data/records.json": "[\n  {\n    \"name\": \"Ada\",\n    \"age\": 32,\n    \"extra\": 1\n  },\n  {\n    \"name\": \"Lin\"\n  }\n]\n",
+              "schema/columns.json": "[\n  \"age\",\n  \"name\"\n]\n",
+              "docs/column-projection.md": "Read data/records.json and schema/columns.json. Return records restricted to configured columns; missing values become null. JSON object key order is not graded.\nWrite the JSON result to reports/column-projection.json.\n",
+              "verify_column_projection.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/column_projection.py'], check=True)\nresult = json.loads(Path('reports/column-projection.json').read_text())\nassert isinstance(result, list)\nassert result[0] == {'age': 32, 'name': 'Ada'}\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "data/records.json": "[\n  {\n    \"name\": \"Ada\",\n    \"age\": 32,\n    \"extra\": 1\n  },\n  {\n    \"name\": \"Lin\"\n  }\n]\n",
+                "schema/columns.json": "[\n  \"age\",\n  \"name\"\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/column_projection.py'], check=True)\n    assert json.loads(Path('reports/column-projection.json').read_text()) == [{'age': 32, 'name': 'Ada'}, {'age': None, 'name': 'Lin'}]\n    Path('schema/columns.json').write_text('[\"name\"]\\n')\n    subprocess.run([sys.executable, 'tools/column_projection.py'], check=True)\n    assert json.loads(Path('reports/column-projection.json').read_text()) == [{'name': 'Ada'}, {'name': 'Lin'}]\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('data/records.json').read_text())\ncolumns = json.loads(Path('schema/columns.json').read_text())\nresult = [{k: r.get(k) for k in columns} for r in rows]\nPath('reports').mkdir(exist_ok=True)\nPath('reports/column-projection.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/column_projection.py"
+            ],
+            "feedback_command": "python3 verify_column_projection.py"
+          },
+          "wrong_files": {
+            "tools/column_projection.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrows = json.loads(Path('data/records.json').read_text())\ncolumns = json.loads(Path('schema/columns.json').read_text())\nresult = [{k: r[k] for k in columns if k in r} for r in rows]\nPath('reports').mkdir(exist_ok=True)\nPath('reports/column-projection.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Omits missing fields instead of filling null."
+        }
+      ]
+    },
+    {
+      "original_task_id": "expired-sessions",
+      "family_id": "harness/expired-sessions",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/expired-sessions",
+            "prompt": "Complete the workspace task described in `docs/expired-sessions.md` using the actual files here. Implement `tools/expired_sessions.py` and run `python3 verify_expired_sessions.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "auth/sessions.json": "[\n  {\n    \"id\": \"b\",\n    \"expires_at\": 30\n  },\n  {\n    \"id\": \"a\",\n    \"expires_at\": 20\n  },\n  {\n    \"id\": \"c\",\n    \"expires_at\": 31\n  }\n]\n",
+              "clock/now.json": "30\n",
+              "docs/expired-sessions.md": "Read auth/sessions.json and clock/now.json (an integer timestamp). Output sorted ids whose expires_at is <= now.\nWrite the JSON result to reports/expired-sessions.json.\n",
+              "verify_expired_sessions.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/expired_sessions.py'], check=True)\nresult = json.loads(Path('reports/expired-sessions.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'a'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "auth/sessions.json": "[\n  {\n    \"id\": \"b\",\n    \"expires_at\": 30\n  },\n  {\n    \"id\": \"a\",\n    \"expires_at\": 20\n  },\n  {\n    \"id\": \"c\",\n    \"expires_at\": 31\n  }\n]\n",
+                "clock/now.json": "30\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/expired_sessions.py'], check=True)\n    assert json.loads(Path('reports/expired-sessions.json').read_text()) == ['a', 'b']\n    Path('clock/now.json').write_text('20\\n')\n    subprocess.run([sys.executable, 'tools/expired_sessions.py'], check=True)\n    assert json.loads(Path('reports/expired-sessions.json').read_text()) == ['a']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nsessions = json.loads(Path('auth/sessions.json').read_text())\nnow = json.loads(Path('clock/now.json').read_text())\nresult = sorted(s['id'] for s in sessions if s['expires_at'] <= now)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/expired-sessions.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/expired_sessions.py"
+            ],
+            "feedback_command": "python3 verify_expired_sessions.py"
+          },
+          "wrong_files": {
+            "tools/expired_sessions.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nsessions = json.loads(Path('auth/sessions.json').read_text())\nnow = json.loads(Path('clock/now.json').read_text())\nresult = sorted(s['id'] for s in sessions if s['expires_at'] < now)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/expired-sessions.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Excludes sessions expiring exactly now."
+        }
+      ]
+    },
+    {
+      "original_task_id": "dependency-edges",
+      "family_id": "harness/dependency-edges",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/dependency-edges",
+            "prompt": "Complete the workspace task described in `docs/dependency-edges.md` using the actual files here. Implement `tools/dependency_edges.py` and run `python3 verify_dependency_edges.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "build/dependencies.json": "{\n  \"app\": [\n    \"core\",\n    \"util\",\n    \"core\"\n  ],\n  \"util\": [\n    \"core\"\n  ],\n  \"core\": []\n}\n",
+              "docs/dependency-edges.md": "Read build/dependencies.json mapping package names to direct dependencies. Return sorted [package, dependency] pairs, removing repeated dependency entries.\nWrite the JSON result to reports/dependency-edges.json.\n",
+              "verify_dependency_edges.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/dependency_edges.py'], check=True)\nresult = json.loads(Path('reports/dependency-edges.json').read_text())\nassert isinstance(result, list)\nassert result[0] == ['app', 'core']\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "build/dependencies.json": "{\n  \"app\": [\n    \"core\",\n    \"util\",\n    \"core\"\n  ],\n  \"util\": [\n    \"core\"\n  ],\n  \"core\": []\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/dependency_edges.py'], check=True)\n    assert json.loads(Path('reports/dependency-edges.json').read_text()) == [['app', 'core'], ['app', 'util'], ['util', 'core']]\n    Path('build/dependencies.json').write_text('{\"z\": [\"a\", \"a\"]}\\n')\n    subprocess.run([sys.executable, 'tools/dependency_edges.py'], check=True)\n    assert json.loads(Path('reports/dependency-edges.json').read_text()) == [['z', 'a']]\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\ndeps = json.loads(Path('build/dependencies.json').read_text())\nresult = [list(pair) for pair in sorted({(name, dep) for name, values in deps.items() for dep in values})]\nPath('reports').mkdir(exist_ok=True)\nPath('reports/dependency-edges.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/dependency_edges.py"
+            ],
+            "feedback_command": "python3 verify_dependency_edges.py"
+          },
+          "wrong_files": {
+            "tools/dependency_edges.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\ndeps = json.loads(Path('build/dependencies.json').read_text())\nresult = [list(pair) for pair in sorted((name, dep) for name, values in deps.items() for dep in values)]\nPath('reports').mkdir(exist_ok=True)\nPath('reports/dependency-edges.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Repeats duplicate dependency edges."
+        }
+      ]
+    },
+    {
+      "original_task_id": "feature-requirements",
+      "family_id": "harness/feature-requirements",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/feature-requirements",
+            "prompt": "Complete the workspace task described in `docs/feature-requirements.md` using the actual files here. Implement `tools/feature_requirements.py` and run `python3 verify_feature_requirements.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "features/requirements.json": "{\n  \"fast\": [\n    \"avx\",\n    \"ssd\"\n  ],\n  \"plain\": [],\n  \"gpu\": [\n    \"cuda\"\n  ]\n}\n",
+              "machine/capabilities.json": "[\n  \"avx\"\n]\n",
+              "docs/feature-requirements.md": "Read features/requirements.json and machine/capabilities.json (a list). Return sorted feature names for which every listed requirement is available, including features with no requirements.\nWrite the JSON result to reports/feature-requirements.json.\n",
+              "verify_feature_requirements.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/feature_requirements.py'], check=True)\nresult = json.loads(Path('reports/feature-requirements.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'plain'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "features/requirements.json": "{\n  \"fast\": [\n    \"avx\",\n    \"ssd\"\n  ],\n  \"plain\": [],\n  \"gpu\": [\n    \"cuda\"\n  ]\n}\n",
+                "machine/capabilities.json": "[\n  \"avx\"\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/feature_requirements.py'], check=True)\n    assert json.loads(Path('reports/feature-requirements.json').read_text()) == ['plain']\n    Path('machine/capabilities.json').write_text('[\"avx\", \"ssd\"]\\n')\n    subprocess.run([sys.executable, 'tools/feature_requirements.py'], check=True)\n    assert json.loads(Path('reports/feature-requirements.json').read_text()) == ['fast', 'plain']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrequirements = json.loads(Path('features/requirements.json').read_text())\ncapabilities = json.loads(Path('machine/capabilities.json').read_text())\nresult = sorted(k for k, values in requirements.items() if set(values) <= set(capabilities))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/feature-requirements.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/feature_requirements.py"
+            ],
+            "feedback_command": "python3 verify_feature_requirements.py"
+          },
+          "wrong_files": {
+            "tools/feature_requirements.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nrequirements = json.loads(Path('features/requirements.json').read_text())\ncapabilities = json.loads(Path('machine/capabilities.json').read_text())\nresult = sorted(k for k, values in requirements.items() if not values or any(v in capabilities for v in values))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/feature-requirements.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Accepts one capability instead of requiring all."
+        }
+      ]
+    },
+    {
+      "original_task_id": "cache-budget",
+      "family_id": "harness/cache-budget",
+      "split": "train",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/cache-budget",
+            "prompt": "Complete the workspace task described in `docs/cache-budget.md` using the actual files here. Implement `tools/cache_budget.py` and run `python3 verify_cache_budget.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "cache/entries.json": "[\n  {\n    \"bytes\": 14\n  },\n  {\n    \"bytes\": 6\n  }\n]\n",
+              "config/cache.json": "{\n  \"max_bytes\": 20\n}\n",
+              "docs/cache-budget.md": "Read cache/entries.json and config/cache.json with max_bytes. Report total_bytes, max_bytes and over_budget (strictly greater).\nWrite the JSON result to reports/cache-budget.json.\n",
+              "verify_cache_budget.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/cache_budget.py'], check=True)\nresult = json.loads(Path('reports/cache-budget.json').read_text())\nassert result['total_bytes'] == 20\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "cache/entries.json": "[\n  {\n    \"bytes\": 14\n  },\n  {\n    \"bytes\": 6\n  }\n]\n",
+                "config/cache.json": "{\n  \"max_bytes\": 20\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/cache_budget.py'], check=True)\n    assert json.loads(Path('reports/cache-budget.json').read_text()) == {'total_bytes': 20, 'max_bytes': 20, 'over_budget': False}\n    Path('config/cache.json').write_text('{\"max_bytes\": 19}\\n')\n    subprocess.run([sys.executable, 'tools/cache_budget.py'], check=True)\n    assert json.loads(Path('reports/cache-budget.json').read_text()) == {'total_bytes': 20, 'max_bytes': 19, 'over_budget': True}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nentries = json.loads(Path('cache/entries.json').read_text())\nconfig = json.loads(Path('config/cache.json').read_text())\nresult = {'total_bytes': sum(e['bytes'] for e in entries), 'max_bytes': config['max_bytes'], 'over_budget': sum(e['bytes'] for e in entries) > config['max_bytes']}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/cache-budget.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/cache_budget.py"
+            ],
+            "feedback_command": "python3 verify_cache_budget.py"
+          },
+          "wrong_files": {
+            "tools/cache_budget.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nentries = json.loads(Path('cache/entries.json').read_text())\nconfig = json.loads(Path('config/cache.json').read_text())\nresult = {'total_bytes': sum(e['bytes'] for e in entries), 'max_bytes': config['max_bytes'], 'over_budget': sum(e['bytes'] for e in entries) >= config['max_bytes']}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/cache-budget.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Flags equality as over budget."
+        }
+      ]
+    },
+    {
+      "original_task_id": "license-audit",
+      "family_id": "harness/license-audit",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/license-audit",
+            "prompt": "Complete the workspace task described in `docs/license-audit.md` using the actual files here. Implement `tools/license_audit.py` and run `python3 verify_license_audit.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "registry/dependencies.json": "[\n  {\n    \"name\": \"birch\",\n    \"license\": \"MIT\"\n  },\n  {\n    \"name\": \"cedar\",\n    \"license\": \"Custom-Blue\"\n  },\n  {\n    \"name\": \"spruce\",\n    \"license\": \"Apache-2.0\"\n  }\n]\n",
+              "policy/licenses.json": "[\n  \"MIT\",\n  \"Custom-Blue\"\n]\n",
+              "docs/license-audit.md": "Read registry/dependencies.json and policy/licenses.json. Return sorted package names whose license is absent from the allowed list. Use the actual policy, including any uncommon licenses.\nWrite the JSON result to reports/license-audit.json.\n",
+              "verify_license_audit.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\nresult = json.loads(Path('reports/license-audit.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'spruce'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "registry/dependencies.json": "[\n  {\n    \"name\": \"birch\",\n    \"license\": \"MIT\"\n  },\n  {\n    \"name\": \"cedar\",\n    \"license\": \"Custom-Blue\"\n  },\n  {\n    \"name\": \"spruce\",\n    \"license\": \"Apache-2.0\"\n  }\n]\n",
+                "policy/licenses.json": "[\n  \"MIT\",\n  \"Custom-Blue\"\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\n    assert json.loads(Path('reports/license-audit.json').read_text()) == ['spruce']\n    Path('policy/licenses.json').write_text('[\"Apache-2.0\"]\\n')\n    subprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\n    assert json.loads(Path('reports/license-audit.json').read_text()) == ['birch', 'cedar']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\npackages = json.loads(Path('registry/dependencies.json').read_text())\nallowed = json.loads(Path('policy/licenses.json').read_text())\nresult = sorted(p['name'] for p in packages if p['license'] not in allowed)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/license-audit.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/license_audit.py"
+            ],
+            "feedback_command": "python3 verify_license_audit.py"
+          },
+          "wrong_files": {
+            "tools/license_audit.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\npackages = json.loads(Path('registry/dependencies.json').read_text())\nallowed = json.loads(Path('policy/licenses.json').read_text())\nresult = sorted(p['name'] for p in packages if p['license'] not in ['MIT', 'Apache-2.0'])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/license-audit.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Guesses a standard license allowlist instead of reading policy."
+        },
+        {
+          "variant_id": "policy-green",
+          "task": {
+            "task_id": "harness/license-audit/policy-green",
+            "prompt": "Complete the workspace task described in `docs/license-audit.md` using the actual files here. Implement `tools/license_audit.py` and run `python3 verify_license_audit.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "registry/dependencies.json": "[\n  {\n    \"name\": \"willow\",\n    \"license\": \"Custom-Green\"\n  },\n  {\n    \"name\": \"maple\",\n    \"license\": \"MIT\"\n  }\n]\n",
+              "policy/licenses.json": "[\n  \"Custom-Green\"\n]\n",
+              "docs/license-audit.md": "Read registry/dependencies.json and policy/licenses.json. Return sorted package names whose license is absent from the allowed list. Use the actual policy, including any uncommon licenses.\nWrite the JSON result to reports/license-audit.json.\n",
+              "verify_license_audit.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\nresult = json.loads(Path('reports/license-audit.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'maple'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "registry/dependencies.json": "[\n  {\n    \"name\": \"willow\",\n    \"license\": \"Custom-Green\"\n  },\n  {\n    \"name\": \"maple\",\n    \"license\": \"MIT\"\n  }\n]\n",
+                "policy/licenses.json": "[\n  \"Custom-Green\"\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\n    assert json.loads(Path('reports/license-audit.json').read_text()) == ['maple']\n    Path('policy/licenses.json').write_text('[\"MIT\"]\\n')\n    subprocess.run([sys.executable, 'tools/license_audit.py'], check=True)\n    assert json.loads(Path('reports/license-audit.json').read_text()) == ['willow']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\npackages = json.loads(Path('registry/dependencies.json').read_text())\nallowed = json.loads(Path('policy/licenses.json').read_text())\nresult = sorted(p['name'] for p in packages if p['license'] not in allowed)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/license-audit.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/license_audit.py"
+            ],
+            "feedback_command": "python3 verify_license_audit.py"
+          },
+          "wrong_files": {
+            "tools/license_audit.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\npackages = json.loads(Path('registry/dependencies.json').read_text())\nallowed = json.loads(Path('policy/licenses.json').read_text())\nresult = sorted(p['name'] for p in packages if p['license'] not in ['MIT', 'Apache-2.0'])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/license-audit.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Guesses a standard license allowlist instead of reading policy."
+        }
+      ]
+    },
+    {
+      "original_task_id": "deployment-targets",
+      "family_id": "harness/deployment-targets",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/deployment-targets",
+            "prompt": "Complete the workspace task described in `docs/deployment-targets.md` using the actual files here. Implement `tools/deployment_targets.py` and run `python3 verify_deployment_targets.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "deploy/targets.json": "[\n  {\n    \"name\": \"edge\",\n    \"channels\": [\n      \"canary\"\n    ],\n    \"paused\": false\n  },\n  {\n    \"name\": \"core\",\n    \"channels\": [\n      \"stable\",\n      \"canary\"\n    ],\n    \"paused\": true\n  },\n  {\n    \"name\": \"web\",\n    \"channels\": [\n      \"stable\"\n    ],\n    \"paused\": false\n  }\n]\n",
+              "deploy/release.json": "{\n  \"channel\": \"canary\"\n}\n",
+              "docs/deployment-targets.md": "Read deploy/targets.json and deploy/release.json with a channel. Output sorted target names that list this channel and are not paused.\nWrite the JSON result to reports/deployment-targets.json.\n",
+              "verify_deployment_targets.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/deployment_targets.py'], check=True)\nresult = json.loads(Path('reports/deployment-targets.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'edge'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "deploy/targets.json": "[\n  {\n    \"name\": \"edge\",\n    \"channels\": [\n      \"canary\"\n    ],\n    \"paused\": false\n  },\n  {\n    \"name\": \"core\",\n    \"channels\": [\n      \"stable\",\n      \"canary\"\n    ],\n    \"paused\": true\n  },\n  {\n    \"name\": \"web\",\n    \"channels\": [\n      \"stable\"\n    ],\n    \"paused\": false\n  }\n]\n",
+                "deploy/release.json": "{\n  \"channel\": \"canary\"\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/deployment_targets.py'], check=True)\n    assert json.loads(Path('reports/deployment-targets.json').read_text()) == ['edge']\n    Path('deploy/release.json').write_text('{\"channel\": \"stable\"}\\n')\n    subprocess.run([sys.executable, 'tools/deployment_targets.py'], check=True)\n    assert json.loads(Path('reports/deployment-targets.json').read_text()) == ['web']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\ntargets = json.loads(Path('deploy/targets.json').read_text())\nrelease = json.loads(Path('deploy/release.json').read_text())\nresult = sorted(t['name'] for t in targets if release['channel'] in t['channels'] and not t['paused'])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/deployment-targets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/deployment_targets.py"
+            ],
+            "feedback_command": "python3 verify_deployment_targets.py"
+          },
+          "wrong_files": {
+            "tools/deployment_targets.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\ntargets = json.loads(Path('deploy/targets.json').read_text())\nrelease = json.loads(Path('deploy/release.json').read_text())\nresult = sorted(t['name'] for t in targets if release['channel'] in t['channels'])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/deployment-targets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Includes paused deployment targets."
+        }
+      ]
+    },
+    {
+      "original_task_id": "test-matrix",
+      "family_id": "harness/test-matrix",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/test-matrix",
+            "prompt": "Complete the workspace task described in `docs/test-matrix.md` using the actual files here. Implement `tools/test_matrix.py` and run `python3 verify_test_matrix.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "testing/platforms.json": "[\n  \"linux\",\n  \"mac\"\n]\n",
+              "testing/versions.json": "[\n  \"3.10\",\n  \"3.13\"\n]\n",
+              "docs/test-matrix.md": "Read testing/platforms.json and testing/versions.json. Return sorted strings 'platform:version' for the full Cartesian product; either empty list yields [].\nWrite the JSON result to reports/test-matrix.json.\n",
+              "verify_test_matrix.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/test_matrix.py'], check=True)\nresult = json.loads(Path('reports/test-matrix.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'linux:3.10'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "testing/platforms.json": "[\n  \"linux\",\n  \"mac\"\n]\n",
+                "testing/versions.json": "[\n  \"3.10\",\n  \"3.13\"\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/test_matrix.py'], check=True)\n    assert json.loads(Path('reports/test-matrix.json').read_text()) == ['linux:3.10', 'linux:3.13', 'mac:3.10', 'mac:3.13']\n    Path('testing/platforms.json').write_text('[\"win\"]\\n')\n    Path('testing/versions.json').write_text('[\"3.11\", \"3.12\", \"3.13\"]\\n')\n    subprocess.run([sys.executable, 'tools/test_matrix.py'], check=True)\n    assert json.loads(Path('reports/test-matrix.json').read_text()) == ['win:3.11', 'win:3.12', 'win:3.13']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nplatforms = json.loads(Path('testing/platforms.json').read_text())\nversions = json.loads(Path('testing/versions.json').read_text())\nresult = sorted(p + ':' + v for p in platforms for v in versions)\nPath('reports').mkdir(exist_ok=True)\nPath('reports/test-matrix.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/test_matrix.py"
+            ],
+            "feedback_command": "python3 verify_test_matrix.py"
+          },
+          "wrong_files": {
+            "tools/test_matrix.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nplatforms = json.loads(Path('testing/platforms.json').read_text())\nversions = json.loads(Path('testing/versions.json').read_text())\nresult = sorted(p + ':' + v for p, v in zip(platforms, versions))\nPath('reports').mkdir(exist_ok=True)\nPath('reports/test-matrix.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Zips instead of taking all combinations."
+        }
+      ]
+    },
+    {
+      "original_task_id": "timezone-offsets",
+      "family_id": "harness/timezone-offsets",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/timezone-offsets",
+            "prompt": "Complete the workspace task described in `docs/timezone-offsets.md` using the actual files here. Implement `tools/timezone_offsets.py` and run `python3 verify_timezone_offsets.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "zones/offsets.json": "{\n  \"east\": \"+05:30\",\n  \"west\": \"-03:45\",\n  \"zero\": \"+00:00\"\n}\n",
+              "docs/timezone-offsets.md": "Read zones/offsets.json mapping names to signed UTC offsets \u00b1HH:MM. Return offsets as signed minutes.\nWrite the JSON result to reports/timezone-offsets.json.\n",
+              "verify_timezone_offsets.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/timezone_offsets.py'], check=True)\nresult = json.loads(Path('reports/timezone-offsets.json').read_text())\nassert result['east'] == 330\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "zones/offsets.json": "{\n  \"east\": \"+05:30\",\n  \"west\": \"-03:45\",\n  \"zero\": \"+00:00\"\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/timezone_offsets.py'], check=True)\n    assert json.loads(Path('reports/timezone-offsets.json').read_text()) == {'east': 330, 'west': -225, 'zero': 0}\n    Path('zones/offsets.json').write_text('{\"x\": \"-00:30\"}\\n')\n    subprocess.run([sys.executable, 'tools/timezone_offsets.py'], check=True)\n    assert json.loads(Path('reports/timezone-offsets.json').read_text()) == {'x': -30}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nzones = json.loads(Path('zones/offsets.json').read_text())\nresult = {k: (1 if v[0] == '+' else -1) * (int(v[1:3]) * 60 + int(v[4:])) for k, v in zones.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/timezone-offsets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/timezone_offsets.py"
+            ],
+            "feedback_command": "python3 verify_timezone_offsets.py"
+          },
+          "wrong_files": {
+            "tools/timezone_offsets.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nzones = json.loads(Path('zones/offsets.json').read_text())\nresult = {k: int(v[:3]) * 60 + int(v[4:]) for k, v in zones.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/timezone-offsets.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Applies the negative sign only to hours."
+        }
+      ]
+    },
+    {
+      "original_task_id": "discount-codes",
+      "family_id": "harness/discount-codes",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/discount-codes",
+            "prompt": "Complete the workspace task described in `docs/discount-codes.md` using the actual files here. Implement `tools/discount_codes.py` and run `python3 verify_discount_codes.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "sales/codes.json": "[\n  {\n    \"name\": \"five\",\n    \"active\": true,\n    \"min_cents\": 500\n  },\n  {\n    \"name\": \"old\",\n    \"active\": false,\n    \"min_cents\": 0\n  },\n  {\n    \"name\": \"ten\",\n    \"active\": true,\n    \"min_cents\": 1000\n  }\n]\n",
+              "sales/cart.json": "{\n  \"subtotal_cents\": 500\n}\n",
+              "docs/discount-codes.md": "Read sales/codes.json and sales/cart.json with subtotal_cents. Return sorted code names that are active and whose min_cents is <= the subtotal.\nWrite the JSON result to reports/discount-codes.json.\n",
+              "verify_discount_codes.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/discount_codes.py'], check=True)\nresult = json.loads(Path('reports/discount-codes.json').read_text())\nassert isinstance(result, list)\nassert result[0] == 'five'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "sales/codes.json": "[\n  {\n    \"name\": \"five\",\n    \"active\": true,\n    \"min_cents\": 500\n  },\n  {\n    \"name\": \"old\",\n    \"active\": false,\n    \"min_cents\": 0\n  },\n  {\n    \"name\": \"ten\",\n    \"active\": true,\n    \"min_cents\": 1000\n  }\n]\n",
+                "sales/cart.json": "{\n  \"subtotal_cents\": 500\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/discount_codes.py'], check=True)\n    assert json.loads(Path('reports/discount-codes.json').read_text()) == ['five']\n    Path('sales/cart.json').write_text('{\"subtotal_cents\": 1000}\\n')\n    subprocess.run([sys.executable, 'tools/discount_codes.py'], check=True)\n    assert json.loads(Path('reports/discount-codes.json').read_text()) == ['five', 'ten']\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\ncodes = json.loads(Path('sales/codes.json').read_text())\ncart = json.loads(Path('sales/cart.json').read_text())\nresult = sorted(c['name'] for c in codes if c['active'] and c['min_cents'] <= cart['subtotal_cents'])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/discount-codes.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/discount_codes.py"
+            ],
+            "feedback_command": "python3 verify_discount_codes.py"
+          },
+          "wrong_files": {
+            "tools/discount_codes.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\ncodes = json.loads(Path('sales/codes.json').read_text())\ncart = json.loads(Path('sales/cart.json').read_text())\nresult = sorted(c['name'] for c in codes if c['active'] and c['min_cents'] < cart['subtotal_cents'])\nPath('reports').mkdir(exist_ok=True)\nPath('reports/discount-codes.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Rejects exactly-threshold discounts."
+        }
+      ]
+    },
+    {
+      "original_task_id": "symlink-plan",
+      "family_id": "harness/symlink-plan",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/symlink-plan",
+            "prompt": "Complete the workspace task described in `docs/symlink-plan.md` using the actual files here. Implement `tools/symlink_plan.py` and run `python3 verify_symlink_plan.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "files/links.json": "[\n  {\n    \"link\": \"bin/tool\",\n    \"target\": \"lib/tool.py\"\n  },\n  {\n    \"link\": \"docs/latest\",\n    \"target\": \"docs/v2\"\n  }\n]\n",
+              "docs/symlink-plan.md": "Read files/links.json with link and target relative POSIX paths. Return a mapping of each link to the target relative to the link's parent directory (os.path.relpath semantics).\nWrite the JSON result to reports/symlink-plan.json.\n",
+              "verify_symlink_plan.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/symlink_plan.py'], check=True)\nresult = json.loads(Path('reports/symlink-plan.json').read_text())\nassert result['bin/tool'] == '../lib/tool.py'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "files/links.json": "[\n  {\n    \"link\": \"bin/tool\",\n    \"target\": \"lib/tool.py\"\n  },\n  {\n    \"link\": \"docs/latest\",\n    \"target\": \"docs/v2\"\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/symlink_plan.py'], check=True)\n    assert json.loads(Path('reports/symlink-plan.json').read_text()) == {'bin/tool': '../lib/tool.py', 'docs/latest': 'v2'}\n    Path('files/links.json').write_text('[{\"link\": \"a/b/c\", \"target\": \"x\"}]\\n')\n    subprocess.run([sys.executable, 'tools/symlink_plan.py'], check=True)\n    assert json.loads(Path('reports/symlink-plan.json').read_text()) == {'a/b/c': '../../x'}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nlinks = json.loads(Path('files/links.json').read_text())\nresult = {e['link']: __import__('os').path.relpath(e['target'], str(Path(e['link']).parent)) for e in links}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/symlink-plan.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/symlink_plan.py"
+            ],
+            "feedback_command": "python3 verify_symlink_plan.py"
+          },
+          "wrong_files": {
+            "tools/symlink_plan.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nlinks = json.loads(Path('files/links.json').read_text())\nresult = {e['link']: e['target'] for e in links}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/symlink-plan.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Uses workspace-root paths rather than link-relative targets."
+        }
+      ]
+    },
+    {
+      "original_task_id": "cli-aliases",
+      "family_id": "harness/cli-aliases",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/cli-aliases",
+            "prompt": "Complete the workspace task described in `docs/cli-aliases.md` using the actual files here. Implement `tools/cli_aliases.py` and run `python3 verify_cli_aliases.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "commands/spec.json": "{\n  \"show\": [\n    \"s\",\n    \"ls\"\n  ],\n  \"start\": [\n    \"s\",\n    \"run\"\n  ]\n}\n",
+              "docs/cli-aliases.md": "Read commands/spec.json mapping canonical commands to alias lists. Return the reverse alias-to-command dictionary; if an alias occurs multiple times, the last command in file order wins.\nWrite the JSON result to reports/cli-aliases.json.\n",
+              "verify_cli_aliases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/cli_aliases.py'], check=True)\nresult = json.loads(Path('reports/cli-aliases.json').read_text())\nassert result['s'] == 'start'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "commands/spec.json": "{\n  \"show\": [\n    \"s\",\n    \"ls\"\n  ],\n  \"start\": [\n    \"s\",\n    \"run\"\n  ]\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/cli_aliases.py'], check=True)\n    assert json.loads(Path('reports/cli-aliases.json').read_text()) == {'s': 'start', 'ls': 'show', 'run': 'start'}\n    Path('commands/spec.json').write_text('{\"quit\": [\"q\"], \"query\": [\"q\", \"find\"]}\\n')\n    subprocess.run([sys.executable, 'tools/cli_aliases.py'], check=True)\n    assert json.loads(Path('reports/cli-aliases.json').read_text()) == {'q': 'query', 'find': 'query'}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\ncommands = json.loads(Path('commands/spec.json').read_text())\nresult = {alias: name for name, aliases in commands.items() for alias in aliases}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/cli-aliases.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/cli_aliases.py"
+            ],
+            "feedback_command": "python3 verify_cli_aliases.py"
+          },
+          "wrong_files": {
+            "tools/cli_aliases.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\ncommands = json.loads(Path('commands/spec.json').read_text())\nresult = {alias: name for name, aliases in reversed(list(commands.items())) for alias in aliases}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/cli-aliases.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Keeps the first alias owner."
+        }
+      ]
+    },
+    {
+      "original_task_id": "quota-remaining",
+      "family_id": "harness/quota-remaining",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/quota-remaining",
+            "prompt": "Complete the workspace task described in `docs/quota-remaining.md` using the actual files here. Implement `tools/quota_remaining.py` and run `python3 verify_quota_remaining.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "users/quotas.json": "{\n  \"ada\": 100,\n  \"lin\": 40,\n  \"sam\": 30\n}\n",
+              "usage/bytes.json": "{\n  \"ada\": 70,\n  \"lin\": 55,\n  \"unknown\": 3\n}\n",
+              "docs/quota-remaining.md": "Read users/quotas.json and usage/bytes.json. Map every quota user to max(0, quota - usage), with absent usage taken as zero; ignore usage for unknown users.\nWrite the JSON result to reports/quota-remaining.json.\n",
+              "verify_quota_remaining.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/quota_remaining.py'], check=True)\nresult = json.loads(Path('reports/quota-remaining.json').read_text())\nassert result['ada'] == 30\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "users/quotas.json": "{\n  \"ada\": 100,\n  \"lin\": 40,\n  \"sam\": 30\n}\n",
+                "usage/bytes.json": "{\n  \"ada\": 70,\n  \"lin\": 55,\n  \"unknown\": 3\n}\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/quota_remaining.py'], check=True)\n    assert json.loads(Path('reports/quota-remaining.json').read_text()) == {'ada': 30, 'lin': 0, 'sam': 30}\n    Path('usage/bytes.json').write_text('{\"sam\": 30}\\n')\n    subprocess.run([sys.executable, 'tools/quota_remaining.py'], check=True)\n    assert json.loads(Path('reports/quota-remaining.json').read_text()) == {'ada': 100, 'lin': 40, 'sam': 0}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nquotas = json.loads(Path('users/quotas.json').read_text())\nusage = json.loads(Path('usage/bytes.json').read_text())\nresult = {u: max(0, q - usage.get(u, 0)) for u, q in quotas.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/quota-remaining.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/quota_remaining.py"
+            ],
+            "feedback_command": "python3 verify_quota_remaining.py"
+          },
+          "wrong_files": {
+            "tools/quota_remaining.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nquotas = json.loads(Path('users/quotas.json').read_text())\nusage = json.loads(Path('usage/bytes.json').read_text())\nresult = {u: q - usage.get(u, 0) for u, q in quotas.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/quota-remaining.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Reports negative remaining quotas."
+        }
+      ]
+    },
+    {
+      "original_task_id": "checksum-selection",
+      "family_id": "harness/checksum-selection",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/checksum-selection",
+            "prompt": "Complete the workspace task described in `docs/checksum-selection.md` using the actual files here. Implement `tools/checksum_selection.py` and run `python3 verify_checksum_selection.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "downloads/files.json": "[\n  {\n    \"name\": \"a\",\n    \"checksums\": {\n      \"sha256\": \"abc\",\n      \"md5\": \"def\"\n    }\n  },\n  {\n    \"name\": \"b\",\n    \"checksums\": {\n      \"md5\": \"ghi\"\n    }\n  },\n  {\n    \"name\": \"c\",\n    \"checksums\": {}\n  }\n]\n",
+              "config/preference.json": "[\n  \"sha256\",\n  \"md5\"\n]\n",
+              "docs/checksum-selection.md": "Read downloads/files.json and config/preference.json listing preferred algorithms in order. For each file choose the first listed algorithm present in its checksums; return its checksum string or null.\nWrite the JSON result to reports/checksum-selection.json.\n",
+              "verify_checksum_selection.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/checksum_selection.py'], check=True)\nresult = json.loads(Path('reports/checksum-selection.json').read_text())\nassert result['a'] == 'abc'\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "downloads/files.json": "[\n  {\n    \"name\": \"a\",\n    \"checksums\": {\n      \"sha256\": \"abc\",\n      \"md5\": \"def\"\n    }\n  },\n  {\n    \"name\": \"b\",\n    \"checksums\": {\n      \"md5\": \"ghi\"\n    }\n  },\n  {\n    \"name\": \"c\",\n    \"checksums\": {}\n  }\n]\n",
+                "config/preference.json": "[\n  \"sha256\",\n  \"md5\"\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/checksum_selection.py'], check=True)\n    assert json.loads(Path('reports/checksum-selection.json').read_text()) == {'a': 'abc', 'b': 'ghi', 'c': None}\n    Path('config/preference.json').write_text('[\"md5\", \"sha256\"]\\n')\n    subprocess.run([sys.executable, 'tools/checksum_selection.py'], check=True)\n    assert json.loads(Path('reports/checksum-selection.json').read_text()) == {'a': 'def', 'b': 'ghi', 'c': None}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nfiles = json.loads(Path('downloads/files.json').read_text())\npreference = json.loads(Path('config/preference.json').read_text())\nresult = {f['name']: next((f['checksums'][a] for a in preference if a in f['checksums']), None) for f in files}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/checksum-selection.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/checksum_selection.py"
+            ],
+            "feedback_command": "python3 verify_checksum_selection.py"
+          },
+          "wrong_files": {
+            "tools/checksum_selection.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\nfiles = json.loads(Path('downloads/files.json').read_text())\npreference = json.loads(Path('config/preference.json').read_text())\nresult = {f['name']: f['checksums'].get('sha256') for f in files}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/checksum-selection.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Hardcodes one checksum algorithm."
+        }
+      ]
+    },
+    {
+      "original_task_id": "retry-deadlines",
+      "family_id": "harness/retry-deadlines",
+      "split": "dev",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "harness/retry-deadlines",
+            "prompt": "Complete the workspace task described in `docs/retry-deadlines.md` using the actual files here. Implement `tools/retry_deadlines.py` and run `python3 verify_retry_deadlines.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+            "initial_files": {
+              "retries/jobs.json": "[\n  {\n    \"id\": \"a\",\n    \"started_at\": 100,\n    \"attempts\": 0,\n    \"delay_seconds\": 7\n  },\n  {\n    \"id\": \"b\",\n    \"started_at\": 120,\n    \"attempts\": 3,\n    \"delay_seconds\": 5\n  }\n]\n",
+              "docs/retry-deadlines.md": "Read retries/jobs.json with id, started_at, attempts and delay_seconds. Report each next retry timestamp as started_at + attempts * delay_seconds; zero attempts retries immediately.\nWrite the JSON result to reports/retry-deadlines.json.\n",
+              "verify_retry_deadlines.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/retry_deadlines.py'], check=True)\nresult = json.loads(Path('reports/retry-deadlines.json').read_text())\nassert result['a'] == 100\nprint('feedback passed')\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "retries/jobs.json": "[\n  {\n    \"id\": \"a\",\n    \"started_at\": 100,\n    \"attempts\": 0,\n    \"delay_seconds\": 7\n  },\n  {\n    \"id\": \"b\",\n    \"started_at\": 120,\n    \"attempts\": 3,\n    \"delay_seconds\": 5\n  }\n]\n",
+                "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    import json, subprocess, sys\n    from pathlib import Path\n    subprocess.run([sys.executable, 'tools/retry_deadlines.py'], check=True)\n    assert json.loads(Path('reports/retry-deadlines.json').read_text()) == {'a': 100, 'b': 135}\n    Path('retries/jobs.json').write_text('[{\"id\": \"c\", \"started_at\": 0, \"attempts\": 2, \"delay_seconds\": 11}]\\n')\n    subprocess.run([sys.executable, 'tools/retry_deadlines.py'], check=True)\n    assert json.loads(Path('reports/retry-deadlines.json').read_text()) == {'c': 22}\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\njobs = json.loads(Path('retries/jobs.json').read_text())\nresult = {j['id']: j['started_at'] + j['attempts'] * j['delay_seconds'] for j in jobs}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/retry-deadlines.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+            "implementation_paths": [
+              "tools/retry_deadlines.py"
+            ],
+            "feedback_command": "python3 verify_retry_deadlines.py"
+          },
+          "wrong_files": {
+            "tools/retry_deadlines.py": "import json\nfrom pathlib import Path\nfrom collections import Counter\njobs = json.loads(Path('retries/jobs.json').read_text())\nresult = {j['id']: j['started_at'] + (j['attempts'] + 1) * j['delay_seconds'] for j in jobs}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/retry-deadlines.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n"
+          },
+          "wrong_reason": "Adds an extra retry interval."
+        }
+      ]
+    }
+  ]
+}

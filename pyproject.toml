@@ -23,6 +23,9 @@ dependencies = [
 [tool.hatch.build.targets.wheel.force-include]
 "configs/bash-block-v3.yaml" = "bashlet/configs/bash-block-v3.yaml"
 "configs/spend.yaml" = "bashlet/configs/spend.yaml"
+"configs/harness-authored-v1.json" = "bashlet/configs/harness-authored-v1.json"
+"configs/harness-authored-v1.lock.json" = "bashlet/configs/harness-authored-v1.lock.json"
+"configs/harness-cohort-v1.json" = "bashlet/configs/harness-cohort-v1.json"
 
 [build-system]
 requires = ["hatchling>=1.27"]
