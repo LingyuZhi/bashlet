@@ -446,6 +446,27 @@ def evaluation_metrics(record: dict[str, Any]) -> dict[str, Any]:
         }
     )
     metrics.update(spend_metrics(record["cost"]))
+    if record.get("track") == "coding":
+        for key in (
+            "first_implementation_passed",
+            "first_implementation_pass_rate",
+            "first_grading_missing",
+            "recovery_denominator",
+            "recovered_tasks",
+            "recovery_rate",
+        ):
+            metrics.pop(f"eval/{key}", None)
+    for kind, group in summary.get("by_task_type", {}).items():
+        for key in (
+            "planned_tasks",
+            "passed_tasks",
+            "final_pass_rate",
+            "protocol_errors",
+            "submitted_tasks",
+        ):
+            metrics[f"eval/type/{kind}/{key}"] = group[key]
+        for status, count in group["command_problems"].items():
+            metrics[f"eval/type/{kind}/command/{status}"] = count
     return metrics
 
 
@@ -477,7 +498,7 @@ def import_evaluation(path: Path, output_dir: Path, config: MonitorConfig) -> No
     monitor = RunMonitor(
         output_dir,
         config,
-        phase="baseline-eval",
+        phase="coding-eval" if record.get("track") == "coding" else "baseline-eval",
         metadata={
             "historical_import": True,
             "source_run": str(path.resolve().parent),

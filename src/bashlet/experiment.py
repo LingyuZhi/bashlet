@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .analysis import analyze_episode
-from .config import ExperimentConfig, load_config
+from .config import DirectCodeConfig, ExperimentConfig, load_config
 from .demonstrations import (
     ActionSupervision,
     SFTAdapter,
@@ -242,6 +242,7 @@ def run_experiment(
     overrides: Sequence[str] = (),
     on_update: Callable[[EpisodeResult], None] | None = None,
     assess_first_implementation: bool = False,
+    direct_code: DirectCodeConfig | None = None,
     sft_adapter: SFTAdapter | None = None,
     sft_supervision: Sequence[ActionSupervision] | None = None,
     sft_max_context_tokens: int = 32768,
@@ -265,6 +266,12 @@ def run_experiment(
     else:
         condition = load_config(config, overrides)
     _validate_task(task, condition.environment.id)
+    if direct_code is not None and (
+        sft_adapter is not None or assess_first_implementation
+    ):
+        raise ValueError(
+            "Direct coding is an independent evaluation, without SFT export"
+        )
     if sft_supervision is not None and sft_adapter is None:
         raise ValueError("SFT supervision requires an Adapter")
     if sft_adapter is not None:
@@ -304,20 +311,29 @@ def run_experiment(
         "grade": None,
         "passed": False,
     }
+    if direct_code is not None:
+        metadata.update(evaluation_track="coding", direct_code=asdict(direct_code))
 
     def save_progress(episode: EpisodeResult) -> None:
         save_record(episode, condition, metadata | {"episode_status": episode.status})
         if on_update is not None:
             on_update(episode)
 
-    episode = run_episode(
-        instruction=task.prompt,
-        workspace=workspace,
-        model=model,
-        config=condition,
-        run_dir=run_dir,
-        on_update=save_progress,
-    )
+    if direct_code is not None:
+        from .evaluation.direct import run_direct_code
+
+        episode = run_direct_code(
+            task, model, workspace, run_dir, condition, direct_code, save_progress
+        )
+    else:
+        episode = run_episode(
+            instruction=task.prompt,
+            workspace=workspace,
+            model=model,
+            config=condition,
+            run_dir=run_dir,
+            on_update=save_progress,
+        )
     result = ExperimentResult(
         **{field.name: getattr(episode, field.name) for field in fields(EpisodeResult)},
         task_id=task.task_id,
@@ -369,6 +385,10 @@ def run_experiment(
             "environment_variant_id": task.environment_variant_id,
             "passed": result.passed,
         }
+        if direct_code is not None:
+            final_metadata.update(
+                evaluation_track="coding", direct_code=asdict(direct_code)
+            )
         try:
             if sft_adapter is not None:
                 # Seal actual grading and history before any SFT consumer sees it.

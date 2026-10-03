@@ -1,5 +1,6 @@
 """Token-in/token-out sampling with optional verified local snapshot provenance."""
 
+import inspect
 import math
 import os
 import time
@@ -21,6 +22,22 @@ from .models import (
 
 VLLM_VERSION = "0.11.0"
 _TRANSIENT_STATUS = {408, 429, 500, 502, 503, 504}
+_REQUEST_FIELDS = ("timeout_seconds", "max_retries", "retry_delay_seconds")
+
+
+def configured_request_policy(model: dict[str, Any]) -> dict[str, Any]:
+    """Use the constructor's defaults when a VLLM config omits HTTP settings."""
+    vllm = model.get("class", "").replace(":", ".").split(".")[-1] == "VLLMModel"
+    signature = inspect.signature(VLLMModel)
+    policy = {
+        name: model.get(name, signature.parameters[name].default)
+        for name in _REQUEST_FIELDS
+        if vllm or name in model
+    }
+    return {
+        name: float(value) if name != "max_retries" else value
+        for name, value in policy.items()
+    }
 
 
 class VLLMModel:
@@ -113,6 +130,12 @@ class VLLMModel:
             "required_service_version": self.service_version,
             "identity_verified": False,
             "capability_probe": {"passed": False},
+            "request_policy": {
+                name: float(getattr(self, name))
+                if name != "max_retries"
+                else getattr(self, name)
+                for name in _REQUEST_FIELDS
+            },
         }
         if self._snapshot is not None:
             self._details.update(self._snapshot.details)

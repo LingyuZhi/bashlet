@@ -1,7 +1,9 @@
 """Controllable model-call Adapter for tests. It is a test tool, not a backend."""
 
+import shlex
 from collections.abc import Callable, Sequence
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from bashlet import (
     DecodedReply,
@@ -146,6 +148,88 @@ class EvaluationModel(ScriptedModel):
                 else "def double(n): return n * 2\n"
             )
         return submit()
+
+
+class DirectEvaluationModel(EvaluationModel):
+    """Respond to either frozen evaluation prompt at the model-call boundary."""
+
+    def __init__(
+        self,
+        thinking: bool = False,
+        identity: str = "test/direct-v1",
+        timeout_seconds: float | None = None,
+        max_retries: int | None = None,
+        retry_delay_seconds: float | None = None,
+    ) -> None:
+        super().__init__(thinking, identity)
+
+    def _respond(self, context: str) -> str:
+        if "You have one answer" in context:
+            return "```python\ndef double(n): return n * 2\n```"
+        return super()._respond(context)
+
+
+class AcceptanceModel(ScriptedModel):
+    """Canned model responses; all workspace execution and grading stay real."""
+
+    def __init__(
+        self,
+        programs: list[dict[str, Any]],
+        scenario: str,
+        identity: str,
+        thinking: bool = False,
+    ) -> None:
+        assert not thinking
+        self.programs = programs
+        self.scenario = scenario
+        super().__init__(self._respond, identity)
+
+    def _respond(self, context: str) -> str | Generation:
+        if "You have one answer" in context:
+            if self.scenario == "backend-error":
+                return Generation((65,), "stop", logprobs=None)
+            return (
+                "```python\ndef double(n): return "
+                + ("4" if self.scenario == "coding-regression" else "n * 2")
+                + "\n```"
+            )
+        task = context.split("<|user|>")[1]
+        program = next(item for item in self.programs if item["keyword"] in task)
+        turn = turn_number(context)
+        if program["kind"] == "short_program" and self.scenario == "base":
+            if turn == 1:
+                return "I will write the implementation."
+            turn -= 1
+        observe = program["kind"] == "workspace" and self.scenario not in {
+            "base",
+            "format-only",
+            "no-observation",
+        }
+        if observe:
+            if turn == 1:
+                return bash(
+                    "cat "
+                    + " ".join(shlex.quote(path) for path in program["read_paths"])
+                )
+            turn -= 1
+        if turn > 1:
+            return submit()
+        wrong = (
+            self.scenario == "format-only"
+            or self.scenario == "base"
+            and program["kind"] == "workspace"
+            or self.scenario == "class-regression"
+            and program["kind"] == "code_edit"
+        )
+        source = (
+            "raise RuntimeError('incorrect implementation')\n"
+            if wrong
+            else program["code"]
+        )
+        return bash(
+            f"mkdir -p {shlex.quote(str(Path(program['target']).parent))}\n"
+            f"cat > {shlex.quote(program['target'])} <<'PY'\n{source}\nPY"
+        )
 
 
 class PaidEvaluationModel(PyTRIOModel):

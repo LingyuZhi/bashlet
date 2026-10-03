@@ -90,6 +90,30 @@ class ExperimentConfig:
     model: ModelConfig
 
 
+@dataclass(frozen=True)
+class DirectCodeConfig:
+    """Frozen single-generation instructions and mechanical extraction rule."""
+
+    version: str
+    system_prompt: str
+    user_prompt: str
+    extraction: str
+
+    def __post_init__(self) -> None:
+        if self.version != "direct-code-v1":
+            raise ValueError("Unknown direct coding version")
+        if self.extraction != "single-python-fence-v1":
+            raise ValueError("Unknown direct coding extraction rule")
+        if not self.system_prompt.strip() or not self.user_prompt.strip():
+            raise ValueError("Direct coding prompts must be nonempty")
+        try:
+            _JINJA.from_string(self.user_prompt).render(
+                instruction="", function_name=""
+            )
+        except TemplateError as error:
+            raise ValueError(f"Invalid direct coding template: {error}") from error
+
+
 def config_record(config: ExperimentConfig) -> dict[str, Any]:
     """Record the resolved condition using the same keys as its YAML input."""
     return asdict(config) | {

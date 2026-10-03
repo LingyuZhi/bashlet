@@ -300,6 +300,13 @@ uv run --locked bashlet evaluate configs/mbpp-dev-8-v1.json \
 以下命令使用既有总账 `runs/spend.sqlite3`；`sft` 和 `sft-development` 分别限 ¥4，原项目上限和已充值 ¥10 上限仍同时生效。新实验须另取输出目录，不覆盖已有证据：
 
 ```bash
+# 新训练前先冻结双轨规则并运行本地原始模型初筛。
+# 服务身份须对应原始 Qwen3.5-4B，启动方式见本地快照部分。
+uv run --locked bashlet evaluate-acceptance configs/sft-acceptance-v1.json \
+  -c configs/local-base.yaml -c configs/acceptance-local-v1.yaml \
+  --snapshot vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a \
+  --monitor-config configs/acceptance-monitoring.yaml --output-dir runs/my-base
+
 # 从已验证示范开始；在第 12 步保存并退出。
 uv run --locked bashlet train-sft configs/sft-v1.yaml \
   --output-dir runs/my-sft --stop-after 12
@@ -307,23 +314,24 @@ uv run --locked bashlet train-sft configs/sft-v1.yaml \
 uv run --locked bashlet train-sft configs/sft-v1.yaml \
   --output-dir runs/my-sft --resume
 
-# 用 training.json 中某个 sampler.path 替换下面的 URI。
-uv run --locked bashlet evaluate configs/mbpp-dev-8-v1.json \
-  -c configs/pytrio-smoke.yaml -c configs/development-baseline-v1.yaml \
-  --set model.api_key_env=pytrio_api_key --set model.group=sft-development \
-  --set model.model_path=trio://TRAINING_RUN/sampler_weights/SNAPSHOT \
-  --snapshot pytrio/Qwen/Qwen3.5-4B@trio://TRAINING_RUN/sampler_weights/SNAPSHOT \
-  --monitor-config configs/monitoring.yaml --training-run runs/my-sft \
+# 导出并加载候选；用其 snapshot.json 的 identity 替换 SFT_SNAPSHOT_ID。
+uv run --locked bashlet evaluate-acceptance configs/sft-acceptance-v1.json \
+  -c configs/local-base.yaml -c configs/local-sft.yaml -c configs/acceptance-local-v1.yaml \
+  --snapshot SFT_SNAPSHOT_ID \
+  --monitor-config configs/acceptance-monitoring.yaml --training-run runs/my-sft \
   --output-dir runs/my-sft-dev
 
+# 有希望时，分别用对应服务和配置扩展基线及候选。
+# 加 --stage confirmation --resume runs/my-sft-dev/acceptance.json；已完成 seed 会复用。
 uv run --locked bashlet select-sft runs/my-sft \
-  --baseline runs/issue05-development-baseline/1dd96303a0784be6a0988c6a22bc31dc/evaluation.json \
-  --evaluation runs/my-sft-dev/EVALUATION_ID/evaluation.json
+  --baseline runs/my-base/acceptance.json \
+  --evaluation runs/my-sft-dev/acceptance.json \
+  --benefit-review runs/my-sft-dev/workspace-review.json
 ```
 
 `training.json` 保留优化器进度、批次用量、训练配置、示范来源和费用请求身份。sampler 权重供推理与冻结教师使用；`training_state` 保存模型和优化器，以 `create_training_client_from_state_with_optimizer()` 恢复。`--resume` 保留本地与 W&B 身份，校验配置和训练数据，并拒绝未核实的在途更新、缺少对应完整状态的恢复或并发启动。同一个运行的 `metrics.jsonl` 以独立事件序号记录，每次已完成更新默认上报一次；loss 为受监督 token 的交叉熵之和除以受监督 token 数。
 
-`select-sft` 只接受完整、真实、比较条件相同的开发评测和已保存的 SFT sampler。按最终通过数选择，同分取更早更新；最终测试数据、测试替身及不完整评测均被拒绝。`selection.json` 同时记录学生与冻结教师所用的同一个快照，以及配套的 SFT 完整状态。从 SFT 转到 OPSD **重置优化器**：学生从所选模型参数初始化，教师固定该快照；不能把这一新阶段初始化冒充 SFT 断点续训。教师的实际评分能力仍由后续 OPSD 小试验证。
+`evaluate-acceptance` 分别检查 30 项 Harness 任务和 37 道直接代码生成题；两者有重叠，分母分别报告。`select-sft` 将候选标为合格、不合格或证据不足：保留独立编程表现、没有类别回退、且工作区场景有经审阅的任务收益，才能建立起点。没有合格候选时，`selection.json` 的学生、教师和训练状态均为 null；单 seed、不完整或条件不同的结果不能通过。同分取更早更新。详见 [冻结规则及审阅格式](configs/sft-acceptance-v1.md)。合格后从 SFT 进入 OPSD **重置优化器**，学生与冻结教师使用同一快照；教师实际评分能力仍由后续小试验证。
 
 历史基线通过 `bashlet monitor import-evaluation EVALUATION_JSON --monitor-config configs/monitoring.yaml --output-dir runs/baseline-monitor` 导入，保留原产物、来源哈希和 `historical_import=true`，不再采样。未知实扣保持缺失，不能把费用上界当成实扣。
 

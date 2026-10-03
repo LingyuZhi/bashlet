@@ -293,7 +293,7 @@ def test_invalid_or_uncertain_training_never_claims_an_optimizer_update(
         assert again.returncode != 0 and "reconciled" in again.stderr
 
 
-def test_selection_requires_comparable_dev_results_and_preserves_snapshot_roles(
+def test_selection_rejects_one_track_results_and_preserves_historical_selection(
     tmp_path: Path,
 ) -> None:
     training = tmp_path / "training"
@@ -342,16 +342,9 @@ def test_selection_requires_comparable_dev_results_and_preserves_snapshot_roles(
     args = ["select-sft", str(training), "--baseline", str(baseline)]
     for path in evaluations:
         args.extend(["--evaluation", str(path)])
+    (training / "selection.json").write_text(json.dumps({"historical": True}))
     selected = cli(*args, cwd=tmp_path)
-    assert selected.returncode == 0, selected.stdout + selected.stderr
-    selection = json.loads((training / "selection.json").read_text())
-    assert (
-        selection["optimizer_step"] == 12
-    )  # Equal pass rates prefer the earlier update.
-    assert selection["student_snapshot"] == selection["frozen_teacher_snapshot"]
-    assert selection["student_snapshot"] == "trio://run/sampler-12"
-    assert selection["optimizer_transition"] == "reset-for-opsd"
-    assert selection["sft_training_state"]["path"] == "trio://run/state-12"
+    assert selected.returncode == 2 and "dual-track" in selected.stderr
     original = (training / "selection.json").read_bytes()
     baseline.write_text(evaluations[0].read_text())
     refused = cli(*args, cwd=tmp_path)

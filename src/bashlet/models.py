@@ -71,6 +71,15 @@ class Bash:
 
 
 @dataclass(frozen=True)
+class Code:
+    """Extracted direct-generation answer; the host writes it without repair."""
+
+    path: str
+    text: str
+    kind: Literal["code"] = field(default="code", init=False)
+
+
+@dataclass(frozen=True)
 class InvalidAction:
     """A generation the action protocol rejected; nothing was executed."""
 
@@ -282,7 +291,7 @@ class Step:
     """One Interaction Step. ``feedback`` is the exact text the policy sees next;
     ``candidate`` is derived after the episode from the workspace manifest."""
 
-    action: Bash | InvalidAction
+    action: Bash | Code | InvalidAction
     observation: Observation | None = None
     model_call: ModelCall | None = None
     feedback: str | None = None

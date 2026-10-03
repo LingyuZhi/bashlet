@@ -200,6 +200,24 @@ def main() -> None:
         default="experimental",
     )
     _execution_options(evaluation)
+    acceptance = commands.add_parser(
+        "evaluate-acceptance",
+        help="Run or extend the frozen Harness and direct coding checks",
+    )
+    acceptance.add_argument("policy", type=Path)
+    acceptance.add_argument("--snapshot", required=True)
+    acceptance.add_argument(
+        "--stage", choices=("screening", "confirmation"), default="screening"
+    )
+    acceptance.add_argument("--resume", type=Path)
+    acceptance.add_argument(
+        "--evidence-kind",
+        choices=("experimental", "test-double"),
+        default="experimental",
+    )
+    acceptance.add_argument("--monitor-config", type=Path)
+    acceptance.add_argument("--training-run", type=Path)
+    _execution_options(acceptance)
     prepare = commands.add_parser(
         "prepare-mbpp", help="Import pinned MBPP and validate references in isolation"
     )
@@ -254,6 +272,14 @@ def main() -> None:
     selection.add_argument("run_dir", type=Path)
     selection.add_argument("--baseline", type=Path, required=True)
     selection.add_argument("--evaluation", type=Path, action="append", required=True)
+    selection.add_argument("--benefit-review", type=Path, action="append", default=[])
+    selection.add_argument(
+        "--evidence-kind",
+        choices=("experimental", "test-double"),
+        default="experimental",
+    )
+    selection.add_argument("--output-dir", type=Path)
+    selection.add_argument("--monitor-config", type=Path)
     export = commands.add_parser(
         "export-snapshot", help="Download an existing PyTRIO sampler as a LoRA adapter"
     )
@@ -313,6 +339,27 @@ def main() -> None:
     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "evaluate-acceptance":
+            from .evaluation.suite import evaluate_acceptance
+            from .monitoring import MonitorConfig
+
+            path = evaluate_acceptance(
+                options.policy,
+                snapshot=options.snapshot,
+                evidence_kind=options.evidence_kind,
+                condition=load_config(options.config, options.overrides),
+                output_dir=options.output_dir,
+                stage=options.stage,
+                resume=options.resume,
+                monitoring=MonitorConfig.read(options.monitor_config)
+                if options.monitor_config
+                else None,
+                training_run=options.training_run,
+            )
+            print(path)
+            raise SystemExit(
+                0 if json.loads(path.read_text())["status"] == "complete" else 2
+            )
         if options.command == "freeze-demonstrations":
             from .curation import freeze_demonstrations
 
@@ -364,8 +411,21 @@ def main() -> None:
             return
         if options.command == "select-sft":
             from .evaluation import select_sft
+            from .monitoring import MonitorConfig
 
-            print(select_sft(options.run_dir, options.baseline, options.evaluation))
+            print(
+                select_sft(
+                    options.run_dir,
+                    options.baseline,
+                    options.evaluation,
+                    evidence_kind=options.evidence_kind,
+                    reviews=options.benefit_review,
+                    output_dir=options.output_dir,
+                    monitoring=MonitorConfig.read(options.monitor_config)
+                    if options.monitor_config
+                    else None,
+                )
+            )
             return
         if options.command == "train-sft":
             from .training import train_sft

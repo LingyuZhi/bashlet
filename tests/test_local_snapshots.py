@@ -678,11 +678,8 @@ def test_local_evaluations_require_loaded_identity_and_matching_runtime_conditio
         str(records[1]),
         cwd=tmp_path,
     )
-    assert valid.returncode == 0, valid.stdout + valid.stderr
-    assert (
-        json.loads((training / "selection.json").read_text())["student_snapshot"]
-        == SAMPLER
-    )
+    assert valid.returncode == 2 and "dual-track" in valid.stderr
+    assert not (training / "selection.json").exists()
     relabeled = loaded[1]
     relabeled["snapshot_details"]["identity_verified"] = False
     forged = tmp_path / "relabeled.json"

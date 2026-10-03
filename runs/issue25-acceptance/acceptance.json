@@ -1,0 +1,370 @@
+{
+  "schema_version": 1,
+  "issue": 25,
+  "evidence_kind": "experimental",
+  "seeds_frozen": [
+    4,
+    17,
+    29
+  ],
+  "seeds_executed": [
+    4
+  ],
+  "new_paid_model_requests": 0,
+  "status": "accepted-evaluation-chain; no-qualified-new-SFT-snapshot",
+  "runs": {
+    "base-v1": {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/base-v1/acceptance.json",
+      "sha256": "108f341b6dfff119aba21f00203376b0eafcde3bac686b9bc575962296e70761",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "tracks": {
+        "harness": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/base-v1/harness/35a7bb3d998142f3aff44b05c735e366/evaluation.json",
+          "sha256": "7bf166753504ba7727812c9bfb3c3236e23ced2f1ed0fdaea8e65d849b9da1da",
+          "planned_tasks": 30,
+          "passed_tasks": 4,
+          "outcomes": {
+            "budget_exhausted": 6,
+            "protocol_error": 20,
+            "passed": 4
+          },
+          "by_task_type": {
+            "short_program": {
+              "planned_tasks": 10,
+              "passed_tasks": 4,
+              "final_pass_rate": 0.4,
+              "outcomes": {
+                "budget_exhausted": 1,
+                "protocol_error": 5,
+                "passed": 4
+              },
+              "protocol_errors": 19,
+              "command_problems": {
+                "command_failed": 2
+              },
+              "submitted_tasks": 4,
+              "terminations": {
+                "budget_exhausted": 1,
+                "format_error": 5,
+                "submitted": 4
+              },
+              "typical_trajectories": {
+                "budget_exhausted": "episodes/069d2d0348fc4bdd942579a517f75bf5",
+                "protocol_error": "episodes/1894e1649a9f4b6b9f1c82297008cb3b",
+                "passed": "episodes/0076cc2439714517915b930ce46cea23"
+              }
+            },
+            "code_edit": {
+              "planned_tasks": 10,
+              "passed_tasks": 0,
+              "final_pass_rate": 0.0,
+              "outcomes": {
+                "protocol_error": 6,
+                "budget_exhausted": 4
+              },
+              "protocol_errors": 24,
+              "command_problems": {
+                "command_failed": 2
+              },
+              "submitted_tasks": 0,
+              "terminations": {
+                "format_error": 6,
+                "budget_exhausted": 4
+              },
+              "typical_trajectories": {
+                "protocol_error": "episodes/a2436c763bec4984b659fca1a7ef2732",
+                "budget_exhausted": "episodes/12e83576cad644f18f1b8bfbe2b818ae"
+              }
+            },
+            "workspace": {
+              "planned_tasks": 10,
+              "passed_tasks": 0,
+              "final_pass_rate": 0.0,
+              "outcomes": {
+                "protocol_error": 9,
+                "budget_exhausted": 1
+              },
+              "protocol_errors": 27,
+              "command_problems": {},
+              "submitted_tasks": 0,
+              "terminations": {
+                "format_error": 9,
+                "budget_exhausted": 1
+              },
+              "typical_trajectories": {
+                "protocol_error": "episodes/3b541120693f43298f569d0f8edf2ebd",
+                "budget_exhausted": "episodes/a73c4e68b9de4117b06ba0060fa636c1"
+              }
+            }
+          },
+          "typical_trajectories": {
+            "budget_exhausted": "episodes/069d2d0348fc4bdd942579a517f75bf5",
+            "protocol_error": "episodes/1894e1649a9f4b6b9f1c82297008cb3b",
+            "passed": "episodes/0076cc2439714517915b930ce46cea23"
+          }
+        },
+        "coding": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/base-v1/coding/3525e5f730bb4946bd6cafd44420dbc0/evaluation.json",
+          "sha256": "ef605f02d7c9abc8cee10212511b633e1732aba862e7f6ccadf366a944d423c7",
+          "planned_tasks": 37,
+          "passed_tasks": 27,
+          "outcomes": {
+            "passed": 27,
+            "model_failure": 10
+          },
+          "by_task_type": {
+            "short_program": {
+              "planned_tasks": 37,
+              "passed_tasks": 27,
+              "final_pass_rate": 0.7297297297297297,
+              "outcomes": {
+                "passed": 27,
+                "model_failure": 10
+              },
+              "protocol_errors": 1,
+              "command_problems": {},
+              "submitted_tasks": 36,
+              "terminations": {
+                "submitted": 36,
+                "model_failure": 1
+              },
+              "typical_trajectories": {
+                "passed": "episodes/b5f1f2c652f1440bb5f07516f3050b7d",
+                "model_failure": "episodes/e9aea679676e45d29209b378d2d57807"
+              }
+            }
+          },
+          "typical_trajectories": {
+            "passed": "episodes/b5f1f2c652f1440bb5f07516f3050b7d",
+            "model_failure": "episodes/e9aea679676e45d29209b378d2d57807"
+          }
+        },
+        "variant": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/base-v1/variant/6c3e342eca7448ada3794931c5e41115/evaluation.json",
+          "sha256": "73726d7efa2ef7b07245ee70b97f5a93c6e187e13c23ee0fc834ba9086675523",
+          "planned_tasks": 1,
+          "passed_tasks": 0,
+          "outcomes": {
+            "protocol_error": 1
+          },
+          "by_task_type": {
+            "workspace": {
+              "planned_tasks": 1,
+              "passed_tasks": 0,
+              "final_pass_rate": 0.0,
+              "outcomes": {
+                "protocol_error": 1
+              },
+              "protocol_errors": 3,
+              "command_problems": {},
+              "submitted_tasks": 0,
+              "terminations": {
+                "format_error": 1
+              },
+              "typical_trajectories": {
+                "protocol_error": "episodes/be64cde01b3d4f4fadfab70c5c8f80ff"
+              }
+            }
+          },
+          "typical_trajectories": {
+            "protocol_error": "episodes/be64cde01b3d4f4fadfab70c5c8f80ff"
+          }
+        }
+      }
+    },
+    "sft-step12": {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/sft-step12/acceptance.json",
+      "sha256": "4e9f6ead681aa7fa7edbd3115582847e1f73676312e28ee75755ed2e9cdc02b6",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_x2uvy7hltg83/sampler_weights/sampler-0012:e459465152a9a6a079c821cf05f92f2d5263b4fc811e5c2296e563880c93debb",
+      "tracks": {
+        "harness": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/sft-step12/harness/07798399d0604bfcb9517ca8a3cd1935/evaluation.json",
+          "sha256": "39378ab5eae338b7590e3b474850ff250d7a55a76bcf993118b7e585d7db1a71",
+          "planned_tasks": 30,
+          "passed_tasks": 3,
+          "outcomes": {
+            "passed": 3,
+            "budget_exhausted": 25,
+            "protocol_error": 2
+          },
+          "by_task_type": {
+            "short_program": {
+              "planned_tasks": 10,
+              "passed_tasks": 3,
+              "final_pass_rate": 0.3,
+              "outcomes": {
+                "passed": 3,
+                "budget_exhausted": 7
+              },
+              "protocol_errors": 0,
+              "command_problems": {
+                "command_failed": 40
+              },
+              "submitted_tasks": 3,
+              "terminations": {
+                "submitted": 3,
+                "budget_exhausted": 7
+              },
+              "typical_trajectories": {
+                "passed": "episodes/e09f3a45ef5e405ab372b9993804cd8b",
+                "budget_exhausted": "episodes/096fa4907db34feab25bde82e491fb93"
+              }
+            },
+            "code_edit": {
+              "planned_tasks": 10,
+              "passed_tasks": 0,
+              "final_pass_rate": 0.0,
+              "outcomes": {
+                "budget_exhausted": 10
+              },
+              "protocol_errors": 0,
+              "command_problems": {
+                "command_failed": 57
+              },
+              "submitted_tasks": 0,
+              "terminations": {
+                "budget_exhausted": 10
+              },
+              "typical_trajectories": {
+                "budget_exhausted": "episodes/f1759afea1e34c79adedeb80a9de6997"
+              }
+            },
+            "workspace": {
+              "planned_tasks": 10,
+              "passed_tasks": 0,
+              "final_pass_rate": 0.0,
+              "outcomes": {
+                "budget_exhausted": 8,
+                "protocol_error": 2
+              },
+              "protocol_errors": 8,
+              "command_problems": {
+                "command_failed": 30
+              },
+              "submitted_tasks": 0,
+              "terminations": {
+                "budget_exhausted": 8,
+                "format_error": 2
+              },
+              "typical_trajectories": {
+                "budget_exhausted": "episodes/b439ab0b8bfa487abbee7e8487190bcb",
+                "protocol_error": "episodes/4a87558fd4814699a920b932042b5cbc"
+              }
+            }
+          },
+          "typical_trajectories": {
+            "passed": "episodes/e09f3a45ef5e405ab372b9993804cd8b",
+            "budget_exhausted": "episodes/096fa4907db34feab25bde82e491fb93",
+            "protocol_error": "episodes/4a87558fd4814699a920b932042b5cbc"
+          }
+        },
+        "coding": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/sft-step12/coding/b5bfe0d20acb4af2978a3c4f35bc63ce/evaluation.json",
+          "sha256": "c958c584b610f4b8df1761afcb0b2ac5e888ae35d0a7161b479bc450317038df",
+          "planned_tasks": 37,
+          "passed_tasks": 20,
+          "outcomes": {
+            "passed": 20,
+            "model_failure": 17
+          },
+          "by_task_type": {
+            "short_program": {
+              "planned_tasks": 37,
+              "passed_tasks": 20,
+              "final_pass_rate": 0.5405405405405406,
+              "outcomes": {
+                "passed": 20,
+                "model_failure": 17
+              },
+              "protocol_errors": 0,
+              "command_problems": {},
+              "submitted_tasks": 37,
+              "terminations": {
+                "submitted": 37
+              },
+              "typical_trajectories": {
+                "passed": "episodes/e949efcd5ed149e09f9d71019d6639d6",
+                "model_failure": "episodes/dd29550f4dfe42049c3415f44baf8d33"
+              }
+            }
+          },
+          "typical_trajectories": {
+            "passed": "episodes/e949efcd5ed149e09f9d71019d6639d6",
+            "model_failure": "episodes/dd29550f4dfe42049c3415f44baf8d33"
+          }
+        },
+        "variant": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/sft-step12/variant/ed46351453e44d388ddb0b9af3d309cc/evaluation.json",
+          "sha256": "5824dd431d936ae0bd9dad4a68f31bcaa271bbd8efbdf9980c59d890826fd22b",
+          "planned_tasks": 1,
+          "passed_tasks": 0,
+          "outcomes": {
+            "budget_exhausted": 1
+          },
+          "by_task_type": {
+            "workspace": {
+              "planned_tasks": 1,
+              "passed_tasks": 0,
+              "final_pass_rate": 0.0,
+              "outcomes": {
+                "budget_exhausted": 1
+              },
+              "protocol_errors": 1,
+              "command_problems": {
+                "command_failed": 5
+              },
+              "submitted_tasks": 0,
+              "terminations": {
+                "budget_exhausted": 1
+              },
+              "typical_trajectories": {
+                "budget_exhausted": "episodes/a913a7cc7c904c38a544cdf2a49bb8e1"
+              }
+            }
+          },
+          "typical_trajectories": {
+            "budget_exhausted": "episodes/a913a7cc7c904c38a544cdf2a49bb8e1"
+          }
+        }
+      }
+    }
+  },
+  "same_effective_conditions": true,
+  "same_effective_track_comparisons": {
+    "harness": true,
+    "coding": true,
+    "variant": true
+  },
+  "selection": {
+    "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/selection/selection.json",
+    "sha256": "6f449c47dac9800a8585235576138e9cd57424f7a91b5acd9e7a1eb1b218714b",
+    "status": "no_qualified_snapshot",
+    "student_snapshot": null,
+    "frozen_teacher_snapshot": null,
+    "decision": "insufficient",
+    "screening": {
+      "promising": false,
+      "paired_seeds": [
+        4
+      ],
+      "confirmation_required": true,
+      "is_qualification": false
+    },
+    "gaps": [
+      "missing:harness:seed-17",
+      "missing:harness:seed-29",
+      "missing:coding:seed-17",
+      "missing:coding:seed-29",
+      "missing:variant:seed-17",
+      "missing:variant:seed-29",
+      "missing:harness:seed-17",
+      "missing:harness:seed-29",
+      "missing:coding:seed-17",
+      "missing:coding:seed-29",
+      "missing:variant:seed-17",
+      "missing:variant:seed-29"
+    ]
+  },
+  "interpretation": "Screening only. SFT has fewer Harness and coding successes and no workspace benefit. No three-seed confirmation was triggered, no confirmed capability improvement or regression is claimed, and no OPSD start is emitted.",
+  "monitoring": "Offline metrics and caches retained; initial online action was rejected by automatic approval."
+}
