@@ -157,7 +157,7 @@ uv run bashlet show runs/<运行 ID>
 
 ## 本地 Qwen3.5-4B 采样与评测
 
-任务 21 支持使用原始 `Qwen/Qwen3.5-4B` 和任务 07 的已有 SFT sampler，在同一 vLLM 环境中运行共用 Harness。生产训练仍只使用 PyTRIO。本地推理环境独立锁定在 [configs/local-vllm/](configs/local-vllm/pyproject.toml)，使用 vLLM 0.17.1、PyTorch 2.10.0、CUDA 12.8 和 BF16；服务仅绑定节点 loopback，继续使用上述 SSH 隧道。
+原始 `Qwen/Qwen3.5-4B` 和导出的 SFT sampler 可在本地 vLLM 环境中运行共用 Harness 并评测。生产训练使用 PyTRIO。本地推理环境独立锁定在 [configs/local-vllm/](configs/local-vllm/pyproject.toml)，服务仅绑定节点 loopback，使用上述 SSH 隧道。
 
 新增两个准备入口：
 
@@ -170,13 +170,11 @@ uv run --locked bashlet prepare-local-snapshot /path/to/pinned-Qwen3.5-4B \
   --output-dir runs/new-local-sft
 ```
 
-`export-snapshot` 下载已有 sampler，记录远端 checkpoint、原始 archive 与文件哈希、LoRA 配置和训练编码，不创建 trainer 或新 sampler。`prepare-local-snapshot` 无 `--export` 时记录原始基模；带 `--merge` 时先校验结构和编码、重排 TRIO 的 split Q/K/V，再以 FP32 累加 LoRA 增量并舍入为原始 BF16。输出 head 单独保存，输入 embedding 保持原权重。直接加载这份 tied-head LoRA 被真实 vLLM 服务拒绝，合并路径的失败记录和独立矩阵抽核均保留。
+`export-snapshot` 下载已有 sampler 并记录来源及文件哈希。`prepare-local-snapshot` 无 `--export` 时准备基模 manifest；带 `--export --merge` 时校验结构和编码并合并 LoRA 权重。
 
-[configs/local-base.yaml](configs/local-base.yaml) 和 [configs/local-sft.yaml](configs/local-sft.yaml) 绑定验收产物的 `snapshot.json`。后端检查完整本地文件哈希，核对 `/version`、`/v1/models`、`/server_info` 的实际权重路径、精度和 tokenizer，再对选定模型做 tokenizer 与原始 token／逐 token logprob 探针；成功后才设置 `identity_verified=true`。缺失权重、编码或结构不匹配、错误服务身份和响应回退都会失败。`configs/local-vllm/server.env` 开启该版本的配置查询接口；服务保持 loopback 绑定。
+[configs/local-base.yaml](configs/local-base.yaml) 和 [configs/local-sft.yaml](configs/local-sft.yaml) 是运行配置示例；复跑时更新其中的权重与 manifest 路径。后端验证文件哈希、实际服务身份、编码和 token/logprob 能力后，`evaluate --evidence-kind experimental` 才接受本地记录。比较条件包括基模、编码和推理配置；旧开发记录保留开发身份。
 
-`evaluate --evidence-kind experimental` 接受通过上述验证的本地记录。比较条件包括原始基模哈希、编码、实际推理版本、精度、上下文、缓存、并行、调度和编译设定；模型快照单独记录。`select-sft` 检查匹配基线、已保存 sampler 的训练来源以及 episode 哈希与验证证据，条件不同或未验证的旧开发记录不能入选。
-
-完整的下载、服务切换、恢复与复跑命令见 [任务 21 复跑记录](runs/issue21-local-inference/REPRODUCE.md)。云端基模 revision 未公开，不能据模型名称或 tokenizer commit 宣称云端／本地权重逐位相同。本轮是链路小试，不证明 SFT 提升，也不改变任务 07 回退快照不合格、暂缓后续训练的结论。
+下载、服务启动及复跑命令见 [本地运行指南](runs/issue21-local-inference/REPRODUCE.md)。云端基模 revision 未公开，本地记录不证明云端／本地权重逐位相同。
 
 ## 已验证的 MBPP 任务集
 

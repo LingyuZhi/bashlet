@@ -256,11 +256,11 @@ def evaluate(
             model.max_context_tokens if isinstance(model, ModelBackend) else None
         )
         if local and isinstance(model, VLLMModel):
-            from .snapshots import _encoding_condition
+            from .snapshots import encoding_condition
 
             runtime = model.describe()
             record["snapshot_details"] = runtime
-            comparison["encoding"] = _encoding_condition(model.encoding.describe())
+            comparison["encoding"] = encoding_condition(model.encoding.describe())
             comparison["inference"] = runtime.get("inference_conditions")
         record["comparison_sha256"] = _digest(comparison)
         record["summary"] = _summary(rows)

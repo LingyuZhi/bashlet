@@ -1,6 +1,5 @@
-"""Export existing sampler checkpoints and identify local inference artifacts."""
+"""Export existing sampler checkpoints and prepare validated local weights."""
 
-import hashlib
 import json
 import math
 import shutil
@@ -16,8 +15,8 @@ import ml_dtypes  # noqa: F401 -- registers the BF16 NumPy dtype
 import numpy as np
 from safetensors import TensorSpec, deserialize, safe_open, serialize_file
 
-from .models import Encoding
-from .pytrio import MODEL, SDK_VERSION, _credential
+from ..pytrio import MODEL, SDK_VERSION, _credential
+from .manifest import _snapshot_identity, encoding_condition, file_sha256
 
 _DTYPE_NAMES = {
     "BF16": "bfloat16",
@@ -30,25 +29,6 @@ _DTYPE_NAMES = {
 def _raw_tensors(path: Path) -> dict[str, dict[str, Any]]:
     read = cast(Callable[[bytes], list[tuple[str, dict[str, Any]]]], deserialize)
     return dict(read(path.read_bytes()))
-
-
-def _snapshot_identity(record: dict[str, Any]) -> str:
-    adapter = record["adapter"]
-    if adapter is None:
-        return f"vllm/{MODEL}@{record['model_revision']}"
-    digest = (
-        hashlib.sha256(
-            json.dumps(adapter["merged"]["files_sha256"], sort_keys=True).encode()
-        ).hexdigest()
-        if adapter["load_method"] == "merged"
-        else adapter["files_sha256"]["adapter_model.safetensors"]
-    )
-    return f"vllm/{MODEL}@{adapter['checkpoint']['path']}:{digest}"
-
-
-def file_sha256(path: Path) -> str:
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def _write(path: Path, record: dict[str, Any]) -> None:
@@ -226,7 +206,7 @@ def prepare_local_snapshot(
     weights = sorted(base_path.glob("*.safetensors"))
     if not weights:
         raise ValueError("Local base model weights are missing")
-    from .encoding import QwenChatMLEncoding
+    from ..encoding import QwenChatMLEncoding
 
     encoding = QwenChatMLEncoding(str(base_path), revision=model_revision)
     files = {
@@ -248,8 +228,8 @@ def prepare_local_snapshot(
             raise ValueError("Exported adapter base model mismatch")
         training_encoding = exported.get("training_encoding_details")
         if not isinstance(training_encoding, dict) or (
-            _encoding_condition(training_encoding)
-            != _encoding_condition(encoding.describe())
+            encoding_condition(training_encoding)
+            != encoding_condition(encoding.describe())
         ):
             raise ValueError("Exported adapter training encoding mismatch")
         source = export_path.parent / "adapter"
@@ -301,23 +281,6 @@ def prepare_local_snapshot(
     record["identity"] = _snapshot_identity(record)
     _write(destination, record)
     return destination
-
-
-def _encoding_condition(details: dict[str, Any]) -> dict[str, Any]:
-    # Fast tokenizer.json is authoritative; vocab/merges are redundant slow assets.
-    # Keep added-token and special-token configs, which can change the fast codec.
-    return {
-        key: value
-        for key, value in details.items()
-        if key not in {"tokenizer", "revision", "files_sha256"}
-    } | {
-        "files_sha256": {
-            key: value
-            for key, value in details["files_sha256"].items()
-            if key
-            not in {"config.json", "generation_config.json", "vocab.json", "merges.txt"}
-        }
-    }
 
 
 def _normalize_adapter(
@@ -586,172 +549,3 @@ def _merge_adapter(
             name: version(name) for name in ("numpy", "safetensors", "ml-dtypes")
         },
     }
-
-
-class LocalSnapshot:
-    """Verify local artifact hashes and the actual service before admitting evidence."""
-
-    def __init__(self, path: Path, model_revision: str, encoding: Encoding) -> None:
-        self.record = json.loads(path.read_text())
-        record = self.record
-        if record.get("schema_version") != 1 or record.get("base_model") != MODEL:
-            raise ValueError("Unknown local snapshot manifest")
-        if record["model_revision"] != model_revision:
-            raise ValueError("Local snapshot model revision mismatch")
-        self.base_path = Path(record["base_path"])
-        files = record["base_files_sha256"]
-        required = {
-            "config.json",
-            "tokenizer.json",
-            "tokenizer_config.json",
-            "chat_template.jinja",
-        }
-        actual = {
-            file.name
-            for file in self.base_path.iterdir()
-            if file.is_file() and file.suffix in {".json", ".jinja", ".safetensors"}
-        }
-        if (
-            not self.base_path.is_absolute()
-            or not required <= files.keys()
-            or set(files) != actual
-            or not any(name.endswith(".safetensors") for name in files)
-        ):
-            raise ValueError(
-                "Local snapshot must identify every base and tokenizer artifact"
-            )
-        if record["service_version"] != "0.17.1" or record["dtype"] != "bfloat16":
-            raise ValueError("Unknown verified local inference configuration")
-        base_config = json.loads((self.base_path / "config.json").read_text())
-        if base_config.get("model_type") not in {"qwen3_5", "qwen3_5_text"}:
-            raise ValueError("Local snapshot must identify Qwen3.5 model structure")
-        for name, digest in record["base_files_sha256"].items():
-            if file_sha256(self.base_path / name) != digest:
-                raise ValueError(f"Local snapshot file hash mismatch: {name}")
-        if _encoding_condition(record["encoding_details"]) != _encoding_condition(
-            encoding.describe()
-        ):
-            raise ValueError("Local snapshot encoding mismatch")
-        adapter = record["adapter"]
-        kind = (
-            "base"
-            if adapter is None
-            else ("merged" if adapter["load_method"] == "merged" else "lora")
-        )
-        if record["snapshot_kind"] != kind or record["identity"] != _snapshot_identity(
-            record
-        ):
-            raise ValueError("Local snapshot identity does not match its artifacts")
-        if adapter is not None:
-            for name, digest in adapter["files_sha256"].items():
-                if file_sha256(Path(adapter["path"]) / name) != digest:
-                    raise ValueError(f"Local adapter file hash mismatch: {name}")
-            if adapter["load_method"] == "merged":
-                for name, digest in adapter["merged"]["files_sha256"].items():
-                    if file_sha256(Path(adapter["merged"]["path"]) / name) != digest:
-                        raise ValueError(f"Local merged file hash mismatch: {name}")
-        self.identity: str = record["identity"]
-        self.service_version: str = record["service_version"]
-        self.details = record | {"snapshot_manifest_sha256": file_sha256(path)}
-
-    def verify_service(
-        self, served: dict[str, Any], config: dict[str, Any], models: list[Any]
-    ) -> dict[str, Any]:
-        model = config.get("model_config", {})
-        adapter = self.record["adapter"]
-        merged = adapter and adapter["load_method"] == "merged"
-        expected_root = (
-            adapter["merged"]["path"]
-            if merged
-            else (adapter["path"] if adapter else str(self.base_path))
-        )
-        expected_model = expected_root if merged else str(self.base_path)
-        if adapter and not merged:
-            parent: dict[str, Any] = next(
-                (
-                    item
-                    for item in models
-                    if isinstance(item, dict) and item.get("id") == served.get("parent")
-                ),
-                {},
-            )
-            if parent.get("root") != str(self.base_path) or not config.get(
-                "lora_config"
-            ):
-                raise ValueError("Service has not loaded the requested LoRA adapter")
-        if (
-            served.get("root") != expected_root
-            or ((adapter is None or merged) and served.get("parent") is not None)
-            or model.get("model") != expected_model
-            or model.get("tokenizer") != str(self.base_path)
-        ):
-            raise ValueError("Service model identity does not match the local snapshot")
-        dtype = str(model.get("dtype")).removeprefix("torch.")
-        if dtype != self.record["dtype"]:
-            raise ValueError("Service precision does not match the local snapshot")
-        if model.get("quantization") is not None or model.get("hf_overrides"):
-            raise ValueError(
-                "Service must use the recorded unquantized model configuration"
-            )
-        return {
-            "dtype": dtype,
-            "max_model_len": model.get("max_model_len"),
-            "quantization": model.get("quantization"),
-            "backend": "vllm",
-            "service_version": self.service_version,
-            "model_revision": self.record["model_revision"],
-            "base_weights_sha256": {
-                name: digest
-                for name, digest in self.record["base_files_sha256"].items()
-                if name.endswith(".safetensors")
-            },
-            "model": {
-                key: model.get(key)
-                for key in (
-                    "enforce_eager",
-                    "generation_config",
-                    "logprobs_mode",
-                    "max_logprobs",
-                    "enable_prompt_embeds",
-                )
-            },
-            "cache": {
-                key: config.get("cache_config", {}).get(key)
-                for key in (
-                    "block_size",
-                    "cache_dtype",
-                    "mamba_cache_dtype",
-                    "mamba_ssm_cache_dtype",
-                    "mamba_cache_mode",
-                    "enable_prefix_caching",
-                    "gpu_memory_utilization",
-                )
-            },
-            "parallel": {
-                key: config.get("parallel_config", {}).get(key)
-                for key in (
-                    "tensor_parallel_size",
-                    "pipeline_parallel_size",
-                    "data_parallel_size",
-                    "distributed_executor_backend",
-                )
-            },
-            "scheduler": {
-                key: config.get("scheduler_config", {}).get(key)
-                for key in (
-                    "max_num_seqs",
-                    "max_num_batched_tokens",
-                    "enable_chunked_prefill",
-                )
-            },
-            "compilation": {
-                key: config.get("compilation_config", {}).get(key)
-                for key in ("mode", "cudagraph_mode", "backend")
-            },
-            "lora": {
-                key: config.get("lora_config", {}).get(key)
-                for key in ("max_lora_rank", "lora_dtype")
-            }
-            if config.get("lora_config")
-            else None,
-        }

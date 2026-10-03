@@ -237,6 +237,7 @@ class VLLMModel:
                         None,
                     ),
                     "model_config": config.get("model_config"),
+                    "load_config": config.get("load_config"),
                     "lora_config": config.get("lora_config"),
                     "tokenizer_probe": {"prompt": probe_text, "tokens": remote_tokens},
                 }

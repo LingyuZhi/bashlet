@@ -190,6 +190,26 @@ def base_fixture(tmp_path: Path) -> Path:
     return base
 
 
+def local_service_config(base: Path) -> dict[str, Any]:
+    return {
+        "model_config": {
+            "model": str(base),
+            "tokenizer": str(base),
+            "dtype": "torch.bfloat16",
+            "max_model_len": 8192,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+        },
+        "load_config": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": ["original/**/*"],
+        },
+        "lora_config": None,
+    }
+
+
 def test_verified_local_base_uses_the_existing_experiment_and_is_traceable(
     tmp_path: Path, service: FakeVLLM
 ) -> None:
@@ -217,15 +237,7 @@ def test_verified_local_base_uses_the_existing_experiment_and_is_traceable(
         {"id": "test-qwen", "root": str(base), "parent": None, "max_model_len": 8192}
     ]
     service.tokenizer = encoding
-    service.server_config = {
-        "model_config": {
-            "model": str(base),
-            "tokenizer": str(base),
-            "dtype": "torch.bfloat16",
-            "max_model_len": 8192,
-        },
-        "lora_config": None,
-    }
+    service.server_config = local_service_config(base)
     reply = (
         "```bash\nprintf 'def solve(n): return 2 * n\\n' > solution.py\n"
         "printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```"
@@ -267,6 +279,12 @@ def test_verified_local_base_uses_the_existing_experiment_and_is_traceable(
         "merged_fallback",
         "merged_missing_tokens",
         "merged_missing_logprobs",
+        "merged_dummy_loader",
+        "merged_loader_extra_config",
+        "merged_loader_ignore_patterns",
+        "merged_missing_loader_config",
+        "merged_external_generation_config",
+        "merged_logits_processor",
     ],
 )
 def test_exported_split_projections_load_as_the_selected_local_lora(
@@ -433,15 +451,8 @@ def test_exported_split_projections_load_as_the_selected_local_lora(
             "max_model_len": 8192,
         },
     ]
-    service.server_config = {
-        "model_config": {
-            "model": str(base),
-            "tokenizer": str(base),
-            "dtype": "torch.bfloat16",
-            "max_model_len": 8192,
-        },
-        "lora_config": {"max_lora_rank": 64},
-    }
+    service.server_config = local_service_config(base)
+    service.server_config["lora_config"] = {"max_lora_rank": 64}
     if merge:
         service.models[-1].update(root=str(merged), parent=None)
         service.server_config["model_config"]["model"] = str(merged)
@@ -452,6 +463,20 @@ def test_exported_split_projections_load_as_the_selected_local_lora(
         service.models[-1]["parent"] = None
     elif defect == "identity":
         service.server_config["model_config"]["model"] = "/a/different/model"
+    elif fault == "dummy_loader":
+        service.server_config["load_config"]["load_format"] = "dummy"
+    elif fault == "loader_extra_config":
+        service.server_config["load_config"]["model_loader_extra_config"] = {
+            "pt_weights_files": ["alternate.pt"]
+        }
+    elif fault == "loader_ignore_patterns":
+        service.server_config["load_config"]["ignore_patterns"] = ["*.safetensors"]
+    elif fault == "missing_loader_config":
+        del service.server_config["load_config"]
+    elif fault == "external_generation_config":
+        service.server_config["model_config"]["generation_config"] = "/unhashed/config"
+    elif fault == "logits_processor":
+        service.server_config["model_config"]["logits_processors"] = ["custom.Logits"]
     reply = (
         "```bash\nprintf 'def solve(n): return 2 * n\\n' > solution.py\n"
         "printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```"
@@ -573,24 +598,23 @@ def test_local_evaluations_require_loaded_identity_and_matching_runtime_conditio
             "max_model_len": 8192,
         },
     ]
-    service.server_config = {
-        "model_config": {
-            "model": str(base),
-            "tokenizer": str(base),
-            "dtype": "torch.bfloat16",
-            "max_model_len": 8192,
-        },
-        "lora_config": {"max_lora_rank": 64},
-        "cache_config": {"enable_prefix_caching": False},
-    }
+    service.server_config = local_service_config(base)
+    service.server_config["lora_config"] = {"max_lora_rank": 64}
+    service.server_config["cache_config"] = {"enable_prefix_caching": False}
     config = tmp_path / "model.yaml"
     records = []
     reply = (
         "```bash\nprintf 'def double(n): return 2 * n\\n' > solution.py\n"
         "printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```"
     )
-    for index, cache in [(0, False), (1, False), (1, True)]:
+    for index, cache, overrides in [
+        (0, False, {}),
+        (1, False, {}),
+        (1, True, {}),
+        (1, False, {"repetition_penalty": 1.2, "top_k": 8, "min_p": 0.1}),
+    ]:
         service.server_config["cache_config"]["enable_prefix_caching"] = cache
+        service.server_config["model_config"]["override_generation_config"] = overrides
         alias = "base" if index == 0 else "test-qwen"
         for tokens in ([65], encoding.encode(reply)):
             response = completion(tokens)
@@ -633,16 +657,18 @@ def test_local_evaluations_require_loaded_identity_and_matching_runtime_conditio
     loaded = [json.loads(path.read_text()) for path in records]
     assert loaded[0]["comparison_sha256"] == loaded[1]["comparison_sha256"]
     assert loaded[1]["comparison_sha256"] != loaded[2]["comparison_sha256"]
-    mismatch = cli(
-        "select-sft",
-        str(training),
-        "--baseline",
-        str(records[0]),
-        "--evaluation",
-        str(records[2]),
-        cwd=tmp_path,
-    )
-    assert mismatch.returncode == 2 and "comparison conditions" in mismatch.stderr
+    assert loaded[1]["comparison_sha256"] != loaded[3]["comparison_sha256"]
+    for changed in records[2:]:
+        mismatch = cli(
+            "select-sft",
+            str(training),
+            "--baseline",
+            str(records[0]),
+            "--evaluation",
+            str(changed),
+            cwd=tmp_path,
+        )
+        assert mismatch.returncode == 2 and "comparison conditions" in mismatch.stderr
     valid = cli(
         "select-sft",
         str(training),
