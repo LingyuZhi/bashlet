@@ -213,9 +213,213 @@
       "raw_tokens_and_per_token_logprobs": true,
       "observations_and_growing_context": true,
       "snapshot_manifest_sha256": "facfde2b9858b427f5468a15403171bffbcad5f64e7c961538f4c734961bb7eb"
+    },
+    {
+      "name": "base-smoke-review",
+      "path": "runs/issue21-local-inference/base-smoke-review/16aed318319b49afad8bf5f27ac9efb4/run.json",
+      "sha256": "5074f25fbbda9d4cdc2b84d7821ffb2425f04b604a06560d3e78a13261581650",
+      "policy": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "status": "completed",
+      "steps": 3,
+      "generated_tokens": 56,
+      "grade": {
+        "passed": true,
+        "passed_cases": 2,
+        "total_cases": 2,
+        "cases": [
+          {
+            "passed": true,
+            "status": "passed",
+            "reason": ""
+          },
+          {
+            "passed": true,
+            "status": "passed",
+            "reason": ""
+          }
+        ]
+      },
+      "first_implementation": null,
+      "raw_tokens_and_per_token_logprobs": true,
+      "observations_and_growing_context": true,
+      "snapshot_manifest_sha256": "9ec59c5e53d4ec7151ec75eb046788aee5e2208a57c8bf7f412ad922cb606f23"
+    },
+    {
+      "name": "sft-smoke-review",
+      "path": "runs/issue21-local-inference/sft-smoke-review/97469c6b122a45768ff48a4f479a08e9/run.json",
+      "sha256": "6d8745b82f6e0baa5647c25a619ebfbcfa83f219f736ff79a61c59edab4f136a",
+      "policy": "vllm/Qwen/Qwen3.5-4B@trio://run_x2uvy7hltg83/sampler_weights/sampler-0012:e459465152a9a6a079c821cf05f92f2d5263b4fc811e5c2296e563880c93debb",
+      "status": "completed",
+      "steps": 3,
+      "generated_tokens": 83,
+      "grade": {
+        "passed": true,
+        "passed_cases": 2,
+        "total_cases": 2,
+        "cases": [
+          {
+            "passed": true,
+            "status": "passed",
+            "reason": ""
+          },
+          {
+            "passed": true,
+            "status": "passed",
+            "reason": ""
+          }
+        ]
+      },
+      "first_implementation": null,
+      "raw_tokens_and_per_token_logprobs": true,
+      "observations_and_growing_context": true,
+      "snapshot_manifest_sha256": "facfde2b9858b427f5468a15403171bffbcad5f64e7c961538f4c734961bb7eb"
+    },
+    {
+      "name": "base-evaluation-review",
+      "path": "runs/issue21-local-inference/base-evaluation-review/40c50ed2f11649b6950624b5a51a00fe/episodes/f9ba75ffe2c14eb1abf123ce4805c76d/run.json",
+      "sha256": "4d515b9864abd9eb349fcfd611a427de7782a8466dd0ebc186005f511cecaba2",
+      "policy": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "status": "budget_exhausted",
+      "steps": 6,
+      "generated_tokens": 430,
+      "grade": null,
+      "first_implementation": {
+        "status": "graded",
+        "candidate_index": 0,
+        "formed_at_step": 0,
+        "snapshot": {
+          "path": "private/first-implementation",
+          "sha256": "f9d957d8f231802c18136b07fbc0b7833e2bec4bf1f04dc14eeaa7869fc73563",
+          "size_bytes": 123,
+          "file_count": 2,
+          "manifest": {
+            "feedback_tests.py": {
+              "kind": "file",
+              "sha256": "068ab6b398ff359429f1b6fcdeb53f466fadd875b9fe2e532792d5889725671c",
+              "size_bytes": 67,
+              "target": null,
+              "error": "",
+              "mode": 436
+            },
+            "solution.py": {
+              "kind": "file",
+              "sha256": "a5d9367bb3a857ecff673f1608b5736769cb549d7327d7f3e256ee0d90c8ef06",
+              "size_bytes": 56,
+              "target": null,
+              "error": "",
+              "mode": 436
+            }
+          }
+        },
+        "grade": {
+          "passed": true,
+          "passed_cases": 2,
+          "total_cases": 2,
+          "cases": [
+            {
+              "passed": true,
+              "status": "passed",
+              "reason": ""
+            },
+            {
+              "passed": true,
+              "status": "passed",
+              "reason": ""
+            }
+          ]
+        },
+        "reason": ""
+      },
+      "raw_tokens_and_per_token_logprobs": true,
+      "observations_and_growing_context": true,
+      "snapshot_manifest_sha256": "9ec59c5e53d4ec7151ec75eb046788aee5e2208a57c8bf7f412ad922cb606f23"
+    },
+    {
+      "name": "sft-evaluation-review",
+      "path": "runs/issue21-local-inference/sft-evaluation-review/cc53b4c3040d42ceb8414a6f5630a96a/episodes/9e5628a263ce4d8696dce4ea275cf475/run.json",
+      "sha256": "a3f43918c5f1ef8fa816a2172de7be5020dfc57d502587bcc424360179c0c680",
+      "policy": "vllm/Qwen/Qwen3.5-4B@trio://run_x2uvy7hltg83/sampler_weights/sampler-0012:e459465152a9a6a079c821cf05f92f2d5263b4fc811e5c2296e563880c93debb",
+      "status": "completed",
+      "steps": 5,
+      "generated_tokens": 178,
+      "grade": {
+        "passed": true,
+        "passed_cases": 2,
+        "total_cases": 2,
+        "cases": [
+          {
+            "passed": true,
+            "status": "passed",
+            "reason": ""
+          },
+          {
+            "passed": true,
+            "status": "passed",
+            "reason": ""
+          }
+        ]
+      },
+      "first_implementation": {
+        "status": "graded",
+        "candidate_index": 0,
+        "formed_at_step": 0,
+        "snapshot": {
+          "path": "private/first-implementation",
+          "sha256": "14868d3fdc16dce4fc4854b3fb9bdba85eac64958f381cd06646efad2c28d108",
+          "size_bytes": 124,
+          "file_count": 2,
+          "manifest": {
+            "feedback_tests.py": {
+              "kind": "file",
+              "sha256": "068ab6b398ff359429f1b6fcdeb53f466fadd875b9fe2e532792d5889725671c",
+              "size_bytes": 67,
+              "target": null,
+              "error": "",
+              "mode": 436
+            },
+            "solution.py": {
+              "kind": "file",
+              "sha256": "a0efdc7a632d3719d005c5640d05c44b64ff69c7081921bec25b5d41b0fbe635",
+              "size_bytes": 57,
+              "target": null,
+              "error": "",
+              "mode": 436
+            }
+          }
+        },
+        "grade": {
+          "passed": false,
+          "passed_cases": 0,
+          "total_cases": 2,
+          "cases": [
+            {
+              "passed": false,
+              "status": "command_failed",
+              "reason": ""
+            },
+            {
+              "passed": false,
+              "status": "command_failed",
+              "reason": ""
+            }
+          ]
+        },
+        "reason": ""
+      },
+      "raw_tokens_and_per_token_logprobs": true,
+      "observations_and_growing_context": true,
+      "snapshot_manifest_sha256": "facfde2b9858b427f5468a15403171bffbcad5f64e7c961538f4c734961bb7eb"
     }
   ],
-  "comparison_sha256": "89a0215a8d28d475590925d537663034de20f52ed2b92d3ef7fc509da71ba8c8",
+  "comparison_sha256": "2f0e1b273a225ad47e92980e23911e288c8e8e43186122ceea889408295a84c5",
+  "primary_evaluation_directories": [
+    "base-evaluation-review",
+    "sft-evaluation-review"
+  ],
+  "primary_smoke_directories": [
+    "base-smoke-review",
+    "sft-smoke-review"
+  ],
   "spend": {
     "ledger": "/data/home/zdhs0148/opd/bashlet/runs/spend.sqlite3",
     "policy": {

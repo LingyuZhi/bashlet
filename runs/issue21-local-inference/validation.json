@@ -2,20 +2,43 @@
   "full_suite": {
     "command": "uv run --locked pytest -q",
     "passed": 304,
-    "seconds": 808.42
+    "seconds": 808.42,
+    "phase": "implementation, before code-review fixes"
   },
   "mypy": {
     "command": "uv run --locked mypy",
-    "source_files": 39,
+    "source_files": 41,
     "passed": true
   },
   "ruff": {
     "lint": true,
     "format": true,
-    "diff_whitespace": true
+    "diff_whitespace": true,
+    "formatted_files": 42
   },
   "review": {
     "base": "72deae8",
-    "status": "pending"
-  }
+    "status": "passed",
+    "initial_findings": {
+      "standards": 2,
+      "spec": 2
+    },
+    "final_findings": {
+      "standards": 0,
+      "spec": 0
+    },
+    "report": "review.json"
+  },
+  "review_regressions": [
+    {
+      "command": "uv run --locked pytest -q tests/test_local_snapshots.py",
+      "passed": 24,
+      "seconds": 296.66
+    },
+    {
+      "command": "uv run --locked pytest -q tests/test_vllm.py tests/test_evaluation.py",
+      "passed": 40,
+      "seconds": 115.55
+    }
+  ]
 }

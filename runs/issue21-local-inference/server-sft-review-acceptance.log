@@ -1,0 +1,89 @@
+(APIServer pid=481870) INFO 10-03 12:16:48 [utils.py:302]
+(APIServer pid=481870) INFO 10-03 12:16:48 [utils.py:302]        █     █     █▄   ▄█
+(APIServer pid=481870) INFO 10-03 12:16:48 [utils.py:302]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.17.1
+(APIServer pid=481870) INFO 10-03 12:16:48 [utils.py:302]   █▄█▀ █     █     █     █  model   /data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/local-sft-step12-merged-v2/merged-model
+(APIServer pid=481870) INFO 10-03 12:16:48 [utils.py:302]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=481870) INFO 10-03 12:16:48 [utils.py:302]
+(APIServer pid=481870) INFO 10-03 12:16:48 [utils.py:238] non-default args: {'host': '127.0.0.1', 'model': '/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/local-sft-step12-merged-v2/merged-model', 'tokenizer': '/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a', 'dtype': 'bfloat16', 'revision': '851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a', 'tokenizer_revision': '851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a', 'max_model_len': 8192, 'enforce_eager': True, 'served_model_name': ['sft-step12'], 'generation_config': 'vllm', 'gpu_memory_utilization': 0.6, 'language_model_only': True, 'max_num_seqs': 1}
+(APIServer pid=481870) INFO 10-03 12:16:48 [model.py:531] Resolved architecture: Qwen3_5ForConditionalGeneration
+(APIServer pid=481870) INFO 10-03 12:16:48 [model.py:1554] Using max model len 8192
+(APIServer pid=481870) INFO 10-03 12:16:48 [scheduler.py:231] Chunked prefill is enabled with max_num_batched_tokens=2048.
+(APIServer pid=481870) INFO 10-03 12:16:49 [config.py:544] Setting attention block size to 528 tokens to ensure that attention page size is >= mamba page size.
+(APIServer pid=481870) INFO 10-03 12:16:49 [config.py:575] Padding mamba page size by 0.76% to ensure that mamba page size and attention page size are exactly equal.
+(APIServer pid=481870) INFO 10-03 12:16:49 [vllm.py:747] Asynchronous scheduling is enabled.
+(APIServer pid=481870) WARNING 10-03 12:16:49 [vllm.py:781] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
+(APIServer pid=481870) WARNING 10-03 12:16:49 [vllm.py:792] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(APIServer pid=481870) INFO 10-03 12:16:49 [vllm.py:957] Cudagraph is disabled under eager mode
+(APIServer pid=481870) INFO 10-03 12:16:50 [registry.py:126] All limits of multimodal modalities supported by the model are set to 0, running in text-only mode.
+(EngineCore_DP0 pid=483202) INFO 10-03 12:16:58 [core.py:101] Initializing a V1 LLM engine (v0.17.1) with config: model='/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/local-sft-step12-merged-v2/merged-model', speculative_config=None, tokenizer='/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a', skip_tokenizer_init=False, tokenizer_mode=auto, revision=851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a, tokenizer_revision=851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=8192, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=True, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=sft-step12, enable_prefix_caching=False, enable_chunked_prefill=True, pooler_config=None, compilation_config={'level': None, 'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'splitting_ops': [], 'compile_mm_encoder': False, 'compile_sizes': [], 'compile_ranges_split_points': [2048], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.NONE: 0>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': [], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False}, 'max_cudagraph_capture_size': 0, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': True, 'static_all_moe_layers': []}
+(EngineCore_DP0 pid=483202) INFO 10-03 12:16:59 [registry.py:126] All limits of multimodal modalities supported by the model are set to 0, running in text-only mode.
+(EngineCore_DP0 pid=483202) INFO 10-03 12:16:59 [parallel_state.py:1393] world_size=1 rank=0 local_rank=0 distributed_init_method=tcp://10.36.113.233:53761 backend=nccl
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:00 [parallel_state.py:1715] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:00 [base.py:106] Offloader set to NoopOffloader
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:00 [gpu_model_runner.py:4281] Starting to load model /data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/local-sft-step12-merged-v2/merged-model...
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:00 [cuda.py:453] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:00 [mm_encoder_attention.py:215] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:01 [cuda.py:405] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:01 [flash_attn.py:587] Using FlashAttention version 2
+(EngineCore_DP0 pid=483202)
+Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+(EngineCore_DP0 pid=483202)
+Loading safetensors checkpoint shards:  50% Completed | 1/2 [00:02<00:02,  2.63s/it]
+(EngineCore_DP0 pid=483202)
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:04<00:00,  2.08s/it]
+(EngineCore_DP0 pid=483202)
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:04<00:00,  2.16s/it]
+(EngineCore_DP0 pid=483202)
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:06 [default_loader.py:293] Loading weights took 4.41 seconds
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:06 [gpu_model_runner.py:4364] Model loading took 9.17 GiB memory and 5.995163 seconds
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:11 [gpu_worker.py:424] Available KV cache memory: 14.31 GiB
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:11 [kv_cache_utils.py:1314] GPU KV cache size: 116,688 tokens
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:11 [kv_cache_utils.py:1319] Maximum concurrency for 8,192 tokens per request: 46.68x
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:12 [core.py:282] init engine (profile, create kv cache, warmup model) took 5.33 seconds
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:12 [vllm.py:747] Asynchronous scheduling is enabled.
+(EngineCore_DP0 pid=483202) WARNING 10-03 12:17:12 [vllm.py:781] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
+(EngineCore_DP0 pid=483202) WARNING 10-03 12:17:12 [vllm.py:792] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(EngineCore_DP0 pid=483202) INFO 10-03 12:17:12 [vllm.py:957] Cudagraph is disabled under eager mode
+(APIServer pid=481870) INFO 10-03 12:17:12 [api_server.py:495] Supported tasks: ['generate']
+(APIServer pid=481870) WARNING 10-03 12:17:12 [__init__.py:14] SECURITY WARNING: Development endpoints are enabled! This should NOT be used in production!
+(APIServer pid=481870) INFO 10-03 12:17:12 [serving.py:185] Warming up chat template processing...
+(APIServer pid=481870) INFO 10-03 12:17:13 [hf.py:318] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+(APIServer pid=481870) INFO 10-03 12:17:13 [serving.py:210] Chat template warmup completed in 1131.6ms
+(APIServer pid=481870) INFO 10-03 12:17:13 [api_server.py:500] Starting vLLM API server 0 on http://127.0.0.1:8000
+(APIServer pid=481870) INFO 10-03 12:17:13 [launcher.py:38] Available routes are:
+(APIServer pid=481870) INFO 10-03 12:17:13 [launcher.py:47] Route: /openapi.json, Methods: GET, HEAD
+(APIServer pid=481870) INFO 10-03 12:17:13 [launcher.py:47] Route: /docs, Methods: GET, HEAD
+(APIServer pid=481870) INFO 10-03 12:17:13 [launcher.py:47] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+(APIServer pid=481870) INFO 10-03 12:17:13 [launcher.py:47] Route: /redoc, Methods: GET, HEAD
+(APIServer pid=481870) INFO 10-03 12:17:13 [launcher.py:47] Route: /metrics, Methods: GET
+(APIServer pid=481870) INFO:     Started server process [481870]
+(APIServer pid=481870) INFO:     Waiting for application startup.
+(APIServer pid=481870) INFO:     Application startup complete.
+(APIServer pid=481870) INFO:     127.0.0.1:38582 - "GET /version HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:38582 - "GET /v1/models HTTP/1.1" 200 OK
+(APIServer pid=481870) uv is set
+(APIServer pid=481870) INFO:     127.0.0.1:34918 - "GET /server_info?config_format=json HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:34918 - "GET /version HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:34918 - "GET /v1/models HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33892 - "GET /version HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33906 - "GET /v1/models HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33916 - "GET /server_info?config_format=json HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33932 - "POST /tokenize HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33934 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO 10-03 12:19:24 [loggers.py:259] Engine 000: Avg prompt throughput: 0.1 tokens/s, Avg generation throughput: 0.1 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=481870) INFO:     127.0.0.1:33954 - "GET /version HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33970 - "GET /v1/models HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33976 - "GET /server_info?config_format=json HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33992 - "POST /tokenize HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO 10-03 12:19:34 [loggers.py:259] Engine 000: Avg prompt throughput: 49.3 tokens/s, Avg generation throughput: 4.9 tokens/s, Running: 1 reqs, Waiting: 1 reqs, GPU KV cache usage: 0.6%, Prefix cache hit rate: 0.0%
+(APIServer pid=481870) INFO:     127.0.0.1:33948 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:33996 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:49388 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:49392 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:49394 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:35800 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:35806 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:35808 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO:     127.0.0.1:35816 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=481870) INFO 10-03 12:19:44 [loggers.py:259] Engine 000: Avg prompt throughput: 462.2 tokens/s, Avg generation throughput: 21.3 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=481870) INFO 10-03 12:19:54 [loggers.py:259] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 0.0 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%

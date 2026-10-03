@@ -1,0 +1,701 @@
+{
+  "version": "development-evaluation-v1",
+  "started_at": "2026-10-03T04:13:50.303316+00:00",
+  "code_revision": "fc1af6697bcf39f45876e933438fc36c0aa1ccc2",
+  "status": "complete",
+  "evidence_kind": "experimental",
+  "snapshot": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+  "snapshot_details": {
+    "backend": "vllm",
+    "development_only": false,
+    "base_url": "http://127.0.0.1:18000",
+    "model": "Qwen/Qwen3.5-4B",
+    "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "service_version": "0.17.1",
+    "required_service_version": "0.17.1",
+    "identity_verified": true,
+    "capability_probe": {
+      "passed": true,
+      "prompt_tokens": [
+        12675
+      ],
+      "generation": {
+        "tokens": [
+          11
+        ],
+        "stop_reason": "length",
+        "logprobs": [
+          -1.197744607925415
+        ],
+        "request_id": "cmpl-a7cd7f92c815bf99",
+        "source": "sampled"
+      }
+    },
+    "schema_version": 1,
+    "base_model": "Qwen/Qwen3.5-4B",
+    "base_path": "/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "base_files_sha256": {
+      "chat_template.jinja": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+      "config.json": "ddc63e1c717afa86c865bb5e01313d89d72bb53b97ad4a8a03ba8510c0621670",
+      "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+      "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188",
+      "model.safetensors.index.json": "cf3f798ee02ba45f9622aa8892a47369ab667d0afbf154ee7c2212de42e6302d",
+      "preprocessor_config.json": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+      "tokenizer.json": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "tokenizer_config.json": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+      "video_preprocessor_config.json": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+      "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+    },
+    "encoding_details": {
+      "format": "qwen/chatml-v1",
+      "tokenizer": "/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "files_sha256": {
+        "tokenizer.json": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "tokenizer_config.json": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+        "chat_template.jinja": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+        "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+        "config.json": "ddc63e1c717afa86c865bb5e01313d89d72bb53b97ad4a8a03ba8510c0621670"
+      },
+      "chat_template_sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+      "transformers_version": "4.57.3",
+      "tokenizers_version": "0.22.1",
+      "thinking": false,
+      "stop_tokens": [
+        248046,
+        248044
+      ],
+      "thinking_start_token": 248068,
+      "thinking_end_token": 248069,
+      "assistant_header": "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    },
+    "snapshot_kind": "base",
+    "identity": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "dtype": "bfloat16",
+    "server_model_revision": null,
+    "revision_limitation": "Cloud base weight revision is not published; local/cloud bitwise equality is unverified",
+    "adapter": null,
+    "snapshot_manifest_sha256": "9ec59c5e53d4ec7151ec75eb046788aee5e2208a57c8bf7f412ad922cb606f23",
+    "inference_conditions": {
+      "dtype": "bfloat16",
+      "max_model_len": 8192,
+      "quantization": null,
+      "backend": "vllm",
+      "service_version": "0.17.1",
+      "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "load": {
+        "load_format": "auto",
+        "safetensors_load_strategy": "lazy",
+        "model_loader_extra_config": {},
+        "ignore_patterns": [
+          "original/**/*"
+        ]
+      },
+      "base_weights_sha256": {
+        "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+        "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+      },
+      "model": {
+        "enforce_eager": true,
+        "generation_config": "vllm",
+        "override_generation_config": {},
+        "seed": 0,
+        "model_impl": "auto",
+        "override_attention_dtype": null,
+        "disable_sliding_window": false,
+        "disable_cascade_attn": false,
+        "logprobs_mode": "raw_logprobs",
+        "max_logprobs": 20,
+        "enable_prompt_embeds": false
+      },
+      "cache": {
+        "block_size": 528,
+        "cache_dtype": "auto",
+        "mamba_cache_dtype": "auto",
+        "mamba_ssm_cache_dtype": "float32",
+        "mamba_cache_mode": "none",
+        "enable_prefix_caching": false,
+        "gpu_memory_utilization": 0.6
+      },
+      "parallel": {
+        "tensor_parallel_size": 1,
+        "pipeline_parallel_size": 1,
+        "data_parallel_size": 1,
+        "distributed_executor_backend": "uni"
+      },
+      "scheduler": {
+        "max_num_seqs": 1,
+        "max_num_batched_tokens": 2048,
+        "enable_chunked_prefill": true
+      },
+      "compilation": {
+        "mode": 0,
+        "cudagraph_mode": 0,
+        "backend": "inductor"
+      },
+      "lora": null
+    },
+    "load_proof": {
+      "served_model": {
+        "id": "Qwen/Qwen3.5-4B",
+        "object": "model",
+        "created": 1791000890,
+        "owned_by": "vllm",
+        "root": "/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        "parent": null,
+        "max_model_len": 8192,
+        "permission": [
+          {
+            "id": "modelperm-a374ef1f83d98335",
+            "object": "model_permission",
+            "created": 1791000890,
+            "allow_create_engine": false,
+            "allow_sampling": true,
+            "allow_logprobs": true,
+            "allow_search_indices": false,
+            "allow_view": true,
+            "allow_fine_tuning": false,
+            "organization": "*",
+            "group": null,
+            "is_blocking": false
+          }
+        ]
+      },
+      "parent_model": null,
+      "model_config": {
+        "model": "/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        "model_weights": "",
+        "runner": "auto",
+        "convert": "auto",
+        "tokenizer": "/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        "tokenizer_mode": "auto",
+        "trust_remote_code": false,
+        "dtype": "torch.bfloat16",
+        "seed": 0,
+        "hf_config_path": null,
+        "allowed_local_media_path": "",
+        "allowed_media_domains": null,
+        "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        "code_revision": null,
+        "tokenizer_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        "max_model_len": 8192,
+        "spec_target_max_model_len": null,
+        "quantization": null,
+        "allow_deprecated_quantization": false,
+        "enforce_eager": true,
+        "enable_return_routed_experts": false,
+        "max_logprobs": 20,
+        "logprobs_mode": "raw_logprobs",
+        "disable_sliding_window": false,
+        "disable_cascade_attn": false,
+        "skip_tokenizer_init": false,
+        "enable_prompt_embeds": false,
+        "served_model_name": "Qwen/Qwen3.5-4B",
+        "config_format": "auto",
+        "hf_token": null,
+        "hf_overrides": {},
+        "generation_config": "vllm",
+        "override_generation_config": {},
+        "enable_sleep_mode": false,
+        "model_impl": "auto",
+        "override_attention_dtype": null,
+        "logits_processors": null,
+        "io_processor_plugin": null,
+        "pooler_config": null,
+        "multimodal_config": {
+          "language_model_only": true,
+          "limit_per_prompt": {},
+          "enable_mm_embeds": false,
+          "media_io_kwargs": {},
+          "mm_processor_kwargs": null,
+          "mm_processor_cache_gb": 4.0,
+          "mm_processor_cache_type": "lru",
+          "mm_shm_cache_max_object_size_mb": 128,
+          "mm_encoder_only": false,
+          "mm_encoder_tp_mode": "weights",
+          "mm_encoder_attn_backend": null,
+          "interleave_mm_strings": false,
+          "skip_mm_profiling": false,
+          "video_pruning_rate": null
+        }
+      },
+      "load_config": {
+        "load_format": "auto",
+        "download_dir": null,
+        "safetensors_load_strategy": "lazy",
+        "model_loader_extra_config": {},
+        "device": null,
+        "ignore_patterns": [
+          "original/**/*"
+        ],
+        "use_tqdm_on_load": true,
+        "pt_load_map_location": "cpu"
+      },
+      "lora_config": null,
+      "tokenizer_probe": {
+        "prompt": "Hi <|im_start|>assistant\n<think>\n</think><|im_end|>",
+        "tokens": [
+          12675,
+          220,
+          248045,
+          74455,
+          198,
+          248068,
+          198,
+          248069,
+          248046
+        ]
+      }
+    },
+    "served_model_root": "/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "max_model_len": 8192,
+    "retry_count": 0
+  },
+  "plan": {
+    "version": "development-evaluation-v1",
+    "name": "local-snapshot-path-smoke-v1",
+    "manifest": "/data/home/zdhs0148/opd/bashlet/runs/mbpp-sanitized-v1-verified/manifest.json",
+    "split": "dev",
+    "task_ids": [
+      "mbpp/554"
+    ],
+    "manifest_sha256": "015d7018489b498ba38a8806f662524a5bba2e137b12278b3f0257c3e83779ba",
+    "source": {
+      "dataset": "google-research/mbpp",
+      "variant": "sanitized",
+      "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+      "url": "https://raw.githubusercontent.com/google-research/google-research/e49bbfe381c9c0e564b937f1c4e163a2273c65cc/mbpp/sanitized-mbpp.json",
+      "sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+      "conversion": "mbpp-json-functions-v1"
+    },
+    "conversion": "mbpp-json-functions-v1"
+  },
+  "config": {
+    "protocol": {
+      "name": "bash-block-v3",
+      "system_prompt": "You are a programming agent working in an isolated Linux task workspace. The task instruction is provided in the first user message.\n\nIn each action body, provide exactly one non-empty fenced bash block, with ```bash and the closing ``` each on their own line. A natural-language explanation before the block is optional:\n```bash\nyour command here\n```\n\nIf native thinking is enabled, finish it before the action body. Only the body after the last thinking end marker is parsed as an action; commands and submission markers inside thinking are never executed.\n\nThe block runs without network access in a fresh shell and a fresh sandbox, starting in the task workspace. Only workspace files persist between steps. Directory changes (cd), exported variables and background processes do not persist. Include any directory changes or environment settings needed by each command.\n\nThe next user message contains the command's return code and combined stdout/stderr in their write order:\n<returncode>...</returncode>\n<output>\n...\n</output>\nLong output is shown as its head and tail with the number of omitted characters and a hint to narrow your command. The command still runs to completion. Output beyond the sandbox's byte limit is discarded. A timeout has its own message and all processes from that step are terminated.\n\nTo submit the current workspace and end the episode, run a command whose first output line is exactly COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT and whose exit code is 0. Any remaining output is recorded as your final submission text. For example:\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```\nA marker elsewhere in the output, in an explanation or thinking, or in a command that fails does not submit. Submission is final; you cannot run further commands afterwards.\n\nAn action body with no bash block, multiple blocks, an empty block, an unclosed block, unfinished thinking, or a reply cut off by the generation length limit is a format error. Nothing is executed, the step counts against your budget, and consecutive format errors terminate the episode at the configured limit.",
+      "user_prompt": "instruction verbatim as the first user message",
+      "observation_template": "<returncode>{exit_code}</returncode>\n<output>\n{output}</output>",
+      "timeout_template": "The command timed out. All processes from this step were terminated.\n<returncode>{exit_code}</returncode>\n<output>\n{output}</output>",
+      "observation_head_chars": 2000,
+      "observation_tail_chars": 2000,
+      "elision_template": "[... {omitted_chars} characters omitted ...]\nNarrow the output with head, tail, sed, or a more selective search.",
+      "output_limit_message": "The sandbox output byte limit was reached; further output was discarded. Narrow the output with head, tail, sed, or a more selective search.",
+      "invalid_action_format": "<format_error>{reason}</format_error>\nNothing was executed. Finish native thinking if enabled, then provide exactly one non-empty, closed ```bash block. An explanation before the block is optional.",
+      "history": "append-only token context: encoding.prompt(system, user), then per step the raw sampled tokens followed by encoding.continuation(tokens, feedback); earlier tokens are never decoded and re-encoded",
+      "submission_marker": "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
+    },
+    "environment": {
+      "id": "linux-bwrap-v1",
+      "bwrap": "/usr/bin/bwrap",
+      "timeout_seconds": 30.0,
+      "probe_timeout_seconds": 30.0,
+      "output_bytes": 16384,
+      "submission_bytes": 65536,
+      "submission_files": 1024,
+      "memory_bytes": 536870912,
+      "file_bytes": 1048576,
+      "nofile": 64,
+      "path": "/opt/bin:/opt/python/bin:/usr/bin:/bin",
+      "lang": "C.UTF-8",
+      "home": "/home/agent",
+      "python": {
+        "source": "/data/home/zdhs0148/opd/bashlet/configs/sandbox-python/.venv",
+        "target": "/opt/python"
+      },
+      "python_version": "3.10.12",
+      "pytest_version": "9.1.1",
+      "variables": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTEST_ADDOPTS": "-p no:cacheprovider",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "etc_files": {
+        "passwd": "agent:x:{uid}:{gid}:Sandbox agent:{home}:/bin/bash\n",
+        "group": "agent:x:{gid}:\n",
+        "hosts": "127.0.0.1 localhost\n::1 localhost\n",
+        "nsswitch.conf": "passwd: files\ngroup: files\nhosts: files\n",
+        "resolv.conf": "nameserver 127.0.0.1\n",
+        "gitconfig": "[user]\n\tname = agent\n\temail = agent@localhost\n[init]\n\tdefaultBranch = main\n"
+      },
+      "ro_bind": [
+        {
+          "source": "/usr/bin",
+          "target": "/usr/bin"
+        },
+        {
+          "source": "/usr/lib",
+          "target": "/usr/lib"
+        },
+        {
+          "source": "/usr/lib64",
+          "target": "/usr/lib64"
+        },
+        {
+          "source": "/etc/alternatives",
+          "target": "/etc/alternatives"
+        }
+      ],
+      "symlink": [
+        {
+          "source": "usr/bin",
+          "target": "/bin"
+        },
+        {
+          "source": "usr/lib",
+          "target": "/lib"
+        },
+        {
+          "source": "usr/lib64",
+          "target": "/lib64"
+        }
+      ]
+    },
+    "budget": {
+      "max_steps": 6,
+      "max_generated_tokens": 4096,
+      "max_seconds": 300.0,
+      "max_consecutive_invalid": 3
+    },
+    "model": {
+      "class": "bashlet.vllm.VLLMModel",
+      "sampling": {
+        "max_tokens": 1024,
+        "temperature": 1.0,
+        "top_p": 1.0,
+        "seed": 4
+      },
+      "thinking": false,
+      "base_url": "http://127.0.0.1:18000",
+      "model": "Qwen/Qwen3.5-4B",
+      "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "tokenizer": "runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "tokenizer_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "snapshot_manifest": "runs/issue21-local-inference/local-base/snapshot.json",
+      "timeout_seconds": 120,
+      "max_retries": 0
+    }
+  },
+  "comparison": {
+    "version": "development-evaluation-v1",
+    "evidence_kind": "experimental",
+    "rules": {
+      "first_implementation": "first-recorded-candidate-v1",
+      "candidate_definition": "Earliest post-command manifest with all declared implementation paths recorded as regular files within the implementation byte limit. Empty, syntactically invalid and unchanged initial implementations count. Grade the entire saved workspace at that step after interaction ends.",
+      "denominator": "all planned task IDs, including missing and failed tasks",
+      "recovery_denominator": "task IDs whose first implementation was independently graded and failed; the numerator requires a passing final submission. Cohorts are recorded per model and must not be treated as a shared paired failure set.",
+      "episode_attempts": 1,
+      "retry_policy": "No episode retries. Only the configured bounded backend request retries; all paid attempts use the same persistent ledger. Stop on infrastructure failure or interruption and retain every remaining task as not_started."
+    },
+    "tasks": [
+      {
+        "task_id": "mbpp/554",
+        "task_sha256": "27d86fa14b9a08288d8c664751ddbe6818fdbe7a640cacbbf5fb9279c04a1b23",
+        "task_origin": {
+          "dataset": "google-research/mbpp",
+          "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+          "source_sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+          "original_task_id": "554",
+          "family_id": "mbpp/554",
+          "split": "dev"
+        },
+        "feedback_command": "python3 feedback_tests.py",
+        "implementation_paths": [
+          "solution.py"
+        ],
+        "outcome": "not_started",
+        "run": null
+      }
+    ],
+    "source": {
+      "dataset": "google-research/mbpp",
+      "variant": "sanitized",
+      "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+      "url": "https://raw.githubusercontent.com/google-research/google-research/e49bbfe381c9c0e564b937f1c4e163a2273c65cc/mbpp/sanitized-mbpp.json",
+      "sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+      "conversion": "mbpp-json-functions-v1"
+    },
+    "conversion": "mbpp-json-functions-v1",
+    "protocol": {
+      "name": "bash-block-v3",
+      "system_prompt": "You are a programming agent working in an isolated Linux task workspace. The task instruction is provided in the first user message.\n\nIn each action body, provide exactly one non-empty fenced bash block, with ```bash and the closing ``` each on their own line. A natural-language explanation before the block is optional:\n```bash\nyour command here\n```\n\nIf native thinking is enabled, finish it before the action body. Only the body after the last thinking end marker is parsed as an action; commands and submission markers inside thinking are never executed.\n\nThe block runs without network access in a fresh shell and a fresh sandbox, starting in the task workspace. Only workspace files persist between steps. Directory changes (cd), exported variables and background processes do not persist. Include any directory changes or environment settings needed by each command.\n\nThe next user message contains the command's return code and combined stdout/stderr in their write order:\n<returncode>...</returncode>\n<output>\n...\n</output>\nLong output is shown as its head and tail with the number of omitted characters and a hint to narrow your command. The command still runs to completion. Output beyond the sandbox's byte limit is discarded. A timeout has its own message and all processes from that step are terminated.\n\nTo submit the current workspace and end the episode, run a command whose first output line is exactly COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT and whose exit code is 0. Any remaining output is recorded as your final submission text. For example:\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```\nA marker elsewhere in the output, in an explanation or thinking, or in a command that fails does not submit. Submission is final; you cannot run further commands afterwards.\n\nAn action body with no bash block, multiple blocks, an empty block, an unclosed block, unfinished thinking, or a reply cut off by the generation length limit is a format error. Nothing is executed, the step counts against your budget, and consecutive format errors terminate the episode at the configured limit.",
+      "user_prompt": "instruction verbatim as the first user message",
+      "observation_template": "<returncode>{exit_code}</returncode>\n<output>\n{output}</output>",
+      "timeout_template": "The command timed out. All processes from this step were terminated.\n<returncode>{exit_code}</returncode>\n<output>\n{output}</output>",
+      "observation_head_chars": 2000,
+      "observation_tail_chars": 2000,
+      "elision_template": "[... {omitted_chars} characters omitted ...]\nNarrow the output with head, tail, sed, or a more selective search.",
+      "output_limit_message": "The sandbox output byte limit was reached; further output was discarded. Narrow the output with head, tail, sed, or a more selective search.",
+      "invalid_action_format": "<format_error>{reason}</format_error>\nNothing was executed. Finish native thinking if enabled, then provide exactly one non-empty, closed ```bash block. An explanation before the block is optional.",
+      "history": "append-only token context: encoding.prompt(system, user), then per step the raw sampled tokens followed by encoding.continuation(tokens, feedback); earlier tokens are never decoded and re-encoded",
+      "submission_marker": "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
+    },
+    "environment": {
+      "id": "linux-bwrap-v1",
+      "bwrap": "/usr/bin/bwrap",
+      "timeout_seconds": 30.0,
+      "probe_timeout_seconds": 30.0,
+      "output_bytes": 16384,
+      "submission_bytes": 65536,
+      "submission_files": 1024,
+      "memory_bytes": 536870912,
+      "file_bytes": 1048576,
+      "nofile": 64,
+      "path": "/opt/bin:/opt/python/bin:/usr/bin:/bin",
+      "lang": "C.UTF-8",
+      "home": "/home/agent",
+      "python": {
+        "source": "/data/home/zdhs0148/opd/bashlet/configs/sandbox-python/.venv",
+        "target": "/opt/python"
+      },
+      "python_version": "3.10.12",
+      "pytest_version": "9.1.1",
+      "variables": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTEST_ADDOPTS": "-p no:cacheprovider",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "etc_files": {
+        "passwd": "agent:x:{uid}:{gid}:Sandbox agent:{home}:/bin/bash\n",
+        "group": "agent:x:{gid}:\n",
+        "hosts": "127.0.0.1 localhost\n::1 localhost\n",
+        "nsswitch.conf": "passwd: files\ngroup: files\nhosts: files\n",
+        "resolv.conf": "nameserver 127.0.0.1\n",
+        "gitconfig": "[user]\n\tname = agent\n\temail = agent@localhost\n[init]\n\tdefaultBranch = main\n"
+      },
+      "ro_bind": [
+        {
+          "source": "/usr/bin",
+          "target": "/usr/bin"
+        },
+        {
+          "source": "/usr/lib",
+          "target": "/usr/lib"
+        },
+        {
+          "source": "/usr/lib64",
+          "target": "/usr/lib64"
+        },
+        {
+          "source": "/etc/alternatives",
+          "target": "/etc/alternatives"
+        }
+      ],
+      "symlink": [
+        {
+          "source": "usr/bin",
+          "target": "/bin"
+        },
+        {
+          "source": "usr/lib",
+          "target": "/lib"
+        },
+        {
+          "source": "usr/lib64",
+          "target": "/lib64"
+        }
+      ]
+    },
+    "budget": {
+      "max_steps": 6,
+      "max_generated_tokens": 4096,
+      "max_seconds": 300.0,
+      "max_consecutive_invalid": 3
+    },
+    "sampling": {
+      "max_tokens": 1024,
+      "temperature": 1.0,
+      "top_p": 1.0,
+      "seed": 4
+    },
+    "encoding": {
+      "format": "qwen/chatml-v1",
+      "chat_template_sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+      "transformers_version": "4.57.3",
+      "tokenizers_version": "0.22.1",
+      "thinking": false,
+      "stop_tokens": [
+        248046,
+        248044
+      ],
+      "thinking_start_token": 248068,
+      "thinking_end_token": 248069,
+      "assistant_header": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+      "files_sha256": {
+        "tokenizer.json": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "tokenizer_config.json": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+        "chat_template.jinja": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+      }
+    },
+    "max_context_tokens": 8192,
+    "inference": {
+      "dtype": "bfloat16",
+      "max_model_len": 8192,
+      "quantization": null,
+      "backend": "vllm",
+      "service_version": "0.17.1",
+      "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "load": {
+        "load_format": "auto",
+        "safetensors_load_strategy": "lazy",
+        "model_loader_extra_config": {},
+        "ignore_patterns": [
+          "original/**/*"
+        ]
+      },
+      "base_weights_sha256": {
+        "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+        "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+      },
+      "model": {
+        "enforce_eager": true,
+        "generation_config": "vllm",
+        "override_generation_config": {},
+        "seed": 0,
+        "model_impl": "auto",
+        "override_attention_dtype": null,
+        "disable_sliding_window": false,
+        "disable_cascade_attn": false,
+        "logprobs_mode": "raw_logprobs",
+        "max_logprobs": 20,
+        "enable_prompt_embeds": false
+      },
+      "cache": {
+        "block_size": 528,
+        "cache_dtype": "auto",
+        "mamba_cache_dtype": "auto",
+        "mamba_ssm_cache_dtype": "float32",
+        "mamba_cache_mode": "none",
+        "enable_prefix_caching": false,
+        "gpu_memory_utilization": 0.6
+      },
+      "parallel": {
+        "tensor_parallel_size": 1,
+        "pipeline_parallel_size": 1,
+        "data_parallel_size": 1,
+        "distributed_executor_backend": "uni"
+      },
+      "scheduler": {
+        "max_num_seqs": 1,
+        "max_num_batched_tokens": 2048,
+        "enable_chunked_prefill": true
+      },
+      "compilation": {
+        "mode": 0,
+        "cudagraph_mode": 0,
+        "backend": "inductor"
+      },
+      "lora": null
+    }
+  },
+  "comparison_sha256": "2f0e1b273a225ad47e92980e23911e288c8e8e43186122ceea889408295a84c5",
+  "tasks": [
+    {
+      "task_id": "mbpp/554",
+      "task_sha256": "27d86fa14b9a08288d8c664751ddbe6818fdbe7a640cacbbf5fb9279c04a1b23",
+      "task_origin": {
+        "dataset": "google-research/mbpp",
+        "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+        "source_sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+        "original_task_id": "554",
+        "family_id": "mbpp/554",
+        "split": "dev"
+      },
+      "feedback_command": "python3 feedback_tests.py",
+      "implementation_paths": [
+        "solution.py"
+      ],
+      "outcome": "budget_exhausted",
+      "run": "episodes/f9ba75ffe2c14eb1abf123ce4805c76d",
+      "status": "budget_exhausted",
+      "reason": "Reached max_steps=6",
+      "episode_status": "budget_exhausted",
+      "budget_kind": "interaction",
+      "grade": null,
+      "first_implementation": {
+        "status": "graded",
+        "candidate_index": 0,
+        "formed_at_step": 0,
+        "snapshot": {
+          "path": "private/first-implementation",
+          "sha256": "f9d957d8f231802c18136b07fbc0b7833e2bec4bf1f04dc14eeaa7869fc73563",
+          "size_bytes": 123,
+          "file_count": 2,
+          "manifest": {
+            "feedback_tests.py": {
+              "kind": "file",
+              "sha256": "068ab6b398ff359429f1b6fcdeb53f466fadd875b9fe2e532792d5889725671c",
+              "size_bytes": 67,
+              "target": null,
+              "error": "",
+              "mode": 436
+            },
+            "solution.py": {
+              "kind": "file",
+              "sha256": "a5d9367bb3a857ecff673f1608b5736769cb549d7327d7f3e256ee0d90c8ef06",
+              "size_bytes": 56,
+              "target": null,
+              "error": "",
+              "mode": 436
+            }
+          }
+        },
+        "grade": {
+          "passed": true,
+          "passed_cases": 2,
+          "total_cases": 2,
+          "cases": [
+            {
+              "passed": true,
+              "status": "passed",
+              "reason": ""
+            },
+            {
+              "passed": true,
+              "status": "passed",
+              "reason": ""
+            }
+          ]
+        },
+        "reason": ""
+      },
+      "usage": {
+        "steps": 6,
+        "generated_tokens": 430,
+        "invalid_actions": 0,
+        "elapsed_seconds": 14.956616392359138
+      },
+      "episode_sha256": "4d515b9864abd9eb349fcfd611a427de7782a8466dd0ebc186005f511cecaba2"
+    }
+  ],
+  "summary": {
+    "planned_tasks": 1,
+    "passed_tasks": 0,
+    "final_pass_rate": 0.0,
+    "missing_task_ids": [],
+    "first_grading_missing_task_ids": [],
+    "first_implementation_passed": 1,
+    "first_implementation_pass_rate": 1.0,
+    "outcomes": {
+      "budget_exhausted": 1
+    },
+    "recovery": {
+      "task_ids": [],
+      "denominator": 0,
+      "recovered_task_ids": [],
+      "rate": null
+    },
+    "typical_trajectories": {
+      "budget_exhausted": "episodes/f9ba75ffe2c14eb1abf123ce4805c76d"
+    }
+  },
+  "cost": {
+    "ledger": null,
+    "request_ids": [],
+    "charged_upper_bound_cny": 0,
+    "pending_upper_bound_cny": 0,
+    "actual_cny": null,
+    "billing_note": "Unreconciled ceilings are not verified actual charges."
+  },
+  "finished_at": "2026-10-03T04:14:14.119703+00:00"
+}

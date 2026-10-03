@@ -12,6 +12,18 @@
     "server-sft-acceptance.log": {
       "raw_sha256": "5bc94e4bd2d2192f233fc34cf79c77f19c810d11ac3934fa1292238a59d5011a",
       "normalized_sha256": "fcdb1e17ed8664bee7fe9a72ad0897f78336df54ae2d1bf0fdfd3d8ce08687f4"
+    },
+    "server-base-review.log": {
+      "raw_sha256": "12ccad917268e8d911c011bcc564284b58a5cc40bd6b5dca008aa4902b791c5b",
+      "normalized_sha256": "f3e6ee1ba28b377176d97a7d8e414a0cece450c86f0fc77378c1abcfa2be4279",
+      "source": "server-base-review.log",
+      "captured_at": "2026-10-03T04:20:22.909878+00:00"
+    },
+    "server-sft-review-acceptance.log": {
+      "raw_sha256": "3b1d4fce8cb9c7dfbcd0b2d4faead9072ac2d95331f9b35ecfb768277369d74a",
+      "normalized_sha256": "e0feaccc32ac99281532fa4d1f30d0d051b67ccae5c50683ce7f6c4336153e99",
+      "source": "server-sft-review.log",
+      "captured_at": "2026-10-03T04:20:22.913674+00:00"
     }
   }
 }

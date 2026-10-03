@@ -58,7 +58,7 @@ bash scripts/serve-local-vllm.sh configs/local-vllm/serve-sft.yaml
 
 本轮后台启动命令保存在 `start-service.sh`，分别写入 `server-base.log`、`server-sft.log` 和 `service.pid`；持续运行的 SFT 日志另留固定验收副本 `server-sft-acceptance.log`。新服务同样仅监听 `127.0.0.1:8000`，Python 3.12、vLLM 0.17.1、Torch 2.10.0、CUDA 12.8、BF16、8192 上下文、单序列、eager、显存利用率 0.6、`generation-config=vllm`、language-model-only。实际配置与系统版本另存 `api-base.json`、`api-sft.json`，运行时验证证据保留在每个 episode。
 
-Git 中三份固定服务日志去除终端 CR 和行尾空白，原始与规范化 SHA-256 保存于 `log-format.json`；episode JSON、token/logprob 和仍在写入的服务日志未改写。
+Git 中固定服务日志去除终端 CR 和行尾空白，原始与规范化 SHA-256 保存于 `log-format.json`；episode JSON、token/logprob 和仍在写入的服务日志未改写。
 
 恢复任务 20：停止已核对的新 API server，执行 `bash -l runs/issue20-vllm/start-service.sh`，恢复其 vLLM 0.11.0 与 Qwen3-4B-Instruct-2507 配置。恢复原始 Qwen3.5 则使用 `serve.yaml`。恢复服务不改变旧记录的开发身份。
 
@@ -81,3 +81,11 @@ uv run --locked bashlet evaluate configs/mbpp-local-smoke-v1.json \
 ```
 
 基模评测使用相同 plan 和 `local-base.yaml`，身份为 `vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a`。固定 smoke Task 明确要求在公开反馈通过后提交，只用于加载、采样、执行与独立评分链路验证；不能作为自然任务成功率或 SFT 有效性的证据。MBPP 单题的失败和首次实现评分全部保留，不能用 smoke 成功覆盖失败结果。
+
+## 审查后的准入与验收
+
+实验模式要求明确的 `auto`／`safetensors` 加载器及 `lazy`／`eager` 策略，不能有额外加载配置或过滤权重的 ignore patterns；`dummy` 和缺失加载配置会失败。服务应使用 `generation-config=vllm`，采样覆盖完整进入比较条件，自定义 logits processor 和外部生成／模型配置不受支持。[vLLM 0.17.1 原生模型配置](https://github.com/vllm-project/vllm/blob/v0.17.1/vllm/config/model.py) 会应用服务采样覆盖，因此这些设置必须可追溯。
+
+`*-review/` 是修正探针后使用相同 Task／plan、参数和权重重新运行的证据，`api-*-review.json` 保存当时完整加载与推理配置。`acceptance.json` 指定最终采用的目录和比较指纹，原始四个回合继续保留。[validation.json](validation.json) 区分审查前全量 304 项通过与修正后 64 项回归通过；[review.json](review.json) 保存两轴初审与复审结果。
+
+最终活动服务日志为 `server-sft-review.log`，固定验收副本为 `server-sft-review-acceptance.log`；`migration.json` 记录复跑后的实际 PID 和恢复方式。

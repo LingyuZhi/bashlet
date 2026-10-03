@@ -1,0 +1,27 @@
+{
+  "base": "72deae8dce84e45ba63628f43335eaf709485610",
+  "base_approved_by_user": true,
+  "method": "Parallel Standards and Spec reviews, followed by separate reviews of the fixes",
+  "standards": {
+    "initial_findings": 2,
+    "initial_worst_severity": "P2",
+    "fixes": [
+      "Organized the deep snapshot module as a focused subpackage with artifact preparation and manifest verification",
+      "Removed added experiment and progress conclusions from README; retained usage and guide links"
+    ],
+    "final_findings": 0,
+    "final_worst_severity": null
+  },
+  "spec": {
+    "initial_findings": 2,
+    "initial_worst_severity": "P1",
+    "fixes": [
+      "Reject dummy and unverified loaders, missing loader configuration, weight-filtering ignore patterns and extra loader configuration",
+      "Include server sampling overrides in comparison conditions; reject untracked external generation configurations and logits processors"
+    ],
+    "final_findings": 0,
+    "final_worst_severity": null
+  },
+  "validation": "validation.json",
+  "code_commit_reviewed": "fc1af6697bcf39f45876e933438fc36c0aa1ccc2"
+}
