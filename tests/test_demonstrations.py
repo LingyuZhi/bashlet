@@ -544,6 +544,70 @@ def test_reviewed_export_checks_admission_before_submitting(
     assert result.demonstration["reason"]
 
 
+@pytest.mark.parametrize("fault", ["observation", "grade", "snapshot"])
+def test_reviewed_export_refuses_evidence_changed_after_execution(
+    tmp_path: Path,
+    fault: str,
+) -> None:
+    from bashlet.demonstrations import ActionSupervision, export_demonstration
+    from bashlet.models import Grade
+    from bashlet.protocol import render_observation
+
+    task = executed_task()
+    encoding = QwenChatMLEncoding(
+        "Qwen/Qwen3.5-4B",
+        revision="851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        cache_dir="runs/tokenizers",
+    )
+    config = load_config()
+    model = SampledTrajectory(encoding, [REPAIR, SUBMIT])
+    result = run_experiment(task=task, model=model, config=config, output_dir=tmp_path)
+    assert result.passed
+    if fault == "observation":
+        first = result.trajectory[0]
+        assert first.observation is not None
+        observation = replace(first.observation, output="invented observation\n")
+        result.trajectory[0] = replace(
+            first,
+            observation=observation,
+            feedback=render_observation(observation, config.protocol),
+        )
+        # Keep the forged history internally consistent while preserving sampled tokens.
+        context = encoding.prompt(config.protocol.system_prompt, task.prompt)
+        for index, step in enumerate(result.trajectory):
+            assert step.model_call is not None
+            call = replace(step.model_call, context_offset=len(context))
+            result.trajectory[index] = replace(step, model_call=call)
+            context.extend(call.generation.tokens)
+            if step.feedback is not None:
+                context.extend(
+                    encoding.continuation(call.generation.tokens, step.feedback)
+                )
+        result.context_tokens = context
+    elif fault == "grade":
+        result.grade = Grade(True, 0, 0, ())
+    else:
+        path = result.run_dir / "submission/app/headers.py"
+        path.chmod(0o600)
+        path.write_text("def normalize_header(text): return 'forged'\n")
+    adapter = TrainingAdapter(encoding.identity)
+    export_demonstration(
+        result,
+        task,
+        model,
+        config,
+        adapter,
+        supervision=[
+            ActionSupervision(True, "repair"),
+            ActionSupervision(True, "submit"),
+        ],
+    )
+    assert adapter.requests == []
+    assert result.demonstration is not None
+    assert result.demonstration["status"] == "rejected"
+    assert result.demonstration["reason"]
+
+
 def training_task() -> Task:
     return Task(
         task_id="mbpp/602",

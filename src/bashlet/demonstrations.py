@@ -361,6 +361,20 @@ def export_demonstration(
         recorded = json.loads((result.run_dir / "run.json").read_text())
         if recorded["fingerprints"] != fingerprints(config):
             raise ValueError("Export condition differs from its executed evidence")
+        evidence = json.loads(json.dumps(asdict(result), default=str))
+        if (
+            any(
+                recorded.get(key) != value
+                for key, value in evidence.items()
+                if key != "demonstration"
+            )
+            or recorded.get("passed") != result.passed
+        ):
+            raise ValueError(
+                "Export trajectory or grading differs from saved execution evidence"
+            )
+        if result.submission is not None:
+            verify_submission(result.submission, result.run_dir)
     except (OSError, ValueError, KeyError, TypeError) as error:
         result.demonstration["reason"] = str(error)
         return

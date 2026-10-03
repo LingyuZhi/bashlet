@@ -360,8 +360,19 @@ def run_experiment(
         analyze_episode(result, task, feedback_materials)
         if assess_first_implementation:
             result.first_implementation = _assess_first(result, task, condition)
+        final_metadata: dict[str, object] = {
+            "grading_protocol": grading_protocol,
+            "task_origin": asdict(task.origin) if task.origin else None,
+            "task_type": task.task_type,
+            "variant_id": task.variant_id,
+            "feedback_start_id": task.feedback_start_id,
+            "environment_variant_id": task.environment_variant_id,
+            "passed": result.passed,
+        }
         try:
             if sft_adapter is not None:
+                # Seal actual grading and history before any SFT consumer sees it.
+                save_record(result, condition, final_metadata)
                 export_demonstration(
                     result,
                     task,
@@ -372,18 +383,6 @@ def run_experiment(
                     max_context_tokens=sft_max_context_tokens,
                 )
         finally:
-            save_record(
-                result,
-                condition,
-                {
-                    "grading_protocol": grading_protocol,
-                    "task_origin": asdict(task.origin) if task.origin else None,
-                    "task_type": task.task_type,
-                    "variant_id": task.variant_id,
-                    "feedback_start_id": task.feedback_start_id,
-                    "environment_variant_id": task.environment_variant_id,
-                    "passed": result.passed,
-                },
-            )
+            save_record(result, condition, final_metadata)
         if on_update is not None:
             on_update(result)
