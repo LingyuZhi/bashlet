@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from .demonstrations import SOURCE
+from .demonstrations import EXECUTED_SOURCE, SOURCE, validate_executed_example
 from .models import TaskOrigin
 from .monitoring import (
     MonitorConfig,
@@ -119,7 +119,8 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
         validate_origin(origin)
         if (
             origin.split != "train"
-            or meta["source"] != SOURCE
+            or meta["source"] not in (SOURCE, EXECUTED_SOURCE)
+            or meta["source"] != manifest["source"]
             or meta["on_policy_eligible"] is not False
             or not meta["grade"]["passed"]
             or meta["encoding"] != manifest["encoding"]
@@ -141,6 +142,12 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
             raise ValueError(
                 "SFT example differs from its executed demonstration evidence"
             )
+        if meta["source"] == EXECUTED_SOURCE:
+            validate_executed_example(
+                meta,
+                json.loads((run_dir / "run.json").read_text()),
+                run_dir,
+            )
         datum = trio.Datum.model_validate(row["datum"])
         inputs = datum.model_input.to_ints()
         targets = datum.loss_fn_inputs["target_tokens"].tolist()
@@ -157,6 +164,11 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
             not inputs
             or len(inputs) != len(targets)
             or inputs[1:] != targets[:-1]
+            or (
+                meta["source"] == EXECUTED_SOURCE
+                and inputs + targets[-1:]
+                != json.loads((run_dir / "run.json").read_text())["context_tokens"]
+            )
             or weights != expected
             or not sum(weights)
             or sum(weights) != meta["supervised_tokens"]

@@ -80,6 +80,7 @@ class QwenChatMLEncoding:
         if type(thinking) is not bool:
             raise ValueError("thinking must be a boolean")
         snapshot = _snapshot(tokenizer, revision, cache_dir)
+        self.cache_dir = str(Path(cache_dir).resolve()) if cache_dir else None
         from transformers import AutoTokenizer
 
         self._tokenizer = AutoTokenizer.from_pretrained(

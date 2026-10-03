@@ -8,16 +8,23 @@ from typing import Any
 import pytest
 import yaml
 from test_cli import cli
-from test_demonstrations import TrainingAdapter, training_task
+from test_demonstrations import (
+    REPAIR,
+    SUBMIT,
+    SampledTrajectory,
+    TrainingAdapter,
+    executed_task,
+    training_task,
+)
 from test_monitoring import external_sdks
 
 from bashlet import QwenChatMLEncoding, run_experiment
 from bashlet.config import load_config
-from bashlet.demonstrations import reference_demonstration
+from bashlet.demonstrations import ActionSupervision, reference_demonstration
 
 
-def training_input(tmp_path: Path) -> Path:
-    task = training_task()
+def training_input(tmp_path: Path, *, executed: bool = False) -> Path:
+    task = executed_task() if executed else training_task()
     encoding = QwenChatMLEncoding(
         "Qwen/Qwen3.5-4B",
         revision="851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
@@ -25,12 +32,28 @@ def training_input(tmp_path: Path) -> Path:
     )
     adapter = TrainingAdapter(encoding.identity)
     config = load_config()
+    model = (
+        SampledTrajectory(
+            encoding,
+            ["invalid action", "```bash\npython3 feedback.py\n```", REPAIR, SUBMIT],
+        )
+        if executed
+        else reference_demonstration(task=task, encoding=encoding, config=config)
+    )
     result = run_experiment(
         task=task,
-        model=reference_demonstration(task=task, encoding=encoding, config=config),
+        model=model,
         config=config,
         output_dir=tmp_path / "episodes",
         sft_adapter=adapter,
+        sft_supervision=[
+            ActionSupervision(False, "invalid protocol"),
+            ActionSupervision(True, "failure reveals the bug"),
+            ActionSupervision(True, "fix normalization"),
+            ActionSupervision(True, "submit"),
+        ]
+        if executed
+        else None,
     )
     assert result.passed
     datum, metadata = adapter.requests[0]
@@ -67,6 +90,57 @@ def training_input(tmp_path: Path) -> Path:
         )
     )
     return manifest
+
+
+def test_executed_supervision_reaches_the_actual_training_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = training_input(tmp_path, executed=True)
+    config = training_config(tmp_path, manifest)
+    external_sdks(tmp_path, monkeypatch)
+    with (tmp_path / "sitecustomize.py").open("a") as stream:
+        stream.write("import training_sdk\ntraining_sdk.install()\n")
+    monkeypatch.setenv("PYTRIO_API_KEY", "test-trio-key")
+    monkeypatch.setenv("FAKE_TRAINING_ROOT", str(tmp_path))
+    process = cli(
+        "train-sft",
+        str(config),
+        "--output-dir",
+        str(tmp_path / "training"),
+        cwd=tmp_path,
+        timeout=90,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    requests = [
+        json.loads(line)
+        for line in (tmp_path / "training-requests.jsonl").read_text().splitlines()
+    ]
+    original = json.loads((tmp_path / "examples.jsonl").read_text())
+    for request in requests:
+        assert request["loss_fn"] == "cross_entropy" and request["auto_shift"] is False
+        assert request["data"] == [original["datum"]]
+        datum = request["data"][0]
+        weights = datum["loss_fn_inputs"]["weights"]["data"]
+        decisions = original["metadata"]["action_supervision"]
+        for decision in decisions:
+            start, end = decision["start"] - 1, decision["end"] - 1
+            assert weights[start:end] == [float(decision["supervise"])] * (end - start)
+    assert len(requests) == 2
+
+
+def test_executed_loader_rejects_a_modified_submission(tmp_path: Path) -> None:
+    from bashlet.training import load_demonstrations
+
+    path = training_input(tmp_path, executed=True)
+    manifest = json.loads(path.read_text())
+    run_dir = Path(manifest["tasks"][0]["run_dir"])
+    (run_dir / "submission/app/headers.py").chmod(0o600)
+    (run_dir / "submission/app/headers.py").write_text(
+        "def normalize_header(text): return 'forged'\n"
+    )
+    with pytest.raises(ValueError, match="[Ss]ubmission"):
+        load_demonstrations(path)
 
 
 def training_config(tmp_path: Path, manifest: Path) -> Path:

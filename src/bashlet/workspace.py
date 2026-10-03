@@ -145,6 +145,16 @@ def snapshot_workspace(
             file_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(run_dir / "blobs" / str(entry.sha256), file_path)
             file_path.chmod(0o400 | ((entry.mode or 0) & 0o111))
+    return Submission(
+        str(target.relative_to(run_dir)),
+        _submission_sha256(manifest),
+        size_bytes,
+        len(manifest),
+        dict(manifest),
+    )
+
+
+def _submission_sha256(manifest: dict[str, WorkspaceEntry]) -> str:
     payload = json.dumps(
         {
             path: {"kind": entry.kind, "sha256": entry.sha256, "mode": entry.mode}
@@ -153,10 +163,37 @@ def snapshot_workspace(
         sort_keys=True,
         ensure_ascii=True,
     ).encode()
-    return Submission(
-        str(target.relative_to(run_dir)),
-        hashlib.sha256(payload).hexdigest(),
-        size_bytes,
-        len(manifest),
-        dict(manifest),
-    )
+    return hashlib.sha256(payload).hexdigest()
+
+
+def verify_submission(submission: Submission, run_dir: Path) -> None:
+    """Verify the retained grading snapshot against its recorded content identity."""
+    validate_workspace_path(submission.path)
+    root = run_dir / submission.path
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("Submission snapshot is missing or replaced")
+    actual = {str(path.relative_to(root)) for path in root.rglob("*")}
+    if actual != set(submission.manifest):
+        raise ValueError("Submission snapshot paths differ from its manifest")
+    size_bytes = 0
+    for name, entry in submission.manifest.items():
+        validate_workspace_path(name)
+        path = root / name
+        kind = _KINDS.get(stat.S_IFMT(path.lstat().st_mode), "unknown")
+        if kind != entry.kind or kind not in ("file", "directory"):
+            raise ValueError("Submission snapshot entry type differs")
+        if kind == "file":
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            size = path.stat().st_size
+            if digest != entry.sha256 or size != entry.size_bytes:
+                raise ValueError("Submission snapshot content differs")
+            if stat.S_IMODE(path.stat().st_mode) & 0o111 != (entry.mode or 0) & 0o111:
+                raise ValueError("Submission snapshot executable mode differs")
+            size_bytes += size
+    if (
+        _submission_sha256(submission.manifest) != submission.sha256
+        or len(actual) != submission.file_count
+        or size_bytes != submission.size_bytes
+    ):
+        raise ValueError("Submission snapshot identity or counts differ")

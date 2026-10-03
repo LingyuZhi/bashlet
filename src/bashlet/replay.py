@@ -1,8 +1,16 @@
 """Pre-written replies behind the same token interface as a sampling model."""
 
 from collections.abc import Sequence
+from typing import Any
 
-from .models import DecodedReply, Encoding, Generation, JSONValue, SamplingParams
+from .models import (
+    DecodedReply,
+    Encoding,
+    Generation,
+    JSONValue,
+    ModelResponseError,
+    SamplingParams,
+)
 
 
 class Utf8Encoding:
@@ -83,3 +91,45 @@ class ReplayModel:
             stop_reason="length" if len(tokens) > sampling.max_tokens else "stop",
             source="replayed",
         )
+
+
+class RecordedTrajectoryModel:
+    """Re-execute raw tokens, then run authored corrections from the real prefix.
+
+    Execution is always Replay. The original sampled calls and logprobs remain
+    separate evidence, so these generations cannot become on-policy samples.
+    """
+
+    identity = "replay/executed-trajectory-v1"
+
+    def __init__(
+        self,
+        record: dict[str, Any],
+        encoding: Encoding,
+        corrections: Sequence[str] = (),
+    ) -> None:
+        self.record, self.encoding = record, encoding
+        self.corrections = [tuple(encoding.encode(reply)) for reply in corrections]
+        self.index = 0
+
+    def sample(self, prompt: Sequence[int], sampling: SamplingParams) -> Generation:
+        steps = self.record["trajectory"]
+        if self.index < len(steps):
+            call = steps[self.index]["model_call"]
+            if list(prompt) != self.record["context_tokens"][: call["context_offset"]]:
+                raise ModelResponseError(
+                    "Re-executed observation differs from the sampled prefix"
+                )
+            tokens = tuple(call["generation"]["tokens"])
+            stop = call["generation"]["stop_reason"]
+        else:
+            index = self.index - len(steps)
+            if index >= len(self.corrections):
+                raise ModelResponseError("Recorded trajectory ended without submission")
+            tokens, stop = self.corrections[index], "stop"
+        if len(tokens) > sampling.max_tokens:
+            raise ModelResponseError(
+                "Replay would truncate the original causal history"
+            )
+        self.index += 1
+        return Generation(tokens=tokens, stop_reason=stop, source="replayed")

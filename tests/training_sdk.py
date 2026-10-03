@@ -31,6 +31,11 @@ class Training:
 
     def forward_backward(self, data: list[Any], **kwargs: Any) -> Future:
         assert kwargs["loss_fn"] == "cross_entropy" and kwargs["auto_shift"] is False
+        with (self.root / "training-requests.jsonl").open("a") as stream:
+            stream.write(
+                json.dumps(kwargs | {"data": [datum.model_dump() for datum in data]})
+                + "\n"
+            )
         weights = [w for d in data for w in d.loss_fn_inputs["weights"].tolist()]
         self.state["supervised_tokens"] = int(sum(weights))
         self.state["observations_masked"] = 0 in weights and 1 in weights

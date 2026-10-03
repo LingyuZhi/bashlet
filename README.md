@@ -258,6 +258,8 @@ uv run bashlet prepare-sft runs/mbpp-sanitized-v1-verified/manifest.json \
 
 Python 调用者可用 `bashlet.demonstrations.reference_demonstration(task=..., encoding=..., config=...)` 构造回放模型，传给 `run_experiment(..., sft_adapter=...)`。Adapter 声明匹配的 `encoding` 身份并实现 `submit(datum, *, metadata)`；只有接纳示范才会送达。当前 CLI 的 Adapter 仅写文件，真实付费训练、优化器和快照选择由任务 07 实现，并继续使用统一费用守卫。
 
+已执行的模型轨迹可用 `prepare-sft --trajectories <review.json>` 导出，支持变长历史和逐行动监督；也支持从真实失败前缀执行 Codex 修正。格式与用法见[已执行轨迹配置说明](configs/executed-trajectories.md)。这些静态 SFT 样本保留原始采样证据，并标记为非 on-policy 数据。
+
 2026-10-02 已执行全部 95 道已验证训练题，95 条接纳、0 条拒绝，共 13,776 个监督 token；每条上下文为 648–928 token。数据位于 `runs/sft-reference-v1/`，`acceptance.json` 记录文件哈希、真实评分、原始 token、自回归移位、监督范围和编码身份的逐条核验。此结果只证明示范数据链路成立，尚未进行模型参数更新。
 
 ## 固定开发集评测

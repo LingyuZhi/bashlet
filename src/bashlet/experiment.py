@@ -12,7 +12,12 @@ from typing import Any
 
 from .analysis import analyze_episode
 from .config import ExperimentConfig, load_config
-from .demonstrations import SFTAdapter, export_demonstration, validate_sft_request
+from .demonstrations import (
+    ActionSupervision,
+    SFTAdapter,
+    export_demonstration,
+    validate_sft_request,
+)
 from .episode import run_episode, save_record
 from .models import (
     CaseResult,
@@ -238,6 +243,8 @@ def run_experiment(
     on_update: Callable[[EpisodeResult], None] | None = None,
     assess_first_implementation: bool = False,
     sft_adapter: SFTAdapter | None = None,
+    sft_supervision: Sequence[ActionSupervision] | None = None,
+    sft_max_context_tokens: int = 32768,
 ) -> ExperimentResult:
     """Prepare a Task, run its Episode, and grade only an explicit Submission.
 
@@ -247,7 +254,7 @@ def run_experiment(
     share a process with untrusted student code. The returned record and run
     directory are operator-only and never become student observations.
 
-    ``sft_adapter`` opts into reference-demonstration validation and export after
+    ``sft_adapter`` opts into demonstration validation and export after
     grading. Rejected demonstrations retain their run evidence but never reach
     the Adapter. Export errors propagate after the final run record is saved.
     """
@@ -258,8 +265,12 @@ def run_experiment(
     else:
         condition = load_config(config, overrides)
     _validate_task(task, condition.environment.id)
+    if sft_supervision is not None and sft_adapter is None:
+        raise ValueError("SFT supervision requires an Adapter")
     if sft_adapter is not None:
-        validate_sft_request(task, model, sft_adapter)
+        validate_sft_request(
+            task, model, sft_adapter, executed=sft_supervision is not None
+        )
     grading_protocol = (
         "test-command-v1"
         if isinstance(task.grader, CommandGrader)
@@ -351,7 +362,15 @@ def run_experiment(
             result.first_implementation = _assess_first(result, task, condition)
         try:
             if sft_adapter is not None:
-                export_demonstration(result, task, model, condition, sft_adapter)
+                export_demonstration(
+                    result,
+                    task,
+                    model,
+                    condition,
+                    sft_adapter,
+                    supervision=sft_supervision,
+                    max_context_tokens=sft_max_context_tokens,
+                )
         finally:
             save_record(
                 result,

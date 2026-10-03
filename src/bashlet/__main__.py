@@ -213,9 +213,16 @@ def main() -> None:
     harness_tasks.add_argument("--cohort", type=Path, default=DEFAULT_COHORT)
     _execution_options(harness_tasks)
     demonstrations = commands.add_parser(
-        "prepare-sft", help="Execute verified training references and export SFT data"
+        "prepare-sft",
+        help="Export reviewed trajectories or executed training references",
     )
     demonstrations.add_argument("manifest", type=Path)
+    demonstrations.add_argument(
+        "--trajectories",
+        type=Path,
+        help="Reviewed recorded runs and optional Codex corrections",
+    )
+    demonstrations.add_argument("--max-context-tokens", type=int, default=32768)
     demonstrations.add_argument(
         "--task-id",
         action="append",
@@ -396,6 +403,8 @@ def main() -> None:
                 task_ids=options.task_id,
                 output_dir=options.output_dir,
                 config=load_config(options.config, options.overrides),
+                trajectories_path=options.trajectories,
+                max_context_tokens=options.max_context_tokens,
             )
             record = json.loads(manifest.read_text())
             print(f"{record['status']}: {record['counts']}\n{manifest}")
