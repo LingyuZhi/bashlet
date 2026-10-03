@@ -230,6 +230,17 @@ def main() -> None:
         help="Default: all verified training tasks",
     )
     _execution_options(demonstrations)
+    collection = commands.add_parser(
+        "collect-demonstrations", help="Collect one bounded base attempt per family"
+    )
+    collection.add_argument("plan", type=Path)
+    _execution_options(collection)
+    freeze = commands.add_parser(
+        "freeze-demonstrations", help="Replay, load and audit reviewed training data"
+    )
+    freeze.add_argument("collection", type=Path)
+    freeze.add_argument("--review", type=Path, required=True)
+    _execution_options(freeze)
     training = commands.add_parser(
         "train-sft", help="Train and checkpoint verified SFT demonstrations"
     )
@@ -302,6 +313,29 @@ def main() -> None:
     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "freeze-demonstrations":
+            from .curation import freeze_demonstrations
+
+            print(
+                freeze_demonstrations(
+                    options.collection,
+                    options.review,
+                    options.output_dir,
+                    load_config(options.config, options.overrides),
+                )
+            )
+            return
+        if options.command == "collect-demonstrations":
+            from .curation import collect_demonstrations
+
+            print(
+                collect_demonstrations(
+                    options.plan,
+                    options.output_dir,
+                    load_config(options.config, options.overrides),
+                )
+            )
+            return
         if options.command == "prepare-local-snapshot":
             from .snapshots import prepare_local_snapshot
 
