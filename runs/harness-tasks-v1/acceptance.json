@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "status": "verified",
+  "evidence_kind": "reference-and-mutation-replay",
+  "model_baseline": false,
+  "manifest_sha256": "d5a959ad809799ec3a9883e95bde3328992ee8b3eb06744f8ae5f3d3234182f6",
+  "reference_passes": 118,
+  "targeted_mutation_rejections": 118,
+  "task_documents": 118,
+  "unique_families": 117,
+  "training_candidates": {
+    "short_program": 20,
+    "code_edit": 20,
+    "workspace": 20
+  },
+  "harness_development": {
+    "short_program": 10,
+    "code_edit": 10,
+    "workspace": 10
+  },
+  "mbpp_coding_development": 37,
+  "overlap_family_ids": [
+    "mbpp/554",
+    "mbpp/557",
+    "mbpp/562",
+    "mbpp/563",
+    "mbpp/565",
+    "mbpp/566",
+    "mbpp/567",
+    "mbpp/569",
+    "mbpp/573",
+    "mbpp/600"
+  ],
+  "held_out_task_files_selected": 0,
+  "environment_variants_in_denominator": 0,
+  "family_guard_sha256": "c5249859a081a91e4763a56c8512313693a82e6a1d2b8f6f05846cd3b1586b1c",
+  "examples": {
+    "short_program": {
+      "task_id": "mbpp/602",
+      "task_file": "private/tasks/train/f3e326c85f95dcfa09a80839bd06a50b36826cd85e6ee6acdc7ee79b804b71ae.json",
+      "reference_run": "private/validation/8f30bee0f38644dc86e3efab03b3f10e",
+      "wrong_run": "private/validation/7a1f41b1fa974d2c80bb64a6c06396fa"
+    },
+    "code_edit": {
+      "task_id": "harness/header-key",
+      "task_file": "private/tasks/train/4b09f7b18357757a67695f3ed1538907de0f96d317cb1afe734905baa97f013d.json",
+      "reference_run": "private/validation/67aefb89cbd940169231e5607dd0d5c1",
+      "wrong_run": "private/validation/33359ec0a7b14b51a81c9b6c660ec9fb"
+    },
+    "workspace": {
+      "task_id": "harness/stock-value",
+      "task_file": "private/tasks/train/ee4a2bc8a5c6d281cf6b01899530519e31d83742ffa3a4bf48f4c30eb2faf6e9.json",
+      "reference_run": "private/validation/884ecaf645e74ce8a4fe15c12e8c56ea",
+      "wrong_run": "private/validation/4ed87c609753494b881644e0b6b2405a"
+    }
+  },
+  "checks": [
+    "locked source snapshots and family guard verified",
+    "real reference feedback and grading passed",
+    "targeted mutants submitted and rejected",
+    "family and split retained in trajectories",
+    "hidden grading and reference absent from initial workspaces",
+    "review regressions reject input mutation and cross-split MBPP equivalents"
+  ]
+}
