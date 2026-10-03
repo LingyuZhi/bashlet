@@ -1,0 +1,7 @@
+{
+  "version": "development-evaluation-v1",
+  "name": "local-snapshot-path-smoke-v1",
+  "manifest": "../runs/mbpp-sanitized-v1-verified/manifest.json",
+  "split": "dev",
+  "task_ids": ["mbpp/554"]
+}

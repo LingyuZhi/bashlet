@@ -16,6 +16,7 @@ from .models import EpisodeResult, Model, ModelBackend, Task
 from .monitoring import MonitorConfig, RunMonitor, code_revision, evaluation_metrics
 from .protocol import fingerprints
 from .spend import summarize_cost
+from .vllm import VLLMModel
 
 VERSION = "development-evaluation-v1"
 RULES = {
@@ -194,12 +195,17 @@ def evaluate(
     details: dict[str, Any] = (
         model.describe() if isinstance(model, ModelBackend) else {}
     )
-    if evidence_kind == "experimental" and (
-        details.get("backend") != "pytrio"
-        or details.get("development_only") is not False
+    local = isinstance(model, VLLMModel) and details.get("development_only") is False
+    if evidence_kind == "experimental" and not (
+        (
+            details.get("backend") == "pytrio"
+            and details.get("development_only") is False
+        )
+        or local
     ):
         raise ValueError(
-            "Experimental evaluation requires PyTRIO; use --evidence-kind test-double"
+            "Experimental evaluation requires PyTRIO or a verified local snapshot; "
+            "use --evidence-kind test-double for development backends"
         )
     run_dir = output_dir.resolve() / uuid.uuid4().hex
     run_dir.mkdir(parents=True, mode=0o700)
@@ -249,6 +255,13 @@ def evaluate(
         comparison["max_context_tokens"] = (
             model.max_context_tokens if isinstance(model, ModelBackend) else None
         )
+        if local and isinstance(model, VLLMModel):
+            from .snapshots import _encoding_condition
+
+            runtime = model.describe()
+            record["snapshot_details"] = runtime
+            comparison["encoding"] = _encoding_condition(model.encoding.describe())
+            comparison["inference"] = runtime.get("inference_conditions")
         record["comparison_sha256"] = _digest(comparison)
         record["summary"] = _summary(rows)
         record["cost"] = _cost(model)
@@ -312,6 +325,12 @@ def evaluate(
                     (result.run_dir / "run.json").read_bytes()
                 ).hexdigest(),
             )
+            if (
+                local
+                and isinstance(model, VLLMModel)
+                and model.describe().get("identity_verified") is not True
+            ):
+                row["outcome"] = "infrastructure_error"
             save()
             if monitor is not None:
                 monitor.update_metadata(
@@ -361,7 +380,18 @@ def select_sft(run_dir: Path, baseline: Path, evaluations: list[Path]) -> Path:
     """Select by fixed-denominator dev success; retain separate restart artifacts."""
     training = json.loads((run_dir / "training.json").read_text())
     control = json.loads(baseline.read_text())
-    base_snapshot = f"pytrio/{training['metadata']['base_model']}@unversioned-base"
+    local = control.get("snapshot_details", {}).get("backend") == "vllm"
+    if local:
+        _require_verified_local(control, baseline)
+        details = control["snapshot_details"]
+        if (
+            details["snapshot_kind"] != "base"
+            or details["base_model"] != training["metadata"]["base_model"]
+        ):
+            raise ValueError("SFT baseline must load the original local base snapshot")
+        base_snapshot = f"vllm/{details['base_model']}@{details['model_revision']}"
+    else:
+        base_snapshot = f"pytrio/{training['metadata']['base_model']}@unversioned-base"
     if control.get("snapshot") != base_snapshot or any(
         path.resolve() == baseline.resolve() for path in evaluations
     ):
@@ -371,7 +401,11 @@ def select_sft(run_dir: Path, baseline: Path, evaluations: list[Path]) -> Path:
     if not evaluations or len(set(evaluations)) != len(evaluations):
         raise ValueError("Select from distinct development evaluations")
     checkpoints = {
-        f"pytrio/{training['metadata']['base_model']}@{c['sampler']['path']}": c
+        (
+            c["sampler"]["path"]
+            if local
+            else f"pytrio/{training['metadata']['base_model']}@{c['sampler']['path']}"
+        ): c
         for c in training["checkpoints"]
         if c["sampler"]["kind"] == "sampler_weights"
         and c["training_state"]["kind"] == "training_state"
@@ -379,7 +413,9 @@ def select_sft(run_dir: Path, baseline: Path, evaluations: list[Path]) -> Path:
     records = [
         (path, json.loads(path.read_text())) for path in [baseline, *evaluations]
     ]
-    for _, record in records:
+    for path, record in records:
+        if local:
+            _require_verified_local(record, path)
         if record["plan"]["split"] != "dev":
             raise ValueError("SFT selection requires development data only")
         if record["status"] != "complete" or record["evidence_kind"] != "experimental":
@@ -397,6 +433,22 @@ def select_sft(run_dir: Path, baseline: Path, evaluations: list[Path]) -> Path:
     seen = set()
     for path, record in records[1:]:
         snapshot = record["snapshot"]
+        if local:
+            adapter = record["snapshot_details"].get("adapter")
+            if (
+                not isinstance(adapter, dict)
+                or adapter.get("training_record_sha256")
+                != hashlib.sha256((run_dir / "training.json").read_bytes()).hexdigest()
+            ):
+                raise ValueError(
+                    "Local evaluation must identify the saved SFT training record"
+                )
+            snapshot = adapter["checkpoint"]["path"]
+            if (
+                snapshot in checkpoints
+                and adapter["optimizer_step"] != checkpoints[snapshot]["optimizer_step"]
+            ):
+                raise ValueError("Local evaluation checkpoint step mismatch")
         if snapshot not in checkpoints or snapshot in seen:
             raise ValueError(
                 "Evaluation must load a distinct saved SFT sampler snapshot"
@@ -455,3 +507,39 @@ def select_sft(run_dir: Path, baseline: Path, evaluations: list[Path]) -> Path:
         )
         monitor.finish()
     return destination
+
+
+def _require_verified_local(record: dict[str, Any], path: Path) -> None:
+    details = record.get("snapshot_details", {})
+    if (
+        details.get("backend") != "vllm"
+        or details.get("development_only") is not False
+        or details.get("identity_verified") is not True
+        or details.get("identity") != record.get("snapshot")
+        or not details.get("snapshot_manifest_sha256")
+        or details.get("capability_probe", {}).get("passed") is not True
+        or not details.get("inference_conditions")
+        or not details.get("load_proof")
+        or record.get("status") != "complete"
+        or not record.get("tasks")
+    ):
+        raise ValueError(
+            "Local experimental evidence requires a verified snapshot identity"
+        )
+    for row in record.get("tasks", []):
+        episode_path = path.parent / row["run"] / "run.json"
+        if (
+            hashlib.sha256(episode_path.read_bytes()).hexdigest()
+            != row["episode_sha256"]
+        ):
+            raise ValueError("Local evaluation episode hash mismatch")
+        episode = json.loads(episode_path.read_text())
+        if (
+            episode["policy"] != record["snapshot"]
+            or episode["policy_details"].get("identity_verified") is not True
+            or episode["policy_details"].get("snapshot_manifest_sha256")
+            != details["snapshot_manifest_sha256"]
+        ):
+            raise ValueError(
+                "Local evaluation episode requires a verified snapshot identity"
+            )

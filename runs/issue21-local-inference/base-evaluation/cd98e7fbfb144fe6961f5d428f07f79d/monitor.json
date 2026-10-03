@@ -1,0 +1,62 @@
+{
+  "id": "908d494eb89d4d11a0d7656cf55fc06b",
+  "project": "bashlet",
+  "entity": "lingyuzhi-chinese-academy-of-sciences",
+  "group": "issue21-local-inference",
+  "phase": "dev-eval",
+  "config": {
+    "snapshot": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "evidence_kind": "experimental",
+    "training_run": null,
+    "comparison_sha256": "89a0215a8d28d475590925d537663034de20f52ed2b92d3ef7fc509da71ba8c8",
+    "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+    "fingerprints": {
+      "protocol": "90720d09056f51501e9c5761577733296ecaf1c0f6792d8a7f00f1e0f070cb13",
+      "environment": "b2183fb23d0aab1646a10e778901a811f0d3da110a217603703f3f7431896289",
+      "budget": "3eca2c9414e4ec0a77b0157c1959e23d6489bdd2b82557182f55a63ef364c2a9"
+    },
+    "sampling": {
+      "max_tokens": 1024,
+      "temperature": 1.0,
+      "top_p": 1.0,
+      "seed": 4
+    },
+    "code_revision": "72deae8dce84e45ba63628f43335eaf709485610",
+    "data_source": {
+      "source": {
+        "dataset": "google-research/mbpp",
+        "variant": "sanitized",
+        "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+        "url": "https://raw.githubusercontent.com/google-research/google-research/e49bbfe381c9c0e564b937f1c4e163a2273c65cc/mbpp/sanitized-mbpp.json",
+        "sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+        "conversion": "mbpp-json-functions-v1"
+      },
+      "conversion": "mbpp-json-functions-v1",
+      "split": "dev",
+      "task_ids": [
+        "mbpp/554"
+      ]
+    },
+    "local_run": "/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/base-evaluation/cd98e7fbfb144fe6961f5d428f07f79d",
+    "phase": "dev-eval",
+    "monitoring": {
+      "project": "bashlet",
+      "entity": null,
+      "group": "issue21-local-inference",
+      "mode": "online",
+      "log_every": 1,
+      "timeout_seconds": 20
+    }
+  },
+  "url": "https://wandb.ai/lingyuzhi-chinese-academy-of-sciences/bashlet/runs/908d494eb89d4d11a0d7656cf55fc06b",
+  "online_verified": true,
+  "caches": [
+    "/data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/base-evaluation/cd98e7fbfb144fe6961f5d428f07f79d/wandb/run-20261003_100646-908d494eb89d4d11a0d7656cf55fc06b"
+  ],
+  "sync_status": "synced",
+  "cached_events": 2,
+  "sync_command": "uv run --env-file .env bashlet monitor sync /data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/base-evaluation/cd98e7fbfb144fe6961f5d428f07f79d",
+  "cache_sync_commands": [
+    "uv run --env-file .env wandb sync --include-online --id 908d494eb89d4d11a0d7656cf55fc06b --project bashlet --entity lingyuzhi-chinese-academy-of-sciences /data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/base-evaluation/cd98e7fbfb144fe6961f5d428f07f79d/wandb/run-20261003_100646-908d494eb89d4d11a0d7656cf55fc06b"
+  ]
+}

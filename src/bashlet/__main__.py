@@ -228,6 +228,26 @@ def main() -> None:
     selection.add_argument("run_dir", type=Path)
     selection.add_argument("--baseline", type=Path, required=True)
     selection.add_argument("--evaluation", type=Path, action="append", required=True)
+    export = commands.add_parser(
+        "export-snapshot", help="Download an existing PyTRIO sampler as a LoRA adapter"
+    )
+    export.add_argument("training_run", type=Path)
+    export.add_argument("--step", type=int, required=True)
+    export.add_argument("--output-dir", type=Path, required=True)
+    export.add_argument("--api-key-env", default="PYTRIO_API_KEY")
+    export.add_argument("--dotenv", type=Path, default=Path(".env"))
+    local = commands.add_parser(
+        "prepare-local-snapshot", help="Verify and identify local Qwen3.5 weights"
+    )
+    local.add_argument("base_path", type=Path)
+    local.add_argument("--model-revision", required=True)
+    local.add_argument("--output-dir", type=Path, required=True)
+    local.add_argument("--export", type=Path, dest="export_path")
+    local.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge LoRA in FP32, then round to base precision",
+    )
     monitoring = commands.add_parser(
         "monitor", help="Import or sync experiment metrics"
     )
@@ -267,6 +287,32 @@ def main() -> None:
     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "prepare-local-snapshot":
+            from .snapshots import prepare_local_snapshot
+
+            print(
+                prepare_local_snapshot(
+                    options.base_path,
+                    options.model_revision,
+                    options.output_dir,
+                    export_path=options.export_path,
+                    merge=options.merge,
+                )
+            )
+            return
+        if options.command == "export-snapshot":
+            from .snapshots import export_snapshot
+
+            print(
+                export_snapshot(
+                    options.training_run,
+                    options.step,
+                    options.output_dir,
+                    api_key_env=options.api_key_env,
+                    dotenv_path=options.dotenv,
+                )
+            )
+            return
         if options.command == "select-sft":
             from .evaluation import select_sft
 

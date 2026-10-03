@@ -1,0 +1,17 @@
+{
+  "normalization": "Terminal CR and trailing whitespace removed in static acceptance copies only; live server-sft.log and all episode records unchanged",
+  "files": {
+    "server-base.log": {
+      "raw_sha256": "1ae51cf89c06c2c45f266713ff59b0046313a9b68449121a0ac9dd13c6e79407",
+      "normalized_sha256": "4b51c6d1f95876a770a83428886708bbd955259b7d5e7ff7aeb5f4980f4f4290"
+    },
+    "server-lora-failed.log": {
+      "raw_sha256": "eb463ac13e4d8fe9542b7f7134d5bb5454be2fde468fbd901c1b6564ba9ce512",
+      "normalized_sha256": "9989754411efa61e5265f49b4e772e0c06209b6392bd740342b585ac4e995832"
+    },
+    "server-sft-acceptance.log": {
+      "raw_sha256": "5bc94e4bd2d2192f233fc34cf79c77f19c810d11ac3934fa1292238a59d5011a",
+      "normalized_sha256": "fcdb1e17ed8664bee7fe9a72ad0897f78336df54ae2d1bf0fdfd3d8ce08687f4"
+    }
+  }
+}

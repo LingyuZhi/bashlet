@@ -1,0 +1,17 @@
+{
+  "task_id": "local-snapshot-smoke/double",
+  "prompt": "Write solution.py with a function solve(n) returning twice the integer n. Check it by running python3 feedback_tests.py once. Keep the existing feedback test unchanged. Once the check passes, submit by running printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'.",
+  "initial_files": {
+    "feedback_tests.py": "from solution import solve\nassert solve(2) == 4\n"
+  },
+  "grader": {
+    "module_path": "solution.py",
+    "function_name": "solve",
+    "cases": [
+      {"args": [7], "expected": 14},
+      {"args": [-9], "expected": -18}
+    ]
+  },
+  "implementation_paths": ["solution.py"],
+  "feedback_command": "python3 feedback_tests.py"
+}

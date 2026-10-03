@@ -119,9 +119,9 @@ uv run bashlet spend reconcile <账本请求ID> --actual-cny 0.01 --outcome comp
 
 ## 开发用 vLLM
 
-以下保留任务 20 的历史开发配置和证据。任务 04 起的实际调用统一使用上面的 Qwen3.5-4B 配置。
+以下保留任务 20 的历史开发配置和证据；任务 21 的原始 Qwen3.5-4B 与 SFT 本地运行见下一节。
 
-`VLLMModel`（也可写完整导入路径 `bashlet.vllm.VLLMModel`）只产生开发证据。每个运行的 `policy_details.development_only` 固定为 `true`，实时视图和 `show` 也会注明排除实验结果。该字段同样保留在探针失败、服务失败和中断的记录中；有评分的开发回合也不作为实验结果。
+不提供 `snapshot_manifest` 时，`VLLMModel`（也可写完整导入路径 `bashlet.vllm.VLLMModel`）产生开发证据。该模式的 `policy_details.development_only` 为 `true`，实时视图和 `show` 注明排除实验结果；探针失败、服务失败和中断也保留这一身份。有评分的开发回合仍不能作为实验基线，任务 20 的历史记录不重标。
 
 服务环境独立锁定在 `configs/dev-vllm/`，使用 Python 3.12、vLLM 0.11.0、PyTorch 2.8.0 和 CUDA 12.8 wheel。首次使用先核对 `/version`、`/v1/models`，再用一个 prompt token 采样一个 token。探针结果、实际服务版本、模型 revision、服务报告的权重路径和上下文上限写入 `policy_details`，tokenizer 的文件哈希仍写入 `encoding_details`。探针失败时没有任务生成或命令执行。
 
@@ -154,6 +154,29 @@ uv run bashlet show runs/<运行 ID>
 服务可以持续运行，供后续开发使用；本次任务验收后保留服务和 GPU 占用。使用带认证的服务时，通过 `BASHLET_VLLM_API_KEY` 环境变量提供 API key，或用 `model.api_key_env` 指定环境变量名；配置与运行记录只保存变量名。真实服务不加入自动测试；错误映射由本地假 HTTP 服务在实验入口和 CLI 子进程验证。
 
 2026-10-02 已在 `n30126` 的 A100 40GB 上完成真实 CLI 冒烟回合：上述 Qwen3-4B 模型在 3 步内创建并运行 `hello.py`，输出 `5` 后显式提交；48 个采样 token 均保存原始 id 和逐 token logprob，能力与隔离探针通过。开发证据保存在 `runs/issue20-vllm/`：`api-probe.json` 保存真实 token 接口请求和响应，`acceptance.json` 汇总验收，完整运行记录位于 `episodes/a2a47dbc534c43178098b1addd3f609c/run.json`。
+
+## 本地 Qwen3.5-4B 采样与评测
+
+任务 21 支持使用原始 `Qwen/Qwen3.5-4B` 和任务 07 的已有 SFT sampler，在同一 vLLM 环境中运行共用 Harness。生产训练仍只使用 PyTRIO。本地推理环境独立锁定在 [configs/local-vllm/](configs/local-vllm/pyproject.toml)，使用 vLLM 0.17.1、PyTorch 2.10.0、CUDA 12.8 和 BF16；服务仅绑定节点 loopback，继续使用上述 SSH 隧道。
+
+新增两个准备入口：
+
+```bash
+uv run --locked bashlet export-snapshot runs/issue07-sft-v1 \
+  --step 12 --api-key-env pytrio_api_key --output-dir runs/new-local-export
+uv run --locked bashlet prepare-local-snapshot /path/to/pinned-Qwen3.5-4B \
+  --model-revision 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a \
+  --export runs/new-local-export/export.json --merge \
+  --output-dir runs/new-local-sft
+```
+
+`export-snapshot` 下载已有 sampler，记录远端 checkpoint、原始 archive 与文件哈希、LoRA 配置和训练编码，不创建 trainer 或新 sampler。`prepare-local-snapshot` 无 `--export` 时记录原始基模；带 `--merge` 时先校验结构和编码、重排 TRIO 的 split Q/K/V，再以 FP32 累加 LoRA 增量并舍入为原始 BF16。输出 head 单独保存，输入 embedding 保持原权重。直接加载这份 tied-head LoRA 被真实 vLLM 服务拒绝，合并路径的失败记录和独立矩阵抽核均保留。
+
+[configs/local-base.yaml](configs/local-base.yaml) 和 [configs/local-sft.yaml](configs/local-sft.yaml) 绑定验收产物的 `snapshot.json`。后端检查完整本地文件哈希，核对 `/version`、`/v1/models`、`/server_info` 的实际权重路径、精度和 tokenizer，再对选定模型做 tokenizer 与原始 token／逐 token logprob 探针；成功后才设置 `identity_verified=true`。缺失权重、编码或结构不匹配、错误服务身份和响应回退都会失败。`configs/local-vllm/server.env` 开启该版本的配置查询接口；服务保持 loopback 绑定。
+
+`evaluate --evidence-kind experimental` 接受通过上述验证的本地记录。比较条件包括原始基模哈希、编码、实际推理版本、精度、上下文、缓存、并行、调度和编译设定；模型快照单独记录。`select-sft` 检查匹配基线、已保存 sampler 的训练来源以及 episode 哈希与验证证据，条件不同或未验证的旧开发记录不能入选。
+
+完整的下载、服务切换、恢复与复跑命令见 [任务 21 复跑记录](runs/issue21-local-inference/REPRODUCE.md)。云端基模 revision 未公开，不能据模型名称或 tokenizer commit 宣称云端／本地权重逐位相同。本轮是链路小试，不证明 SFT 提升，也不改变任务 07 回退快照不合格、暂缓后续训练的结论。
 
 ## 已验证的 MBPP 任务集
 

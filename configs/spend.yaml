@@ -10,6 +10,7 @@ limits:
     development-baseline: 2
     sft: 4
     sft-development: 4
+    local-snapshot-inference: 5
 prices_cny_per_million:
   prefill: 1.49
   cache: 0.30

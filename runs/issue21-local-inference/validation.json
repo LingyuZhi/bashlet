@@ -1,0 +1,21 @@
+{
+  "full_suite": {
+    "command": "uv run --locked pytest -q",
+    "passed": 304,
+    "seconds": 808.42
+  },
+  "mypy": {
+    "command": "uv run --locked mypy",
+    "source_files": 39,
+    "passed": true
+  },
+  "ruff": {
+    "lint": true,
+    "format": true,
+    "diff_whitespace": true
+  },
+  "review": {
+    "base": "72deae8",
+    "status": "pending"
+  }
+}

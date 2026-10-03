@@ -1,0 +1,27 @@
+{
+  "ledger": "/data/home/zdhs0148/opd/bashlet/runs/spend.sqlite3",
+  "policy": {
+    "regular_cny": 150,
+    "reserve_cny": 50,
+    "project_cny": 200,
+    "funded_cny": 10,
+    "groups": {
+      "pytrio-smoke": 0.5,
+      "opsd-pilot": 10,
+      "development-baseline": 2,
+      "sft": 4,
+      "sft-development": 4,
+      "local-snapshot-inference": 5
+    }
+  },
+  "historical_charged_upper_bound_cny": 8.4,
+  "pending_upper_bound_cny": 0.0,
+  "funded_remaining_cny": 1.6,
+  "effective_round_limit_cny": 1.6,
+  "actual_cny": null,
+  "actual_basis": "Historical bills have not been verified; no reservations released or split",
+  "new_paid_model_requests": 0,
+  "new_ledger_entries": 0,
+  "before_sha256": "bde6330228eac9c695fbfa1b9e3d0b6468d188f8e554f54d9f55919ba109c086",
+  "after_sha256": "bde6330228eac9c695fbfa1b9e3d0b6468d188f8e554f54d9f55919ba109c086"
+}

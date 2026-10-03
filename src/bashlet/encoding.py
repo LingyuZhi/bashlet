@@ -87,6 +87,8 @@ class QwenChatMLEncoding:
             local_files_only=True,
             trust_remote_code=False,
         )
+        if not self._tokenizer.is_fast:
+            raise ValueError("Qwen encoding requires the authoritative fast tokenizer")
         if not isinstance(self._tokenizer.chat_template, str):
             raise ValueError("The Qwen tokenizer must provide one chat template")
         self.thinking = thinking

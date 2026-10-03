@@ -1,10 +1,11 @@
-"""Token-in/token-out sampling from a development-only vLLM service."""
+"""Token-in/token-out sampling with optional verified local snapshot provenance."""
 
 import math
 import os
 import time
 from collections.abc import Sequence
 from dataclasses import asdict, replace
+from pathlib import Path
 from typing import Any, Literal
 
 import httpx
@@ -40,6 +41,7 @@ class VLLMModel:
         max_retries: int = 2,
         retry_delay_seconds: float = 0.5,
         api_key_env: str | None = "BASHLET_VLLM_API_KEY",
+        snapshot_manifest: str | None = None,
     ) -> None:
         if type(max_retries) is not int or max_retries < 0:
             raise ValueError("max_retries must be a non-negative integer")
@@ -83,6 +85,17 @@ class VLLMModel:
         self.model = model
         self.encoding = encoding
         self.identity = f"dev/vllm/{model}@{model_revision}"
+        self._snapshot = None
+        if snapshot_manifest is not None:
+            from .snapshots import LocalSnapshot
+
+            self._snapshot = LocalSnapshot(
+                Path(snapshot_manifest), model_revision, encoding
+            )
+            self.identity = self._snapshot.identity
+        self.service_version = (
+            self._snapshot.service_version if self._snapshot else VLLM_VERSION
+        )
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
@@ -92,14 +105,17 @@ class VLLMModel:
         self.max_context_tokens = 0
         self._details: dict[str, JSONValue] = {
             "backend": "vllm",
-            "development_only": True,
+            "development_only": self._snapshot is None,
             "base_url": self.base_url,
             "model": model,
             "model_revision": model_revision,
             "service_version": None,
-            "required_service_version": VLLM_VERSION,
+            "required_service_version": self.service_version,
+            "identity_verified": False,
             "capability_probe": {"passed": False},
         }
+        if self._snapshot is not None:
+            self._details.update(self._snapshot.details)
 
     def describe(self) -> dict[str, JSONValue]:
         return self._details | {"retry_count": self._retries}
@@ -167,8 +183,10 @@ class VLLMModel:
         try:
             version = self._request("GET", "/version").get("version")
             self._details["service_version"] = version
-            if version != VLLM_VERSION:
-                raise RuntimeError(f"Expected vLLM {VLLM_VERSION}, got {version!r}")
+            if version != self.service_version:
+                raise RuntimeError(
+                    f"Expected vLLM {self.service_version}, got {version!r}"
+                )
             models = self._request("GET", "/v1/models").get("data")
             if not isinstance(models, list):
                 raise ModelResponseError("vLLM did not return a model list")
@@ -182,6 +200,46 @@ class VLLMModel:
             )
             if served is None:
                 raise RuntimeError(f"vLLM is not serving {self.model!r}")
+            if self._snapshot is not None:
+                config = self._request("GET", "/server_info?config_format=json").get(
+                    "vllm_config"
+                )
+                if not isinstance(config, dict):
+                    raise ModelResponseError(
+                        "vLLM must supply its actual model configuration"
+                    )
+                self._details["inference_conditions"] = self._snapshot.verify_service(
+                    served, config, models
+                )
+                probe_text = "Hi <|im_start|>assistant\n<think>\n</think><|im_end|>"
+                remote_tokens = self._request(
+                    "POST",
+                    "/tokenize",
+                    {
+                        "model": self.model,
+                        "prompt": probe_text,
+                        "add_special_tokens": False,
+                    },
+                ).get("tokens")
+                if remote_tokens != self.encoding.encode(probe_text):
+                    raise ModelResponseError(
+                        "Service tokenizer does not match the local encoding"
+                    )
+                self._details["load_proof"] = {
+                    "served_model": served,
+                    "parent_model": next(
+                        (
+                            item
+                            for item in models
+                            if isinstance(item, dict)
+                            and item.get("id") == served.get("parent")
+                        ),
+                        None,
+                    ),
+                    "model_config": config.get("model_config"),
+                    "lora_config": config.get("lora_config"),
+                    "tokenizer_probe": {"prompt": probe_text, "tokens": remote_tokens},
+                }
             self._details["served_model_root"] = served.get("root")
             context_limit = served.get("max_model_len")
             if type(context_limit) is not int or context_limit < 2:
@@ -199,6 +257,7 @@ class VLLMModel:
                 "generation": asdict(generation),
             }
             self._probed = True
+            self._details["identity_verified"] = self._snapshot is not None
         except Exception as error:
             self._details["capability_probe"] = {"passed": False, "reason": str(error)}
             raise

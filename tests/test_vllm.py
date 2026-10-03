@@ -51,6 +51,9 @@ class FakeVLLM:
     max_model_len: int = 8192
     version: str = "0.11.0"
     authorizations: list[str | None] = field(default_factory=list)
+    models: list[dict[str, Any]] | None = None
+    server_config: dict[str, Any] = field(default_factory=dict)
+    tokenizer: Any = None
 
 
 @pytest.fixture
@@ -79,7 +82,9 @@ def service() -> Iterator[FakeVLLM]:
                     (
                         200,
                         {
-                            "data": [
+                            "data": fake.models
+                            if fake.models is not None
+                            else [
                                 {
                                     "id": "test-qwen",
                                     "root": "/models/test-qwen/fixed-revision",
@@ -89,11 +94,17 @@ def service() -> Iterator[FakeVLLM]:
                         },
                     )
                 )
+            elif self.path == "/server_info?config_format=json":
+                self.respond((200, {"vllm_config": fake.server_config}))
             else:
                 self.respond((404, {"error": {"message": "Unknown path"}}))
 
         def do_POST(self) -> None:
             fake.authorizations.append(self.headers.get("Authorization"))
+            if self.path == "/tokenize":
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                self.respond((200, {"tokens": fake.tokenizer.encode(body["prompt"])}))
+                return
             assert self.path == "/v1/completions"
             fake.requests.append(
                 json.loads(self.rfile.read(int(self.headers["Content-Length"])))
