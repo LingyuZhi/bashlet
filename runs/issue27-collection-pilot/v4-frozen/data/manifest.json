@@ -1,0 +1,237 @@
+{
+  "schema_version": 2,
+  "status": "complete",
+  "source": "executed-trajectory-v1",
+  "source_manifest": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/tasks/manifest.json",
+  "source_manifest_sha256": "23e7133126dcc8a51e49fdc595b711c225d47d23b2d74c69175b1c0966a0e841",
+  "review_sha256": "297be808a4085a2544f0acbe9923db2ac1849423e98bdcdfdb2d7fcffa5e68a4",
+  "tokenizer_cache_dir": null,
+  "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+  "encoding_details": {
+    "format": "qwen/chatml-v1",
+    "tokenizer": "runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "files_sha256": {
+      "tokenizer.json": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "tokenizer_config.json": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+      "chat_template.jinja": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+      "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+      "config.json": "ddc63e1c717afa86c865bb5e01313d89d72bb53b97ad4a8a03ba8510c0621670"
+    },
+    "chat_template_sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
+    "transformers_version": "4.57.3",
+    "tokenizers_version": "0.22.1",
+    "thinking": false,
+    "stop_tokens": [
+      248046,
+      248044
+    ],
+    "thinking_start_token": 248068,
+    "thinking_end_token": 248069,
+    "assistant_header": "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+  },
+  "config": {
+    "protocol": {
+      "name": "bash-block-v4",
+      "system_prompt": "You are a programming agent working in an isolated Linux task workspace. The first user message contains the task instruction.\n\nYour role is to generate an action. The environment executes your command and returns the real observation in the next user message. Wait for that observation before choosing another action.\nNever invent a command result. Never use <returncode>, <output>, or <format_error> sections in place of an action. Those sections come from the environment, not from you.\n\nEach action body must contain exactly one non-empty, closed bash block. Put ```bash and the closing ``` on their own lines. A short explanation before the block is optional. End your reply after the closing block; do not add simulated output.\n\nExample interaction. The role labels below explain the example and are not part of your reply.\nAssistant action:\n```bash\npwd\n```\nEnvironment observation in the next user message:\n<returncode>0</returncode>\n<output>\n/workspace\n</output>\nNext assistant action:\n```bash\nls\n```\nOnly the two bash blocks above are assistant actions. The observation between them is supplied by the environment.\n\nIf native thinking is enabled, finish it before the action body. Only the body after the last thinking end marker is parsed as an action. Commands and submission markers inside thinking are never executed.\n\nEach command runs without network access in a fresh shell and sandbox, starting in the task workspace. Only workspace files persist. Directory changes, exported variables, and background processes do not persist. Include any required directory changes and environment settings in each command.\nThe environment returns the real command return code and combined stdout/stderr. Read that observation to decide what to do next. Long output may show only its head and tail. Narrow later commands when output is shortened. A timeout terminates all processes from that action.\n\nTo submit the current workspace and end the episode, run a command whose first output line is exactly COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT and whose exit code is 0. For example:\n```bash\nprintf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```\nAny remaining command output becomes your final submission text. A marker in an explanation, thinking, a later output line, or a failed command does not submit. Submission is final.\n\nA reply with no bash block, multiple blocks, an empty or unclosed block, unfinished thinking, or a reply cut off by the generation length limit is a format error. Nothing is executed. The step counts against your budget. After a format error, respond with a valid action instead of imitating the error message.\n\nFor your next reply, choose one command, write exactly one bash block, and wait for the environment's observation.",
+      "user_prompt": "instruction verbatim as the first user message",
+      "observation_template": "<returncode>{exit_code}</returncode>\n<output>\n{output}</output>",
+      "timeout_template": "The command timed out. All processes from this step were terminated.\n<returncode>{exit_code}</returncode>\n<output>\n{output}</output>",
+      "observation_head_chars": 2000,
+      "observation_tail_chars": 2000,
+      "elision_template": "[... {omitted_chars} characters omitted ...]\nNarrow the output with head, tail, sed, or a more selective search.",
+      "output_limit_message": "The sandbox output byte limit was reached; further output was discarded. Narrow the output with head, tail, sed, or a more selective search.",
+      "invalid_action_format": "<format_error>{reason}</format_error>\nNothing was executed. Finish native thinking if enabled, then provide exactly one non-empty, closed ```bash block. An explanation before the block is optional.",
+      "history": "append-only token context: encoding.prompt(system, user), then per step the raw sampled tokens followed by encoding.continuation(tokens, feedback); earlier tokens are never decoded and re-encoded",
+      "submission_marker": "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
+    },
+    "environment": {
+      "id": "linux-bwrap-v1",
+      "bwrap": "/usr/bin/bwrap",
+      "timeout_seconds": 30.0,
+      "probe_timeout_seconds": 30.0,
+      "output_bytes": 16384,
+      "submission_bytes": 65536,
+      "submission_files": 1024,
+      "memory_bytes": 536870912,
+      "file_bytes": 1048576,
+      "nofile": 64,
+      "path": "/opt/bin:/opt/python/bin:/usr/bin:/bin",
+      "lang": "C.UTF-8",
+      "home": "/home/agent",
+      "python": {
+        "source": "/data/home/zdhs0148/opd/bashlet/configs/sandbox-python/.venv",
+        "target": "/opt/python"
+      },
+      "python_version": "3.10.12",
+      "pytest_version": "9.1.1",
+      "variables": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTEST_ADDOPTS": "-p no:cacheprovider",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "etc_files": {
+        "passwd": "agent:x:{uid}:{gid}:Sandbox agent:{home}:/bin/bash\n",
+        "group": "agent:x:{gid}:\n",
+        "hosts": "127.0.0.1 localhost\n::1 localhost\n",
+        "nsswitch.conf": "passwd: files\ngroup: files\nhosts: files\n",
+        "resolv.conf": "nameserver 127.0.0.1\n",
+        "gitconfig": "[user]\n\tname = agent\n\temail = agent@localhost\n[init]\n\tdefaultBranch = main\n"
+      },
+      "ro_bind": [
+        {
+          "source": "/usr/bin",
+          "target": "/usr/bin"
+        },
+        {
+          "source": "/usr/lib",
+          "target": "/usr/lib"
+        },
+        {
+          "source": "/usr/lib64",
+          "target": "/usr/lib64"
+        },
+        {
+          "source": "/etc/alternatives",
+          "target": "/etc/alternatives"
+        }
+      ],
+      "symlink": [
+        {
+          "source": "usr/bin",
+          "target": "/bin"
+        },
+        {
+          "source": "usr/lib",
+          "target": "/lib"
+        },
+        {
+          "source": "usr/lib64",
+          "target": "/lib64"
+        }
+      ]
+    },
+    "budget": {
+      "max_steps": 10,
+      "max_generated_tokens": 8192,
+      "max_seconds": 300.0,
+      "max_consecutive_invalid": 3
+    },
+    "model": {
+      "class": "ReplayModel",
+      "sampling": {
+        "max_tokens": 1024,
+        "temperature": 1.0,
+        "top_p": 1.0,
+        "seed": null
+      },
+      "thinking": false,
+      "tokenizer": "runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "tokenizer_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    }
+  },
+  "fingerprints": {
+    "protocol": "a2413e6dface81d979e9ed14549b4df42a8facc2bffee0872381493c9ecbab6e",
+    "environment": "b2183fb23d0aab1646a10e778901a811f0d3da110a217603703f3f7431896289",
+    "budget": "e01c047b0918ea36f8da972284bf12bbc68747ec40550bde7c9ca2202a5c2f69"
+  },
+  "max_context_tokens": 16384,
+  "on_policy_eligible": false,
+  "loss_fn": "cross_entropy",
+  "auto_shift": false,
+  "examples": "examples.jsonl",
+  "tasks": [
+    {
+      "review_index": 0,
+      "task_id": "mbpp/604",
+      "source_run_dir": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/75368d99d5e54b00b51484749671a7e4",
+      "status": "accepted",
+      "reason": "",
+      "run_dir": "episodes/df2556f6e7804c0f83e5fbcd74bd97c5",
+      "run_sha256": "bbe3e924d321d072bc36b1a8d9996f3954a2d4fb1be7d89eebacf62be0751e6a",
+      "source": "executed-trajectory-v1",
+      "artifact": "private/sft.json",
+      "task_sha256": "f4bfc124695bb94522eb315bebb2c5f44a468b99fc0a1266228f90aa87bcd8c0",
+      "origin": {
+        "dataset": "google-research/mbpp",
+        "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+        "source_sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+        "original_task_id": "604",
+        "family_id": "mbpp/604",
+        "split": "train"
+      }
+    },
+    {
+      "review_index": 1,
+      "task_id": "mbpp/606",
+      "source_run_dir": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/efa7784c2c744910806daaf2f739d560",
+      "status": "accepted",
+      "reason": "",
+      "run_dir": "episodes/3d3445a19ce44e3c9ebdf42693074079",
+      "run_sha256": "7c222c68db913bc12d039612b925c83dd749322738f9415d705dd985b6889f63",
+      "source": "executed-trajectory-v1",
+      "artifact": "private/sft.json",
+      "task_sha256": "2668ec346fd121ae7ed70a072e9fdcd5a08c838d546db2125fe98ccf1fe17f2b",
+      "origin": {
+        "dataset": "google-research/mbpp",
+        "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+        "source_sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+        "original_task_id": "606",
+        "family_id": "mbpp/606",
+        "split": "train"
+      }
+    },
+    {
+      "review_index": 2,
+      "task_id": "harness/header-key",
+      "source_run_dir": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/ee24117ddd6a4a9d9bfd88518194f7f6",
+      "status": "accepted",
+      "reason": "",
+      "run_dir": "episodes/cecba68bdf2f4a75a5631851984d254e",
+      "run_sha256": "ec5101783e044264d03d3882190abb11e499d6bf7ccdb32a641c7a7769d78dc5",
+      "source": "executed-trajectory-v1",
+      "artifact": "private/sft.json",
+      "task_sha256": "614526516db733d6fd02987171224ff623a1cdaecafe6183dc9214366498419f",
+      "origin": {
+        "dataset": "bashlet/harness-authored",
+        "revision": "harness-authored-v1",
+        "source_sha256": "3469016aa5f1ce861ed18a97fd1768b0985abe190918c76d6faf5cafb979d41f",
+        "original_task_id": "header-key",
+        "family_id": "harness/header-key",
+        "split": "train"
+      }
+    },
+    {
+      "review_index": 3,
+      "task_id": "harness/csv-field",
+      "source_run_dir": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/33a396bb3e1b464d99b5b1ec4280bd84",
+      "status": "accepted",
+      "reason": "",
+      "run_dir": "episodes/cef5e8852dea4edd8a5a7d6f6121a6f0",
+      "run_sha256": "c6fd511766e25e88abf34ac313478995b20d4e86e75fbb1fe37c8c11cfcf00a0",
+      "source": "executed-trajectory-v1",
+      "artifact": "private/sft.json",
+      "task_sha256": "4dc490358ac4a1f6dcef1f43192fa63769adbaa3926f1b68f2e03e2087c35e75",
+      "origin": {
+        "dataset": "bashlet/harness-authored",
+        "revision": "harness-authored-v1",
+        "source_sha256": "3469016aa5f1ce861ed18a97fd1768b0985abe190918c76d6faf5cafb979d41f",
+        "original_task_id": "csv-field",
+        "family_id": "harness/csv-field",
+        "split": "train"
+      }
+    }
+  ],
+  "task_ids": [
+    "mbpp/604",
+    "mbpp/606",
+    "harness/header-key",
+    "harness/csv-field"
+  ],
+  "acceptance_rule": "complete history, action review, actual replay and independent grading",
+  "counts": {
+    "accepted": 4,
+    "rejected": 0
+  },
+  "examples_sha256": "deafce780fd5cf8c2eb19a18f75d78674759aa655b309ed181c4abe57a8e8b05"
+}

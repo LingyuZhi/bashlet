@@ -1,0 +1,11 @@
+# Replay uses the same budgets, encoding and protocol as the paired sampling.
+model:
+  class: ReplayModel
+  tokenizer: runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  tokenizer_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  thinking: false
+budget:
+  max_steps: 10
+  max_generated_tokens: 8192
+  max_seconds: 300.0
+  max_consecutive_invalid: 3

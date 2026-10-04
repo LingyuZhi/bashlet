@@ -1,0 +1,476 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-10-04T13:10:14.819250+00:00",
+  "reviewer": "Codex; explicit review of all raw replies and real observations",
+  "collection_sha256": "228d52f092e8f8a2545e216dbc6f8d18b8dbc363d8d1a99367371b621d32c499",
+  "attempts": [
+    {
+      "attempt": 1,
+      "accept": false,
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement.",
+      "actions": [
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "f6e7c592fa88d404656ae1419da1bd16faeacae9d14d6defbcc922d78e31d499",
+            "step": 1
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "26dc9a5fe4ad04195791654049817cfac826fb08f8427ec05176df0a84cc29a5",
+            "step": 2
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "26dc9a5fe4ad04195791654049817cfac826fb08f8427ec05176df0a84cc29a5",
+            "step": 3
+          }
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "attempt": 2,
+      "accept": false,
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement.",
+      "actions": [
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "e1ab6cd86967cc1abd25dcc174ce0fba5f044503f402fdb9ab5bd36ff473fd32",
+            "step": 1
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "4822083433654dd6fc3086673eac1315a6ac607c52298472016362c037505794",
+            "step": 2
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "4822083433654dd6fc3086673eac1315a6ac607c52298472016362c037505794",
+            "step": 3
+          }
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "attempt": 3,
+      "accept": true,
+      "reason": "Independent grading passes; preserve full useful model actions and mask explicitly reviewed errors/noops.",
+      "actions": [
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "4051afb3d7d2c761b8c00420aa00618b66400eee3771a4b9397e0dbe091dfd46",
+            "step": 1
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Writes a complete implementation of the stated task using the actual available information.",
+          "author": "model",
+          "action_type": "write",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "9f303d83e1436a1277f43c5d40cff11c62087037e895ec65d744b61ea739e2db",
+            "step": 2
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Executes the original feedback command and receives its real result.",
+          "author": "model",
+          "action_type": "verify",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "3f2c40d67d5540d2066c0a20d65669b197afc34c895128d9216fa569ffb9dcb9",
+            "step": 3
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Inspects real workspace or implementation state; observations come from the sandbox.",
+          "author": "model",
+          "action_type": "inspect",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "fc3066ce37d9b1f5fc25e4116995c9bb38044d589570adacb201df485a418d19",
+            "step": 4
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Emits the exact submission marker as the first output line and terminates the episode.",
+          "author": "model",
+          "action_type": "submit",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "bb3bb4c76b441c644437123f72458b6e2e01ebe1532816bfd9b84408c14eb105",
+            "step": 5
+          }
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "attempt": 4,
+      "accept": true,
+      "reason": "Independent grading passes; preserve full useful model actions and mask explicitly reviewed errors/noops.",
+      "actions": [
+        {
+          "supervise": true,
+          "reason": "Inspects real workspace or implementation state; observations come from the sandbox.",
+          "author": "model",
+          "action_type": "inspect",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "67df85e3e40e79c937a2ed6d89b61471e115140adda40916a76e78601db6ca07",
+            "step": 1
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Reads actual task or feedback material before deciding how to implement the requirement.",
+          "author": "model",
+          "action_type": "read",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "770cacee62e189d71583d6ff464adbbe382834ea71db22d4eeb57f62a14d4093",
+            "step": 2
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Reads actual task or feedback material before deciding how to implement the requirement.",
+          "author": "model",
+          "action_type": "read",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "6ff245fce38b73bfa52d45e0231127c929bb704a6cc7a69fa2497f60cfb706dd",
+            "step": 3
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Changes the implementation to satisfy the requirement, including cases missed by public feedback.",
+          "author": "model",
+          "action_type": "repair",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "72a4fb1ecf77c9e3dffd2cb7eab50fc81bb099e3f7d836bfb940dbb72220d03f",
+            "step": 4
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Executes the original feedback command and receives its real result.",
+          "author": "model",
+          "action_type": "verify",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "3d9120fde5fbd5d132f946938556b118b215c033b748ab64f9c2d15af4c66fd1",
+            "step": 5
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Real output begins with code, so the later marker does not submit; do not supervise this misleading submission attempt.",
+          "author": "model",
+          "action_type": "submission_marker_not_first",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "3b53b7ff7cafdf39fd17d6691d60ec5055715d93fd5db08ec1703f32f97361e4",
+            "step": 6
+          }
+        },
+        {
+          "supervise": true,
+          "reason": "Emits the exact submission marker as the first output line and terminates the episode.",
+          "author": "model",
+          "action_type": "submit",
+          "observation_review": {
+            "invented": false,
+            "reason": "Read the full raw reply and real history: this reply gives an action, and any claims about prior results are supported by actual observations; no simulated environment result is asserted.",
+            "reply_sha256": "8eda3e360ee2c626b85375ce8589d11248c358cd0d3d21ee6df8ccdb40c44b3f",
+            "step": 7
+          }
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "attempt": 5,
+      "accept": false,
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement.",
+      "actions": [
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "4051afb3d7d2c761b8c00420aa00618b66400eee3771a4b9397e0dbe091dfd46",
+            "step": 1
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "71f4b87286d90be76ae1d7da8b1390b6adc8c97daf56107a443e37e7d6789c02",
+            "step": 2
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "71f4b87286d90be76ae1d7da8b1390b6adc8c97daf56107a443e37e7d6789c02",
+            "step": 3
+          }
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "attempt": 6,
+      "accept": false,
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement.",
+      "actions": [
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "57458d3e8a9afcd44f790b82b9c0f2ce9196af74de9eb1113db028feff4e2f59",
+            "step": 1
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "57458d3e8a9afcd44f790b82b9c0f2ce9196af74de9eb1113db028feff4e2f59",
+            "step": 2
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "57458d3e8a9afcd44f790b82b9c0f2ce9196af74de9eb1113db028feff4e2f59",
+            "step": 3
+          }
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "attempt": 7,
+      "accept": false,
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement.",
+      "actions": [
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "bc093b80f81d87f06a56529a3c10d748a78d31b981797739f7805f6f0334b8c0",
+            "step": 1
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "bc093b80f81d87f06a56529a3c10d748a78d31b981797739f7805f6f0334b8c0",
+            "step": 2
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "71f4b87286d90be76ae1d7da8b1390b6adc8c97daf56107a443e37e7d6789c02",
+            "step": 3
+          }
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "attempt": 8,
+      "accept": false,
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement.",
+      "actions": [
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "bee14a248dbf6472263c3902fb2a2554983d0cc042bbe5fb0fed73b486d79b8d",
+            "step": 1
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "bee14a248dbf6472263c3902fb2a2554983d0cc042bbe5fb0fed73b486d79b8d",
+            "step": 2
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "bee14a248dbf6472263c3902fb2a2554983d0cc042bbe5fb0fed73b486d79b8d",
+            "step": 3
+          }
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "attempt": 9,
+      "accept": false,
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement.",
+      "actions": [
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "43c13f45d1f6de69f77c84b71bb76fd12083a434f08c15990f19e9ac5882013c",
+            "step": 1
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "43c13f45d1f6de69f77c84b71bb76fd12083a434f08c15990f19e9ac5882013c",
+            "step": 2
+          }
+        },
+        {
+          "supervise": false,
+          "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+          "author": "model",
+          "action_type": "invented",
+          "observation_review": {
+            "invented": true,
+            "reason": "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.",
+            "reply_sha256": "71f4b87286d90be76ae1d7da8b1390b6adc8c97daf56107a443e37e7d6789c02",
+            "step": 3
+          }
+        }
+      ],
+      "corrections": []
+    }
+  ]
+}

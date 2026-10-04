@@ -1,0 +1,693 @@
+diff --git a/.scratch/bashlet-mvp/issues/27-v3-v4-collection-pilot.md b/.scratch/bashlet-mvp/issues/27-v3-v4-collection-pilot.md
+new file mode 100644
+index 0000000..0869b7d
+--- /dev/null
++++ b/.scratch/bashlet-mvp/issues/27-v3-v4-collection-pilot.md
+@@ -0,0 +1,26 @@
++# 27: 原始模型 v3/v4 配对小试与冻结链路核验
++
++**What to build:** 在本地原始 Qwen3.5-4B 上完成三类各 3 个训练家族的 v3/v4 配对小试，交付真实模型行为、执行与评分结果，以及示范冻结和加载证据，为正式采集选择协议和来源。
++
++**Blocked by:** 无（可立即开始；沿用已交付的本地推理、任务池和示范导出能力）。
++
++**Status:** ready-for-agent
++
++- [x] 采样前冻结 9 个训练家族，短程序编写、现有代码修改、工作区信息利用各 3 个。保存任务、初始状态、来源、划分与内容身份；两个协议使用相同清单，不引入开发或最终测试家族。
++- [x] 核验实际加载的原始模型快照、权重、tokenizer、编码及 token／逐 token logprob 能力。根据实际显存和上下文条件准备服务，保留其他正在使用的服务，不能把旧 SFT 服务当作原始模型。
++- [x] 固定模型、任务初始状态、seed、采样、环境及实际服务条件，仅改变协议名称和系统提示。未改变的采样设置沿用已有原始模型方案，并在运行前冻结。
++- [x] 两组均使用最多 10 步、8192 个生成 token、300 秒。服务窗口与完整历史上限相同，并容纳系统提示、任务、生成和真实观察。保持上下文只追加，容量不足单独记录。
++- [x] 每家族每协议恰好一次模型尝试，共 18 次。记录原始 token、logprob、停止原因、行动、真实观察、工作区变化、提交、独立评分及终止状态；失败不被成功重试静默替换。
++- [x] 本阶段本地 GPU 使用不超过 2 小时，新增远端付费为 ¥0。服务准备、能力探针、采样、回放和收尾分别记录用量；达到上限或中断时保存记录及缺口，预定分母保持 18。
++- [x] 按协议和任务类型报告有效行动的分子／分母、格式错误、虚构观察行为审阅、提交数、评分通过数、预算与上下文耗尽。给出配对逐任务结果；虚构观察判断绑定原回复，不仅按标签出现次数推断。
++- [x] 对可用候选逐行动审阅，经已有执行、回放、冻结及训练加载流程核验真实观察、监督掩码、提交和独立评分。分别报告尝试、候选、可加载示范、独立家族、输入与监督 token，以及拒绝原因。
++- [x] 需要独立核验链路时，允许执行明确来源的参考辅助示范或受控回放，并单独记录用途与用量。这些记录不计入 18 次模型对照或原始模型合格率；无合格候选和链路缺口如实报告。
++- [x] 时间戳等回放差异保留原始证据及拒绝理由，新执行观察另存。交付实际可加载证据或明确缺口，不能靠修改历史通过验证。
++- [x] 交付可复跑配置、命令、代码与配置身份、逐任务结果、典型轨迹和实际 GPU 用量。依据结果给出正式采集的协议、来源、有限尝试、结束条件与预算建议；建议与已批准决定分开。
++- [x] 若需要修改组织或计量逻辑，沿用 `run_experiment`／CLI 与可控模型验证外部行为，保留真实 bash、沙箱及评分。预写回复解析和测试替身不能代替真实配对采样，也不能证明 v4 已有效。
++
++## Comments
++
++- 2026-10-04：用户通过 `to-tickets` 审阅后确认合并为三张票，按 27 → 28 → 29 发布。此票仅完成第一阶段；正式批量采集、新 LoRA 训练、开发选优、OPSD 和最终测试属于后续范围。
++
++- 2026-10-04：完成 9 个训练家族的 v3/v4 配对 18 次真实采样。v3/v4 评分通过分别为 2/9、5/9；可加载模型示范分别为 1、4 条，合计 4 个独立家族。工作区原始模型候选为零，另用同一训练家族的一条明确参考示范独立核验链路，不计入模型分母。新增付费 ¥0，保守 GPU 占用 540 秒，旧 SFT 服务保留。原始与回放观察分开保存，时间戳差异候选被拒绝。结果、来源建议与边界见 [REPORT.md](../../../runs/issue27-collection-pilot/REPORT.md)，复跑见 [REPRODUCE.md](../../../runs/issue27-collection-pilot/REPRODUCE.md)。正式采集与新训练未执行。
+diff --git a/configs/bash-block-v4.yaml b/configs/bash-block-v4.yaml
+new file mode 100644
+index 0000000..d18e493
+--- /dev/null
++++ b/configs/bash-block-v4.yaml
+@@ -0,0 +1,41 @@
++# bash-block-v4 prompt overlay. Load after the model and sampling configs.
++protocol:
++  name: bash-block-v4
++  system_prompt: |-
++    You are a programming agent working in an isolated Linux task workspace. The first user message contains the task instruction.
++
++    Your role is to generate an action. The environment executes your command and returns the real observation in the next user message. Wait for that observation before choosing another action.
++    Never invent a command result. Never use <returncode>, <output>, or <format_error> sections in place of an action. Those sections come from the environment, not from you.
++
++    Each action body must contain exactly one non-empty, closed bash block. Put ```bash and the closing ``` on their own lines. A short explanation before the block is optional. End your reply after the closing block; do not add simulated output.
++
++    Example interaction. The role labels below explain the example and are not part of your reply.
++    Assistant action:
++    ```bash
++    pwd
++    ```
++    Environment observation in the next user message:
++    <returncode>0</returncode>
++    <output>
++    /workspace
++    </output>
++    Next assistant action:
++    ```bash
++    ls
++    ```
++    Only the two bash blocks above are assistant actions. The observation between them is supplied by the environment.
++
++    If native thinking is enabled, finish it before the action body. Only the body after the last thinking end marker is parsed as an action. Commands and submission markers inside thinking are never executed.
++
++    Each command runs without network access in a fresh shell and sandbox, starting in the task workspace. Only workspace files persist. Directory changes, exported variables, and background processes do not persist. Include any required directory changes and environment settings in each command.
++    The environment returns the real command return code and combined stdout/stderr. Read that observation to decide what to do next. Long output may show only its head and tail. Narrow later commands when output is shortened. A timeout terminates all processes from that action.
++
++    To submit the current workspace and end the episode, run a command whose first output line is exactly COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT and whose exit code is 0. For example:
++    ```bash
++    printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n'
++    ```
++    Any remaining command output becomes your final submission text. A marker in an explanation, thinking, a later output line, or a failed command does not submit. Submission is final.
++
++    A reply with no bash block, multiple blocks, an empty or unclosed block, unfinished thinking, or a reply cut off by the generation length limit is a format error. Nothing is executed. The step counts against your budget. After a format error, respond with a valid action instead of imitating the error message.
++
++    For your next reply, choose one command, write exactly one bash block, and wait for the environment's observation.
+diff --git a/configs/collection-pilot-export-v1.yaml b/configs/collection-pilot-export-v1.yaml
+new file mode 100644
+index 0000000..2656675
+--- /dev/null
++++ b/configs/collection-pilot-export-v1.yaml
+@@ -0,0 +1,11 @@
++# Replay uses the same budgets, encoding and protocol as the paired sampling.
++model:
++  class: ReplayModel
++  tokenizer: runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
++  tokenizer_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
++  thinking: false
++budget:
++  max_steps: 10
++  max_generated_tokens: 8192
++  max_seconds: 300.0
++  max_consecutive_invalid: 3
+diff --git a/configs/collection-pilot-v1.json b/configs/collection-pilot-v1.json
+new file mode 100644
+index 0000000..ecd280e
+--- /dev/null
++++ b/configs/collection-pilot-v1.json
+@@ -0,0 +1,76 @@
++{
++  "schema_version": 1,
++  "version": "collection-pilot-v1",
++  "task_manifest": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/tasks/manifest.json",
++  "task_manifest_sha256": "23e7133126dcc8a51e49fdc595b711c225d47d23b2d74c69175b1c0966a0e841",
++  "expected_policy": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
++  "max_attempts": 9,
++  "max_accepted": 9,
++  "max_corrections": 0,
++  "max_context_tokens": 16384,
++  "target_per_type": 3,
++  "planned_paired_attempts": 18,
++  "selection_rule": "First three verified training families in each task type, in the frozen v1 manifest order; no outcome-based selection.",
++  "stop_rule": "One attempt per family per protocol; no retries or replacements. Stop on infrastructure failure. Separate preparation/probe/sampling/replay/cleanup phases; local GPU lease at most 7200 seconds, paid remote requests zero.",
++  "quality_rules": [
++    "Review every raw reply and real action; invented observations are human decisions bound to reply SHA-256.",
++    "Accept independently graded submissions only; mask invalid or misleading model content; keep immutable source observations.",
++    "Exact replay and load_demonstrations must accept; nondeterministic observations remain rejected."
++  ],
++  "tasks": [
++    {
++      "task_id": "mbpp/602",
++      "family_id": "mbpp/602",
++      "task_type": "short_program",
++      "task_sha256": "3cf12c97133eae1f2ff296778c6e0af7b16b322c5b3cc1fcebcc6d5f2572582b"
++    },
++    {
++      "task_id": "mbpp/604",
++      "family_id": "mbpp/604",
++      "task_type": "short_program",
++      "task_sha256": "f4bfc124695bb94522eb315bebb2c5f44a468b99fc0a1266228f90aa87bcd8c0"
++    },
++    {
++      "task_id": "mbpp/606",
++      "family_id": "mbpp/606",
++      "task_type": "short_program",
++      "task_sha256": "2668ec346fd121ae7ed70a072e9fdcd5a08c838d546db2125fe98ccf1fe17f2b"
++    },
++    {
++      "task_id": "harness/header-key",
++      "family_id": "harness/header-key",
++      "task_type": "code_edit",
++      "task_sha256": "614526516db733d6fd02987171224ff623a1cdaecafe6183dc9214366498419f"
++    },
++    {
++      "task_id": "harness/csv-field",
++      "family_id": "harness/csv-field",
++      "task_type": "code_edit",
++      "task_sha256": "4dc490358ac4a1f6dcef1f43192fa63769adbaa3926f1b68f2e03e2087c35e75"
++    },
++    {
++      "task_id": "harness/log-level",
++      "family_id": "harness/log-level",
++      "task_type": "code_edit",
++      "task_sha256": "2e73c2d813f026017cf60afe0d69f11f59de4e639497c5b8f0878165d44100b7"
++    },
++    {
++      "task_id": "harness/stock-value",
++      "family_id": "harness/stock-value",
++      "task_type": "workspace",
++      "task_sha256": "e97781c40ead4bc20fb4cd92b2bf810de6c2be05686da5e2af86d409ae50dad6"
++    },
++    {
++      "task_id": "harness/service-owners",
++      "family_id": "harness/service-owners",
++      "task_type": "workspace",
++      "task_sha256": "82de282cffdfd5eb2b2cd33a804b31fa3ae62dba26b957cbbf7c82e0822c0e32"
++    },
++    {
++      "task_id": "harness/build-flags",
++      "family_id": "harness/build-flags",
++      "task_type": "workspace",
++      "task_sha256": "86ce6f12c7b45db5418b787cf048162ad29326b557894f533dd3702a5168cddc"
++    }
++  ]
++}
+diff --git a/configs/collection-pilot-v1.yaml b/configs/collection-pilot-v1.yaml
+new file mode 100644
+index 0000000..a37066f
+--- /dev/null
++++ b/configs/collection-pilot-v1.yaml
+@@ -0,0 +1,16 @@
++# Issue 27: overlay local-base.yaml, then this file, then the protocol overlay.
++# Keep the original-model sampling scheme from curated-harness-sampling-v1.yaml.
++model:
++  base_url: http://127.0.0.1:18027
++  timeout_seconds: 120
++  max_retries: 0
++  sampling:
++    max_tokens: 1024
++    temperature: 1.0
++    top_p: 1.0
++    seed: 4
++budget:
++  max_steps: 10
++  max_generated_tokens: 8192
++  max_seconds: 300.0
++  max_consecutive_invalid: 3
+diff --git a/configs/local-vllm/serve-collection-pilot-v1.yaml b/configs/local-vllm/serve-collection-pilot-v1.yaml
+new file mode 100644
+index 0000000..f26bcec
+--- /dev/null
++++ b/configs/local-vllm/serve-collection-pilot-v1.yaml
+@@ -0,0 +1,15 @@
++# A second service preserves the existing SFT process on port 8000.
++model: /data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
++tokenizer: /data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
++revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
++tokenizer-revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
++served-model-name: Qwen/Qwen3.5-4B
++host: 127.0.0.1
++port: 8001
++dtype: bfloat16
++max-model-len: 16384
++gpu-memory-utilization: 0.30
++max-num-seqs: 1
++enforce-eager: true
++generation-config: vllm
++language-model-only: true
+diff --git a/src/bashlet/__main__.py b/src/bashlet/__main__.py
+index 1e39e47..d98629c 100644
+--- a/src/bashlet/__main__.py
++++ b/src/bashlet/__main__.py
+@@ -253,6 +253,13 @@ def main() -> None:
+     )
+     collection.add_argument("plan", type=Path)
+     _execution_options(collection)
++    pilot_report = commands.add_parser(
++        "report-collection-pilot", help="Report reviewed paired v3/v4 evidence"
++    )
++    pilot_report.add_argument("plan", type=Path)
++    pilot_report.add_argument("--collection", action="append", type=Path, required=True)
++    pilot_report.add_argument("--review", action="append", type=Path, required=True)
++    pilot_report.add_argument("--output-dir", type=Path, required=True)
+     freeze = commands.add_parser(
+         "freeze-demonstrations", help="Replay, load and audit reviewed training data"
+     )
+@@ -339,6 +346,18 @@ def main() -> None:
+     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
+     previous_handler = signal.signal(signal.SIGINT, _interrupt)
+     try:
++        if options.command == "report-collection-pilot":
++            from .curation.pilot import report_collection_pilot
++
++            print(
++                report_collection_pilot(
++                    options.plan,
++                    options.collection,
++                    options.review,
++                    options.output_dir,
++                )
++            )
++            return
+         if options.command == "evaluate-acceptance":
+             from .evaluation.suite import evaluate_acceptance
+             from .monitoring import MonitorConfig
+diff --git a/src/bashlet/curation/pilot.py b/src/bashlet/curation/pilot.py
+new file mode 100644
+index 0000000..e4bd4eb
+--- /dev/null
++++ b/src/bashlet/curation/pilot.py
+@@ -0,0 +1,253 @@
++"""Paired protocol reports from immutable runs and explicit reply reviews."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++from collections import Counter
++from collections.abc import Sequence
++from pathlib import Path
++from typing import Any
++
++from . import _plan, _save, _sha
++
++_PROTOCOLS = ("bash-block-v3", "bash-block-v4")
++_COUNTS = (
++    "planned_attempts",
++    "started_attempts",
++    "recorded_attempts",
++    "unattempted",
++    "valid_actions",
++    "actions",
++    "format_errors",
++    "invented_observation_replies",
++    "reviewed_replies",
++    "submissions",
++    "grading_passes",
++    "quality_candidates",
++    "budget_exhausted",
++    "context_exhausted",
++    "history_over_limit",
++    "generated_tokens",
++    "model_input_tokens",
++)
++
++
++def _condition(config: dict[str, Any]) -> dict[str, Any]:
++    return config | {
++        "protocol": {
++            key: value
++            for key, value in config["protocol"].items()
++            if key not in ("name", "system_prompt")
++        }
++    }
++
++
++def _metrics(
++    root: Path,
++    attempt: dict[str, Any],
++    decision: dict[str, Any],
++    selected: dict[str, Any],
++    collection: dict[str, Any],
++    policy: str,
++) -> dict[str, Any]:
++    counts = dict.fromkeys(_COUNTS, 0)
++    counts.update(planned_attempts=1, started_attempts=1)
++    if "run_dir" not in attempt:
++        if decision["actions"] or decision["accept"]:
++            raise ValueError("An unfinished attempt has no reviewable candidate")
++        return counts | {"status": attempt["status"], "reason": "No sealed run"}
++    run_dir = (root / attempt["run_dir"]).resolve()
++    if not run_dir.is_relative_to(root / "episodes"):
++        raise ValueError("Attempt evidence is outside the collection")
++    run_path = run_dir / "run.json"
++    if _sha(run_path) != attempt["run_sha256"]:
++        raise ValueError("Attempt evidence hash differs")
++    record = json.loads(run_path.read_text())
++    if (
++        record["config"] != collection["config"]
++        or record["policy"] != policy
++        or record["task_id"] != selected["task_id"]
++        or record["task_sha256"] != selected["task_sha256"]
++        or record["status"] != attempt["status"]
++        or record["passed"] != attempt["passed"]
++        or len(decision["actions"]) != len(record["trajectory"])
++    ):
++        raise ValueError("Attempt or review differs from its frozen provenance")
++    counts.update(
++        recorded_attempts=1,
++        submissions=int(record["episode_status"] == "submitted"),
++        grading_passes=int(record["passed"]),
++        quality_candidates=int(decision["accept"]),
++        budget_exhausted=int(record["status"] == "budget_exhausted"),
++        context_exhausted=int(record["status"] == "context_exhausted"),
++        generated_tokens=record["usage"]["generated_tokens"],
++    )
++    for step, action_review in zip(
++        record["trajectory"], decision["actions"], strict=True
++    ):
++        call = step["model_call"]
++        if call is None:
++            raise ValueError("A paired model action must retain its generation")
++        if call["generation"]["source"] != "sampled" or call["policy"] != policy:
++            raise ValueError("Replay cannot count as a paired model attempt")
++        review = action_review["observation_review"]
++        if (
++            type(review["invented"]) is not bool
++            or not isinstance(review["reason"], str)
++            or not review["reason"].strip()
++            or review["reply_sha256"]
++            != hashlib.sha256(call["text"].encode()).hexdigest()
++        ):
++            raise ValueError("Observation review must bind the original reply")
++        valid = "command" in step["action"]
++        counts["actions"] += 1
++        counts["valid_actions"] += int(valid)
++        counts["format_errors"] += int(
++            not valid and call["generation"]["stop_reason"] != "context"
++        )
++        counts["reviewed_replies"] += 1
++        counts["invented_observation_replies"] += int(review["invented"])
++        counts["model_input_tokens"] += call["context_offset"]
++    return counts | {
++        "status": record["status"],
++        "reason": record["reason"],
++        "run": str(run_path),
++        "run_sha256": attempt["run_sha256"],
++        "history_tokens": len(record["context_tokens"]),
++        "encoding": record["encoding"],
++        "inference_conditions": record["policy_details"].get("inference_conditions"),
++    }
++
++
++def report_collection_pilot(
++    plan_path: Path,
++    collection_paths: Sequence[Path],
++    review_paths: Sequence[Path],
++    output_dir: Path,
++) -> Path:
++    """Keep both planned denominators, including incomplete collections.
++
++    This entry point consumes evidence only. It does not sample, replay, infer
++    quality from tags, or replace failed attempts. Demonstration eligibility is
++    established separately by freeze_demonstrations and the training loader.
++    """
++    plan = _plan(plan_path)
++    if len(collection_paths) != 2 or len(review_paths) != 2:
++        raise ValueError("Supply one collection and review for each protocol")
++    paired: dict[str, dict[str, Any]] = {
++        item["task_id"]: dict(item) for item in plan["tasks"]
++    }
++    protocols: dict[str, Any] = {}
++    artifacts: dict[str, str] = {str(plan_path.resolve()): _sha(plan_path)}
++    conditions = []
++    execution_conditions = []
++    for path, review_path in zip(collection_paths, review_paths, strict=True):
++        root = path.resolve().parent
++        collection = json.loads(path.read_text())
++        review = json.loads(review_path.read_text())
++        name = collection["config"]["protocol"]["name"]
++        if name not in _PROTOCOLS or name in protocols:
++            raise ValueError("Exactly one v3 and one v4 collection is required")
++        if (
++            collection["schema_version"] != 1
++            or collection["plan_sha256"] != _sha(plan_path)
++            or _sha(root / "plan.json") != _sha(plan_path)
++            or review["schema_version"] != 1
++            or review["collection_sha256"] != _sha(path)
++            or len(collection["attempts"]) > len(plan["tasks"])
++            or len(review["attempts"]) != len(collection["attempts"])
++            or (
++                collection["status"] == "complete"
++                and len(collection["attempts"]) != len(plan["tasks"])
++            )
++        ):
++            raise ValueError("Collection or review differs from its frozen plan")
++        conditions.append(_condition(collection["config"]))
++        totals = Counter(dict.fromkeys(_COUNTS, 0))
++        per_type: dict[str, Counter[str]] = {}
++        statuses = Counter[str]()
++        for index, selected in enumerate(plan["tasks"]):
++            if index >= len(collection["attempts"]):
++                row: dict[str, Any] = dict.fromkeys(_COUNTS, 0) | {
++                    "planned_attempts": 1,
++                    "unattempted": 1,
++                    "status": "unattempted",
++                    "reason": "The scheduled attempt was not started",
++                }
++            else:
++                attempt = collection["attempts"][index]
++                decision = review["attempts"][index]
++                if (
++                    attempt["attempt"] != index + 1
++                    or decision["attempt"] != index + 1
++                    or any(attempt[key] != value for key, value in selected.items())
++                    or type(decision["accept"]) is not bool
++                    or not isinstance(decision["reason"], str)
++                    or not decision["reason"].strip()
++                ):
++                    raise ValueError("Review each scheduled family exactly once")
++                row = _metrics(
++                    root,
++                    attempt,
++                    decision,
++                    selected,
++                    collection,
++                    plan["expected_policy"],
++                )
++            row["history_over_limit"] = int(
++                row.get("history_tokens", 0) > plan["max_context_tokens"]
++            )
++            numeric = {key: row[key] for key in _COUNTS}
++            totals.update(numeric)
++            per_type.setdefault(selected["task_type"], Counter()).update(numeric)
++            statuses.update([row["status"]])
++            paired[selected["task_id"]][name] = row
++            if "run" in row:
++                artifacts[row["run"]] = row["run_sha256"]
++                execution_conditions.append(
++                    (row["encoding"], row["inference_conditions"])
++                )
++        protocols[name] = dict(totals) | {
++            "collection_status": collection["status"],
++            "per_type": per_type,
++            "terminal_statuses": statuses,
++            "snapshot_verified": collection.get("policy_details", {}).get(
++                "identity_verified", False
++            ),
++        }
++        artifacts.update(
++            {
++                str(path.resolve()): _sha(path),
++                str(review_path.resolve()): _sha(review_path),
++            }
++        )
++    if conditions[0] != conditions[1] or any(
++        item != execution_conditions[0] for item in execution_conditions[1:]
++    ):
++        raise ValueError("Paired conditions may differ only in protocol name/prompt")
++    output_dir = output_dir.resolve()
++    output_dir.mkdir(parents=True, mode=0o700)
++    destination = output_dir / "report.json"
++    _save(
++        destination,
++        {
++            "schema_version": 1,
++            "planned_attempts": 2 * len(plan["tasks"]),
++            "independent_families": len(plan["tasks"]),
++            "max_context_tokens": plan["max_context_tokens"],
++            "protocols": protocols,
++            "paired": list(paired.values()),
++            "sha256": artifacts,
++            "on_policy_eligible": False,
++            "limitations": [
++                "One fixed-seed paired attempt per training family; this pilot is "
++                "not independent capability evaluation.",
++                "Invented observations and quality are explicit reply-bound reviews; "
++                "tag counts alone are not behavioural evidence.",
++                "Quality candidates are not loadable demonstrations. Replay, freeze "
++                "and training-load results are separate evidence.",
++            ],
++        },
++    )
++    return destination
+diff --git a/tests/test_collection_pilot.py b/tests/test_collection_pilot.py
+new file mode 100644
+index 0000000..b6ac9b2
+--- /dev/null
++++ b/tests/test_collection_pilot.py
+@@ -0,0 +1,170 @@
++"""Paired collection reporting through the CLI and real execution seam."""
++
++import hashlib
++import json
++from dataclasses import replace
++from pathlib import Path
++from typing import Any
++
++import pytest
++from test_cli import cli
++from test_curation import collection_plan
++from test_demonstrations import REPAIR, SUBMIT, SampledTrajectory, executed_task
++
++from bashlet import QwenChatMLEncoding, run_experiment
++from bashlet.config import config_record, load_config
++from bashlet.models import JSONValue
++
++
++class ContextBoundTrajectory(SampledTrajectory):
++    """A bounded model boundary; the command and observation stay real."""
++
++    max_context_tokens: int
++
++    def probe(self) -> None:
++        pass
++
++    def describe(self) -> dict[str, JSONValue]:
++        return {"max_model_len": self.max_context_tokens}
++
++
++@pytest.mark.parametrize("review_fault", ["none", "wrong_reply", "context_exhausted"])
++def test_paired_report_keeps_the_planned_denominator_and_binds_reply_reviews(
++    tmp_path: Path,
++    review_fault: str,
++) -> None:
++    plan_path = collection_plan(tmp_path)
++    plan = json.loads(plan_path.read_text())
++    config = load_config()
++    encoding = QwenChatMLEncoding(
++        "Qwen/Qwen3.5-4B",
++        revision="851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
++        cache_dir="runs/tokenizers",
++    )
++    if review_fault == "context_exhausted":
++        plan["max_context_tokens"] = (
++            len(encoding.prompt(config.protocol.system_prompt, executed_task().prompt))
++            + 100
++        )
++        plan_path.write_text(json.dumps(plan))
++    arguments: list[str] = []
++    for version in ("v3", "v4"):
++        root = tmp_path / version
++        root.mkdir()
++        (root / "plan.json").write_bytes(plan_path.read_bytes())
++        condition = replace(
++            config,
++            protocol=replace(config.protocol, name=f"bash-block-{version}"),
++        )
++        attempts = []
++        decisions: list[dict[str, Any]] = []
++        if version == "v3":
++            model = SampledTrajectory(encoding, [REPAIR, SUBMIT])
++            roles: tuple[str, ...] = ("repair", "submit")
++            if review_fault == "context_exhausted":
++                model = ContextBoundTrajectory(
++                    encoding, ["```bash\nprintf '%05000d\\n' 0\n```"]
++                )
++                model.max_context_tokens = plan["max_context_tokens"]
++                roles = ("inspect",)
++            result = run_experiment(
++                task=executed_task(),
++                model=model,
++                config=condition,
++                output_dir=root / "episodes",
++            )
++            assert result.status == (
++                "context_exhausted"
++                if review_fault == "context_exhausted"
++                else "completed"
++            )
++            attempts.append(
++                dict(
++                    plan["tasks"][0],
++                    attempt=1,
++                    status=result.status,
++                    passed=result.passed,
++                    run_dir=str(result.run_dir.relative_to(root)),
++                    run_sha256=hashlib.sha256(
++                        (result.run_dir / "run.json").read_bytes()
++                    ).hexdigest(),
++                )
++            )
++            decisions.append(
++                {
++                    "attempt": 1,
++                    "accept": result.passed,
++                    "reason": "Useful repair and independently graded submission",
++                    "actions": [
++                        {
++                            "supervise": True,
++                            "reason": "Valid real action without invented results",
++                            "author": "model",
++                            "action_type": role,
++                            "observation_review": {
++                                "invented": False,
++                                "reason": "The reply contains an action only",
++                                "reply_sha256": hashlib.sha256(
++                                    step.model_call.text.encode()
++                                ).hexdigest(),
++                            },
++                        }
++                        for role, step in zip(roles, result.trajectory, strict=True)
++                        if step.model_call is not None
++                    ],
++                }
++            )
++        collection = root / "collection.json"
++        collection.write_text(
++            json.dumps(
++                {
++                    "schema_version": 1,
++                    "status": "complete" if attempts else "incomplete",
++                    "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
++                    "config": config_record(condition),
++                    "attempts": attempts,
++                }
++            )
++        )
++        review = root / "review.json"
++        if decisions and review_fault == "wrong_reply":
++            decisions[0]["actions"][0]["observation_review"]["reply_sha256"] = "stale"
++        review.write_text(
++            json.dumps(
++                {
++                    "schema_version": 1,
++                    "collection_sha256": hashlib.sha256(
++                        collection.read_bytes()
++                    ).hexdigest(),
++                    "attempts": decisions,
++                }
++            )
++        )
++        arguments.extend(("--collection", str(collection), "--review", str(review)))
++    output = tmp_path / "report"
++    process = cli(
++        "report-collection-pilot",
++        str(plan_path),
++        *arguments,
++        "--output-dir",
++        str(output),
++        cwd=Path(__file__).parents[1],
++    )
++    if review_fault == "wrong_reply":
++        assert process.returncode != 0
++        assert "bind the original reply" in process.stdout + process.stderr
++        assert not output.exists()
++        return
++    assert process.returncode == 0, process.stdout + process.stderr
++    report = json.loads((output / "report.json").read_text())
++    assert report["planned_attempts"] == 2
++    if review_fault == "context_exhausted":
++        assert report["protocols"]["bash-block-v3"]["context_exhausted"] == 1
++        assert report["protocols"]["bash-block-v3"]["history_over_limit"] == 1
++        row = report["paired"][0]["bash-block-v3"]
++        assert row["history_tokens"] > report["max_context_tokens"]
++        return
++    assert report["protocols"]["bash-block-v3"]["grading_passes"] == 1
++    assert report["protocols"]["bash-block-v3"]["valid_actions"] == 2
++    assert report["protocols"]["bash-block-v4"]["unattempted"] == 1
++    assert report["paired"][0]["bash-block-v4"]["status"] == "unattempted"

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "version": "collection-pilot-v1",
+  "task_manifest": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/tasks/manifest.json",
+  "task_manifest_sha256": "23e7133126dcc8a51e49fdc595b711c225d47d23b2d74c69175b1c0966a0e841",
+  "expected_policy": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+  "max_attempts": 9,
+  "max_accepted": 9,
+  "max_corrections": 0,
+  "max_context_tokens": 16384,
+  "target_per_type": 3,
+  "planned_paired_attempts": 18,
+  "selection_rule": "First three verified training families in each task type, in the frozen v1 manifest order; no outcome-based selection.",
+  "stop_rule": "One attempt per family per protocol; no retries or replacements. Stop on infrastructure failure. Separate preparation/probe/sampling/replay/cleanup phases; local GPU lease at most 7200 seconds, paid remote requests zero.",
+  "quality_rules": [
+    "Review every raw reply and real action; invented observations are human decisions bound to reply SHA-256.",
+    "Accept independently graded submissions only; mask invalid or misleading model content; keep immutable source observations.",
+    "Exact replay and load_demonstrations must accept; nondeterministic observations remain rejected."
+  ],
+  "tasks": [
+    {
+      "task_id": "mbpp/602",
+      "family_id": "mbpp/602",
+      "task_type": "short_program",
+      "task_sha256": "3cf12c97133eae1f2ff296778c6e0af7b16b322c5b3cc1fcebcc6d5f2572582b"
+    },
+    {
+      "task_id": "mbpp/604",
+      "family_id": "mbpp/604",
+      "task_type": "short_program",
+      "task_sha256": "f4bfc124695bb94522eb315bebb2c5f44a468b99fc0a1266228f90aa87bcd8c0"
+    },
+    {
+      "task_id": "mbpp/606",
+      "family_id": "mbpp/606",
+      "task_type": "short_program",
+      "task_sha256": "2668ec346fd121ae7ed70a072e9fdcd5a08c838d546db2125fe98ccf1fe17f2b"
+    },
+    {
+      "task_id": "harness/header-key",
+      "family_id": "harness/header-key",
+      "task_type": "code_edit",
+      "task_sha256": "614526516db733d6fd02987171224ff623a1cdaecafe6183dc9214366498419f"
+    },
+    {
+      "task_id": "harness/csv-field",
+      "family_id": "harness/csv-field",
+      "task_type": "code_edit",
+      "task_sha256": "4dc490358ac4a1f6dcef1f43192fa63769adbaa3926f1b68f2e03e2087c35e75"
+    },
+    {
+      "task_id": "harness/log-level",
+      "family_id": "harness/log-level",
+      "task_type": "code_edit",
+      "task_sha256": "2e73c2d813f026017cf60afe0d69f11f59de4e639497c5b8f0878165d44100b7"
+    },
+    {
+      "task_id": "harness/stock-value",
+      "family_id": "harness/stock-value",
+      "task_type": "workspace",
+      "task_sha256": "e97781c40ead4bc20fb4cd92b2bf810de6c2be05686da5e2af86d409ae50dad6"
+    },
+    {
+      "task_id": "harness/service-owners",
+      "family_id": "harness/service-owners",
+      "task_type": "workspace",
+      "task_sha256": "82de282cffdfd5eb2b2cd33a804b31fa3ae62dba26b957cbbf7c82e0822c0e32"
+    },
+    {
+      "task_id": "harness/build-flags",
+      "family_id": "harness/build-flags",
+      "task_type": "workspace",
+      "task_sha256": "86ce6f12c7b45db5418b787cf048162ad29326b557894f533dd3702a5168cddc"
+    }
+  ]
+}

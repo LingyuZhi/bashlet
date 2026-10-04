@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-10-04T13:17:35.502378+00:00",
+  "paired_attempts": 18,
+  "sampled_protocols": {
+    "v3": {
+      "manifest": "runs/issue27-collection-pilot/v3-frozen/data/manifest.json",
+      "manifest_sha256": "789901dc0aea46b3f8fe36fe86d6ad1cbbd7e2bbf1216be1b5c969e6465e93f5",
+      "freeze_sha256": "0eef09266d82b4931c4b8985f386d5bdda744bfb1911634996d4f8cfb706268d",
+      "datums": 1,
+      "input_tokens": 798,
+      "supervised_tokens": 114,
+      "families": [
+        "mbpp/606"
+      ],
+      "all_source_and_frozen_hashes_verified": true,
+      "loader_rechecks": [
+        "raw history and stop tokens",
+        "shifted input/targets",
+        "supervision masks and real observations",
+        "submission bytes and independent grading"
+      ]
+    },
+    "v4": {
+      "manifest": "runs/issue27-collection-pilot/v4-frozen/data/manifest.json",
+      "manifest_sha256": "e122748376ef474fef340ad6a2c453aa484e53b9c042670be30fc77e13148922",
+      "freeze_sha256": "496ab57513e79aeb1da078e6f62cdf0f11819139c3a996d70af0d41c0ae3590b",
+      "datums": 4,
+      "input_tokens": 4370,
+      "supervised_tokens": 962,
+      "families": [
+        "mbpp/604",
+        "mbpp/606",
+        "harness/header-key",
+        "harness/csv-field"
+      ],
+      "all_source_and_frozen_hashes_verified": true,
+      "loader_rechecks": [
+        "raw history and stop tokens",
+        "shifted input/targets",
+        "supervision masks and real observations",
+        "submission bytes and independent grading"
+      ]
+    }
+  },
+  "model_demonstrations": 5,
+  "model_independent_families": 4,
+  "model_input_tokens": 5168,
+  "model_supervised_tokens": 1076,
+  "auxiliary_reference": {
+    "manifest": "runs/issue27-collection-pilot/auxiliary-reference/manifest.json",
+    "manifest_sha256": "2b7d7d2f3a595454b3c0b1fc9d9792cc97579c61e80d903d6459f47a1320c3a3",
+    "source": "reference-implementation-v1",
+    "task_id": "harness/stock-value",
+    "family_id": "harness/stock-value",
+    "datums": 1,
+    "input_tokens": 906,
+    "supervised_tokens": 207,
+    "passed": true,
+    "actions": 3,
+    "counts_in_paired_attempts": false,
+    "gpu_seconds": 0,
+    "paid_remote_cny": 0
+  },
+  "auxiliary_freeze_sha256": "b7da969486b31409932061abe38928f62d31fe807654cdaff779a00405896ce1",
+  "original_runs_immutable": true,
+  "new_observations_separate": true
+}

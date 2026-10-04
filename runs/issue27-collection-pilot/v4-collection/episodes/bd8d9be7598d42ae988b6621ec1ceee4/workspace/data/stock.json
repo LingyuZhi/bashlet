@@ -1,0 +1,12 @@
+[
+  {
+    "sku": "oak",
+    "qty": 3,
+    "unit_cents": 125
+  },
+  {
+    "sku": "elm",
+    "qty": 0,
+    "unit_cents": 400
+  }
+]

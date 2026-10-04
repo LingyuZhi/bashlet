@@ -1,0 +1,43 @@
+{
+  "task_id": "mbpp/606",
+  "prompt": "Write a function to convert degrees to radians.\n\nImplement `radian_degree(degree)` in `solution.py`.\nRun `python3 feedback_tests.py` to check the public example.\nYour submission is graded on separate inputs.",
+  "initial_files": {
+    "feedback_tests.py": "from solution import radian_degree\n\nassert radian_degree(90)==1.5707963267948966\n"
+  },
+  "grader": {
+    "module_path": "solution.py",
+    "function_name": "radian_degree",
+    "cases": [
+      {
+        "args": [
+          60
+        ],
+        "expected": 1.0471975511965976
+      },
+      {
+        "args": [
+          120
+        ],
+        "expected": 2.0943951023931953
+      }
+    ]
+  },
+  "environment_id": "linux-bwrap-v1",
+  "reference_implementation": "import math\ndef radian_degree(degree):\n radian = degree*(math.pi/180)\n return radian",
+  "implementation_paths": [
+    "solution.py"
+  ],
+  "feedback_command": "python3 feedback_tests.py",
+  "origin": {
+    "dataset": "google-research/mbpp",
+    "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+    "source_sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+    "original_task_id": "606",
+    "family_id": "mbpp/606",
+    "split": "train"
+  },
+  "task_type": "short_program",
+  "variant_id": "base",
+  "feedback_start_id": "0697e4ea1e6edbf12ef6c8306fcce4a5087d4aebd68bb8e3f9aa3b7814082328",
+  "environment_variant_id": "223b19652e08c9b9716ef3e54b28067ad246c0a94a7fb5c8567db9cdf789597f"
+}

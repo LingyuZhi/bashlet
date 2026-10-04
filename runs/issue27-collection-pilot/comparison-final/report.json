@@ -1,0 +1,1775 @@
+{
+  "schema_version": 1,
+  "planned_attempts": 18,
+  "independent_families": 9,
+  "max_context_tokens": 16384,
+  "protocols": {
+    "bash-block-v3": {
+      "planned_attempts": 9,
+      "started_attempts": 9,
+      "recorded_attempts": 9,
+      "unattempted": 0,
+      "valid_actions": 11,
+      "actions": 33,
+      "format_errors": 22,
+      "invented_observation_replies": 22,
+      "reviewed_replies": 33,
+      "submissions": 2,
+      "grading_passes": 2,
+      "quality_candidates": 2,
+      "budget_exhausted": 0,
+      "context_exhausted": 0,
+      "history_over_limit": 0,
+      "generated_tokens": 1433,
+      "model_input_tokens": 22140,
+      "collection_status": "complete",
+      "per_type": {
+        "short_program": {
+          "planned_attempts": 3,
+          "started_attempts": 3,
+          "recorded_attempts": 3,
+          "unattempted": 0,
+          "valid_actions": 4,
+          "actions": 11,
+          "format_errors": 7,
+          "invented_observation_replies": 7,
+          "reviewed_replies": 11,
+          "submissions": 1,
+          "grading_passes": 1,
+          "quality_candidates": 1,
+          "budget_exhausted": 0,
+          "context_exhausted": 0,
+          "history_over_limit": 0,
+          "generated_tokens": 381,
+          "model_input_tokens": 6820
+        },
+        "code_edit": {
+          "planned_attempts": 3,
+          "started_attempts": 3,
+          "recorded_attempts": 3,
+          "unattempted": 0,
+          "valid_actions": 7,
+          "actions": 13,
+          "format_errors": 6,
+          "invented_observation_replies": 6,
+          "reviewed_replies": 13,
+          "submissions": 1,
+          "grading_passes": 1,
+          "quality_candidates": 1,
+          "budget_exhausted": 0,
+          "context_exhausted": 0,
+          "history_over_limit": 0,
+          "generated_tokens": 334,
+          "model_input_tokens": 9242
+        },
+        "workspace": {
+          "planned_attempts": 3,
+          "started_attempts": 3,
+          "recorded_attempts": 3,
+          "unattempted": 0,
+          "valid_actions": 0,
+          "actions": 9,
+          "format_errors": 9,
+          "invented_observation_replies": 9,
+          "reviewed_replies": 9,
+          "submissions": 0,
+          "grading_passes": 0,
+          "quality_candidates": 0,
+          "budget_exhausted": 0,
+          "context_exhausted": 0,
+          "history_over_limit": 0,
+          "generated_tokens": 718,
+          "model_input_tokens": 6078
+        }
+      },
+      "terminal_statuses": {
+        "format_error": 7,
+        "completed": 2
+      },
+      "snapshot_verified": true
+    },
+    "bash-block-v4": {
+      "planned_attempts": 9,
+      "started_attempts": 9,
+      "recorded_attempts": 9,
+      "unattempted": 0,
+      "valid_actions": 68,
+      "actions": 69,
+      "format_errors": 1,
+      "invented_observation_replies": 0,
+      "reviewed_replies": 69,
+      "submissions": 5,
+      "grading_passes": 5,
+      "quality_candidates": 4,
+      "budget_exhausted": 4,
+      "context_exhausted": 0,
+      "history_over_limit": 0,
+      "generated_tokens": 2649,
+      "model_input_tokens": 66360,
+      "collection_status": "complete",
+      "per_type": {
+        "short_program": {
+          "planned_attempts": 3,
+          "started_attempts": 3,
+          "recorded_attempts": 3,
+          "unattempted": 0,
+          "valid_actions": 13,
+          "actions": 14,
+          "format_errors": 1,
+          "invented_observation_replies": 0,
+          "reviewed_replies": 14,
+          "submissions": 3,
+          "grading_passes": 3,
+          "quality_candidates": 2,
+          "budget_exhausted": 0,
+          "context_exhausted": 0,
+          "history_over_limit": 0,
+          "generated_tokens": 656,
+          "model_input_tokens": 11370
+        },
+        "code_edit": {
+          "planned_attempts": 3,
+          "started_attempts": 3,
+          "recorded_attempts": 3,
+          "unattempted": 0,
+          "valid_actions": 25,
+          "actions": 25,
+          "format_errors": 0,
+          "invented_observation_replies": 0,
+          "reviewed_replies": 25,
+          "submissions": 2,
+          "grading_passes": 2,
+          "quality_candidates": 2,
+          "budget_exhausted": 1,
+          "context_exhausted": 0,
+          "history_over_limit": 0,
+          "generated_tokens": 1163,
+          "model_input_tokens": 24207
+        },
+        "workspace": {
+          "planned_attempts": 3,
+          "started_attempts": 3,
+          "recorded_attempts": 3,
+          "unattempted": 0,
+          "valid_actions": 30,
+          "actions": 30,
+          "format_errors": 0,
+          "invented_observation_replies": 0,
+          "reviewed_replies": 30,
+          "submissions": 0,
+          "grading_passes": 0,
+          "quality_candidates": 0,
+          "budget_exhausted": 3,
+          "context_exhausted": 0,
+          "history_over_limit": 0,
+          "generated_tokens": 830,
+          "model_input_tokens": 30783
+        }
+      },
+      "terminal_statuses": {
+        "completed": 5,
+        "budget_exhausted": 4
+      },
+      "snapshot_verified": true
+    }
+  },
+  "paired": [
+    {
+      "task_id": "mbpp/602",
+      "family_id": "mbpp/602",
+      "task_type": "short_program",
+      "task_sha256": "3cf12c97133eae1f2ff296778c6e0af7b16b322c5b3cc1fcebcc6d5f2572582b",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 0,
+        "actions": 3,
+        "format_errors": 3,
+        "invented_observation_replies": 3,
+        "reviewed_replies": 3,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 122,
+        "model_input_tokens": 1861,
+        "status": "format_error",
+        "reason": "3 consecutive invalid actions: Expected exactly one ```bash block, found 0",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/5ce31916eb2745f2bf844e9e7b633a79/run.json",
+        "run_sha256": "7d578e258e6153eb7497a1fe4ce54311814c9f157233a0624ca2ed8eaac5a32e",
+        "history_tokens": 741,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 5,
+        "actions": 6,
+        "format_errors": 1,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 6,
+        "submissions": 1,
+        "grading_passes": 1,
+        "quality_candidates": 0,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 404,
+        "model_input_tokens": 5526,
+        "status": "completed",
+        "reason": "",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/e8b84aa3af924c3fafdf1bddeee06ba6/run.json",
+        "run_sha256": "c13b534ae415c2fbca81a9fca7659cf255f99054f60186a07c6f32977e895861",
+        "history_tokens": 1220,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    },
+    {
+      "task_id": "mbpp/604",
+      "family_id": "mbpp/604",
+      "task_type": "short_program",
+      "task_sha256": "f4bfc124695bb94522eb315bebb2c5f44a468b99fc0a1266228f90aa87bcd8c0",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 0,
+        "actions": 3,
+        "format_errors": 3,
+        "invented_observation_replies": 3,
+        "reviewed_replies": 3,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 127,
+        "model_input_tokens": 1832,
+        "status": "format_error",
+        "reason": "3 consecutive invalid actions: Expected exactly one ```bash block, found 0",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/e4f78c7076c7443c95cde2ef762d7764/run.json",
+        "run_sha256": "7f7b76f859688d07a9b3740c1aa1b1eb0dfc8a8237a7611c19106c508661d4de",
+        "history_tokens": 743,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 5,
+        "actions": 5,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 5,
+        "submissions": 1,
+        "grading_passes": 1,
+        "quality_candidates": 1,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 142,
+        "model_input_tokens": 3791,
+        "status": "completed",
+        "reason": "",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/75368d99d5e54b00b51484749671a7e4/run.json",
+        "run_sha256": "cfaa62a44277da9cd3701932730f9f8b9441f30af8a90c185e4888bc474e55d6",
+        "history_tokens": 915,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    },
+    {
+      "task_id": "mbpp/606",
+      "family_id": "mbpp/606",
+      "task_type": "short_program",
+      "task_sha256": "2668ec346fd121ae7ed70a072e9fdcd5a08c838d546db2125fe98ccf1fe17f2b",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 4,
+        "actions": 5,
+        "format_errors": 1,
+        "invented_observation_replies": 1,
+        "reviewed_replies": 5,
+        "submissions": 1,
+        "grading_passes": 1,
+        "quality_candidates": 1,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 132,
+        "model_input_tokens": 3127,
+        "status": "completed",
+        "reason": "",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/d022aeb61003445f9469501d88aa6183/run.json",
+        "run_sha256": "a5ea4464c8b7362fff83a4b9c9084d1903e3d2452faef04b64c7a81a48962d27",
+        "history_tokens": 799,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 3,
+        "actions": 3,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 3,
+        "submissions": 1,
+        "grading_passes": 1,
+        "quality_candidates": 1,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 110,
+        "model_input_tokens": 2053,
+        "status": "completed",
+        "reason": "",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/efa7784c2c744910806daaf2f739d560/run.json",
+        "run_sha256": "1dcbef75110183974b44d2bcfd3fdbd6b43830909c087b06353443ee017e374b",
+        "history_tokens": 792,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    },
+    {
+      "task_id": "harness/header-key",
+      "family_id": "harness/header-key",
+      "task_type": "code_edit",
+      "task_sha256": "614526516db733d6fd02987171224ff623a1cdaecafe6183dc9214366498419f",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 7,
+        "actions": 7,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 7,
+        "submissions": 1,
+        "grading_passes": 1,
+        "quality_candidates": 1,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 217,
+        "model_input_tokens": 5663,
+        "status": "completed",
+        "reason": "",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/09fe738538bc45deb0ca5c4d62bf6620/run.json",
+        "run_sha256": "e71179d526d3d1f1113891eabaf36c51822bbd1f9470ae76d1a815122908eaf6",
+        "history_tokens": 1089,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 7,
+        "actions": 7,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 7,
+        "submissions": 1,
+        "grading_passes": 1,
+        "quality_candidates": 1,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 109,
+        "model_input_tokens": 5787,
+        "status": "completed",
+        "reason": "",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/ee24117ddd6a4a9d9bfd88518194f7f6/run.json",
+        "run_sha256": "13c0829964029b159a4a833be718ce688ade3efb46a7693d87135dd55b58fb54",
+        "history_tokens": 1027,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    },
+    {
+      "task_id": "harness/csv-field",
+      "family_id": "harness/csv-field",
+      "task_type": "code_edit",
+      "task_sha256": "4dc490358ac4a1f6dcef1f43192fa63769adbaa3926f1b68f2e03e2087c35e75",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 0,
+        "actions": 3,
+        "format_errors": 3,
+        "invented_observation_replies": 3,
+        "reviewed_replies": 3,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 36,
+        "model_input_tokens": 1755,
+        "status": "format_error",
+        "reason": "3 consecutive invalid actions: Expected exactly one ```bash block, found 0",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/801cfaef16744b06b194d8a12c728221/run.json",
+        "run_sha256": "10acd6e7f81bc63bb1cb4016bbc618c9ccc2fa6c841ab4e965940d2fcddafa07",
+        "history_tokens": 668,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 8,
+        "actions": 8,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 8,
+        "submissions": 1,
+        "grading_passes": 1,
+        "quality_candidates": 1,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 667,
+        "model_input_tokens": 8332,
+        "status": "completed",
+        "reason": "",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/33a396bb3e1b464d99b5b1ec4280bd84/run.json",
+        "run_sha256": "4f24783f0ca82d6eda879dc06cb19a29e8f74d9aff63cc19be6981ce7797c865",
+        "history_tokens": 1640,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    },
+    {
+      "task_id": "harness/log-level",
+      "family_id": "harness/log-level",
+      "task_type": "code_edit",
+      "task_sha256": "2e73c2d813f026017cf60afe0d69f11f59de4e639497c5b8f0878165d44100b7",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 0,
+        "actions": 3,
+        "format_errors": 3,
+        "invented_observation_replies": 3,
+        "reviewed_replies": 3,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 81,
+        "model_input_tokens": 1824,
+        "status": "format_error",
+        "reason": "3 consecutive invalid actions: Expected exactly one ```bash block, found 0",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/e5b40a3f9fd24cc5a8e4566c9fc5a658/run.json",
+        "run_sha256": "7e71410dcfcb0d306933eb37d361533a8c18264353a1e89d8957eed11d64ab2a",
+        "history_tokens": 724,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 10,
+        "actions": 10,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 10,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 1,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 387,
+        "model_input_tokens": 10088,
+        "status": "budget_exhausted",
+        "reason": "Reached max_steps=10",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/843e9502e0944ff79936ef9e1c558ef4/run.json",
+        "run_sha256": "714ec1c97d5fb4a2dd3557a0862f40efc906c9c41ceda9169756c5c947c6d5c6",
+        "history_tokens": 1418,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    },
+    {
+      "task_id": "harness/stock-value",
+      "family_id": "harness/stock-value",
+      "task_type": "workspace",
+      "task_sha256": "e97781c40ead4bc20fb4cd92b2bf810de6c2be05686da5e2af86d409ae50dad6",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 0,
+        "actions": 3,
+        "format_errors": 3,
+        "invented_observation_replies": 3,
+        "reviewed_replies": 3,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 175,
+        "model_input_tokens": 1944,
+        "status": "format_error",
+        "reason": "3 consecutive invalid actions: Expected exactly one ```bash block, found 0",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/5845f1b03e1a42b3a3a2112b1d2f54bf/run.json",
+        "run_sha256": "2b517c5e4ceaaebec1b487b0853923a146ddccfeb6f78aa3a1717f2ef4755ea6",
+        "history_tokens": 802,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 10,
+        "actions": 10,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 10,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 1,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 217,
+        "model_input_tokens": 10464,
+        "status": "budget_exhausted",
+        "reason": "Reached max_steps=10",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/bd8d9be7598d42ae988b6621ec1ceee4/run.json",
+        "run_sha256": "66dce2b09e6e898b4e2a83371922c2be82ab0b22ee0256f22ba148a3fe4bf573",
+        "history_tokens": 1516,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    },
+    {
+      "task_id": "harness/service-owners",
+      "family_id": "harness/service-owners",
+      "task_type": "workspace",
+      "task_sha256": "82de282cffdfd5eb2b2cd33a804b31fa3ae62dba26b957cbbf7c82e0822c0e32",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 0,
+        "actions": 3,
+        "format_errors": 3,
+        "invented_observation_replies": 3,
+        "reviewed_replies": 3,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 114,
+        "model_input_tokens": 1812,
+        "status": "format_error",
+        "reason": "3 consecutive invalid actions: Expected exactly one ```bash block, found 0",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/579b1b86effd473495f3cb59922e842d/run.json",
+        "run_sha256": "0474c53c930dc92f1e15cf7d9b1dc3917d7e374616c87ae1733d73dc0cf4b165",
+        "history_tokens": 742,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 10,
+        "actions": 10,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 10,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 1,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 272,
+        "model_input_tokens": 10041,
+        "status": "budget_exhausted",
+        "reason": "Reached max_steps=10",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/aa6b5641cc9c4604aaf3b270f547d89c/run.json",
+        "run_sha256": "aa80e31842bf39de9ad019fef222b97cc6dfe0e1dc71d8fed22bb061ea57837f",
+        "history_tokens": 1540,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    },
+    {
+      "task_id": "harness/build-flags",
+      "family_id": "harness/build-flags",
+      "task_type": "workspace",
+      "task_sha256": "86ce6f12c7b45db5418b787cf048162ad29326b557894f533dd3702a5168cddc",
+      "bash-block-v3": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 0,
+        "actions": 3,
+        "format_errors": 3,
+        "invented_observation_replies": 3,
+        "reviewed_replies": 3,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 0,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 429,
+        "model_input_tokens": 2322,
+        "status": "format_error",
+        "reason": "3 consecutive invalid actions: Expected exactly one ```bash block, found 0",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/6e11aee83bce463d820347d8ca3b5e9d/run.json",
+        "run_sha256": "2ed168fb39993bbb8c5fee28dcb094817e835391dfcdf324c426fae7821c6226",
+        "history_tokens": 1055,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      },
+      "bash-block-v4": {
+        "planned_attempts": 1,
+        "started_attempts": 1,
+        "recorded_attempts": 1,
+        "unattempted": 0,
+        "valid_actions": 10,
+        "actions": 10,
+        "format_errors": 0,
+        "invented_observation_replies": 0,
+        "reviewed_replies": 10,
+        "submissions": 0,
+        "grading_passes": 0,
+        "quality_candidates": 0,
+        "budget_exhausted": 1,
+        "context_exhausted": 0,
+        "history_over_limit": 0,
+        "generated_tokens": 341,
+        "model_input_tokens": 10278,
+        "status": "budget_exhausted",
+        "reason": "Reached max_steps=10",
+        "run": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/b7a6bf3dc8354250bc98e77e9a4d6e67/run.json",
+        "run_sha256": "d5e18af57aa2ba5a66503de8ceff7cba4cb0f99d270579ddaa30a4b4b0111a5e",
+        "history_tokens": 1634,
+        "encoding": "qwen/chatml-v1:runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a:c53df7fbca74672953eb6a6adc27bcd9d0b16cf8f3a33e03d93a42f18eab5588",
+        "inference_conditions": {
+          "dtype": "bfloat16",
+          "max_model_len": 16384,
+          "quantization": null,
+          "backend": "vllm",
+          "service_version": "0.17.1",
+          "model_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "load": {
+            "load_format": "auto",
+            "safetensors_load_strategy": "lazy",
+            "model_loader_extra_config": {},
+            "ignore_patterns": [
+              "original/**/*"
+            ]
+          },
+          "base_weights_sha256": {
+            "model.safetensors-00001-of-00002.safetensors": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61",
+            "model.safetensors-00002-of-00002.safetensors": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+          },
+          "model": {
+            "enforce_eager": true,
+            "generation_config": "vllm",
+            "override_generation_config": {},
+            "seed": 0,
+            "model_impl": "auto",
+            "override_attention_dtype": null,
+            "disable_sliding_window": false,
+            "disable_cascade_attn": false,
+            "logprobs_mode": "raw_logprobs",
+            "max_logprobs": 20,
+            "enable_prompt_embeds": false
+          },
+          "cache": {
+            "block_size": 528,
+            "cache_dtype": "auto",
+            "mamba_cache_dtype": "auto",
+            "mamba_ssm_cache_dtype": "float32",
+            "mamba_cache_mode": "none",
+            "enable_prefix_caching": false,
+            "gpu_memory_utilization": 0.3
+          },
+          "parallel": {
+            "tensor_parallel_size": 1,
+            "pipeline_parallel_size": 1,
+            "data_parallel_size": 1,
+            "distributed_executor_backend": "uni"
+          },
+          "scheduler": {
+            "max_num_seqs": 1,
+            "max_num_batched_tokens": 2048,
+            "enable_chunked_prefill": true
+          },
+          "compilation": {
+            "mode": 0,
+            "cudagraph_mode": 0,
+            "backend": "inductor"
+          },
+          "lora": null
+        }
+      }
+    }
+  ],
+  "sha256": {
+    "/data/home/zdhs0148/opd/bashlet/configs/collection-pilot-v1.json": "6dfef4fac86d17e080abafaaf7ce631f4f59b1e9cc2cb5db36875fa525e293bb",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/5ce31916eb2745f2bf844e9e7b633a79/run.json": "7d578e258e6153eb7497a1fe4ce54311814c9f157233a0624ca2ed8eaac5a32e",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/e4f78c7076c7443c95cde2ef762d7764/run.json": "7f7b76f859688d07a9b3740c1aa1b1eb0dfc8a8237a7611c19106c508661d4de",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/d022aeb61003445f9469501d88aa6183/run.json": "a5ea4464c8b7362fff83a4b9c9084d1903e3d2452faef04b64c7a81a48962d27",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/09fe738538bc45deb0ca5c4d62bf6620/run.json": "e71179d526d3d1f1113891eabaf36c51822bbd1f9470ae76d1a815122908eaf6",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/801cfaef16744b06b194d8a12c728221/run.json": "10acd6e7f81bc63bb1cb4016bbc618c9ccc2fa6c841ab4e965940d2fcddafa07",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/e5b40a3f9fd24cc5a8e4566c9fc5a658/run.json": "7e71410dcfcb0d306933eb37d361533a8c18264353a1e89d8957eed11d64ab2a",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/5845f1b03e1a42b3a3a2112b1d2f54bf/run.json": "2b517c5e4ceaaebec1b487b0853923a146ddccfeb6f78aa3a1717f2ef4755ea6",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/579b1b86effd473495f3cb59922e842d/run.json": "0474c53c930dc92f1e15cf7d9b1dc3917d7e374616c87ae1733d73dc0cf4b165",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/6e11aee83bce463d820347d8ca3b5e9d/run.json": "2ed168fb39993bbb8c5fee28dcb094817e835391dfcdf324c426fae7821c6226",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/collection.json": "228d52f092e8f8a2545e216dbc6f8d18b8dbc363d8d1a99367371b621d32c499",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-quality-review.json": "a3dd88a1069897ce2feb1d39db51843a16d9e98a1e5c72c0743dad8c051043c7",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/e8b84aa3af924c3fafdf1bddeee06ba6/run.json": "c13b534ae415c2fbca81a9fca7659cf255f99054f60186a07c6f32977e895861",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/75368d99d5e54b00b51484749671a7e4/run.json": "cfaa62a44277da9cd3701932730f9f8b9441f30af8a90c185e4888bc474e55d6",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/efa7784c2c744910806daaf2f739d560/run.json": "1dcbef75110183974b44d2bcfd3fdbd6b43830909c087b06353443ee017e374b",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/ee24117ddd6a4a9d9bfd88518194f7f6/run.json": "13c0829964029b159a4a833be718ce688ade3efb46a7693d87135dd55b58fb54",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/33a396bb3e1b464d99b5b1ec4280bd84/run.json": "4f24783f0ca82d6eda879dc06cb19a29e8f74d9aff63cc19be6981ce7797c865",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/843e9502e0944ff79936ef9e1c558ef4/run.json": "714ec1c97d5fb4a2dd3557a0862f40efc906c9c41ceda9169756c5c947c6d5c6",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/bd8d9be7598d42ae988b6621ec1ceee4/run.json": "66dce2b09e6e898b4e2a83371922c2be82ab0b22ee0256f22ba148a3fe4bf573",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/aa6b5641cc9c4604aaf3b270f547d89c/run.json": "aa80e31842bf39de9ad019fef222b97cc6dfe0e1dc71d8fed22bb061ea57837f",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/b7a6bf3dc8354250bc98e77e9a4d6e67/run.json": "d5e18af57aa2ba5a66503de8ceff7cba4cb0f99d270579ddaa30a4b4b0111a5e",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/collection.json": "0ed571f9ddf900090d80b022f730db79a6c1b53239d834baad1c534e4f28a41b",
+    "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-quality-review.json": "1eed20cf2bdad24c4045f4f036a8697f4e270eb8e686eba345645e829eed5c86"
+  },
+  "on_policy_eligible": false,
+  "limitations": [
+    "One fixed-seed paired attempt per training family; this pilot is not independent capability evaluation.",
+    "Invented observations and quality are explicit reply-bound reviews; tag counts alone are not behavioural evidence.",
+    "Quality candidates are not loadable demonstrations. Replay, freeze and training-load results are separate evidence."
+  ]
+}

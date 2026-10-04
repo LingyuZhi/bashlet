@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "dataset": "data/manifest.json",
+  "on_policy_eligible": false,
+  "counts": {
+    "base_sampled_attempts": 9,
+    "sampled_tasks": 9,
+    "sampled_families": 9,
+    "accepted_trajectories": 1,
+    "accepted_tasks": 1,
+    "accepted_families": 1,
+    "base_only_trajectories": 1,
+    "codex_correction_attempts": 0,
+    "codex_corrected_trajectories": 0,
+    "codex_authored_actions": 0,
+    "replay_attempts": 2,
+    "replay_passed": 1,
+    "rejected": 8
+  },
+  "tokens": {
+    "context": 799,
+    "model_input": 798,
+    "supervised": 114,
+    "masked_generated": 18
+  },
+  "token_distribution": {
+    "model_input": {
+      "min": 798,
+      "median": 798,
+      "max": 798
+    },
+    "supervised": {
+      "min": 114,
+      "median": 114,
+      "max": 114
+    }
+  },
+  "per_type": {
+    "short_program": {
+      "candidates": 3,
+      "accepted": 1,
+      "context": 799,
+      "model_input": 798,
+      "supervised": 114,
+      "masked_generated": 18
+    },
+    "code_edit": {
+      "candidates": 3
+    },
+    "workspace": {
+      "candidates": 3
+    }
+  },
+  "action_types": {
+    "invented": {
+      "actions": 1,
+      "generated_tokens": 18,
+      "supervised_tokens": 0
+    },
+    "write": {
+      "actions": 1,
+      "generated_tokens": 43,
+      "supervised_tokens": 43
+    },
+    "verify": {
+      "actions": 1,
+      "generated_tokens": 11,
+      "supervised_tokens": 11
+    },
+    "inspect": {
+      "actions": 1,
+      "generated_tokens": 9,
+      "supervised_tokens": 9
+    },
+    "submit": {
+      "actions": 1,
+      "generated_tokens": 51,
+      "supervised_tokens": 51
+    }
+  },
+  "masked_reasons": {
+    "Raw reply claims an execution return code/output although no command was emitted or executed; it substitutes an invented environment observation for an action.": {
+      "actions": 1,
+      "tokens": 18
+    }
+  },
+  "examples": [
+    {
+      "task_id": "mbpp/606",
+      "family_id": "mbpp/606",
+      "task_type": "short_program",
+      "context": 799,
+      "model_input": 798,
+      "supervised": 114,
+      "masked_generated": 18,
+      "codex_corrected": false,
+      "actions": 5
+    }
+  ],
+  "rejected": [
+    {
+      "attempt": 1,
+      "task_id": "mbpp/602",
+      "family_id": "mbpp/602",
+      "task_type": "short_program",
+      "stage": "quality",
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement."
+    },
+    {
+      "attempt": 2,
+      "task_id": "mbpp/604",
+      "family_id": "mbpp/604",
+      "task_type": "short_program",
+      "stage": "quality",
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement."
+    },
+    {
+      "attempt": 4,
+      "task_id": "harness/header-key",
+      "family_id": "harness/header-key",
+      "task_type": "code_edit",
+      "stage": "export",
+      "reason": "Recorded trajectory replay rejected: Re-executed observation differs from the sampled prefix"
+    },
+    {
+      "attempt": 5,
+      "task_id": "harness/csv-field",
+      "family_id": "harness/csv-field",
+      "task_type": "code_edit",
+      "stage": "quality",
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement."
+    },
+    {
+      "attempt": 6,
+      "task_id": "harness/log-level",
+      "family_id": "harness/log-level",
+      "task_type": "code_edit",
+      "stage": "quality",
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement."
+    },
+    {
+      "attempt": 7,
+      "task_id": "harness/stock-value",
+      "family_id": "harness/stock-value",
+      "task_type": "workspace",
+      "stage": "quality",
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement."
+    },
+    {
+      "attempt": 8,
+      "task_id": "harness/service-owners",
+      "family_id": "harness/service-owners",
+      "task_type": "workspace",
+      "stage": "quality",
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement."
+    },
+    {
+      "attempt": 9,
+      "task_id": "harness/build-flags",
+      "family_id": "harness/build-flags",
+      "task_type": "workspace",
+      "stage": "quality",
+      "reason": "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement."
+    }
+  ],
+  "rejection_reasons": {
+    "No submission or independent passing grade; retain as a failed paired attempt without correction or replacement.": 7,
+    "Recorded trajectory replay rejected: Re-executed observation differs from the sampled prefix": 1
+  },
+  "coverage_gaps": {
+    "short_program": 2,
+    "code_edit": 3,
+    "workspace": 3
+  },
+  "limitations": [
+    "One fixed-seed attempt per training family; this selected dataset is not a model capability estimate.",
+    "All training rows are static SFT; reconstruction and Codex corrections are replay, never on-policy samples.",
+    "Exact replay excludes nondeterministic observations; missing families limit coverage and pilot interpretation.",
+    "Action categories are exclusive primary roles assigned by the reviewer; code-bearing writes retain full-token supervision."
+  ]
+}

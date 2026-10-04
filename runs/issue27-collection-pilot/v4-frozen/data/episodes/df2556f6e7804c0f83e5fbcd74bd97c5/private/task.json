@@ -1,0 +1,43 @@
+{
+  "task_id": "mbpp/604",
+  "prompt": "Write a function to reverse words seperated by spaces in a given string.\n\nImplement `reverse_words(s)` in `solution.py`.\nRun `python3 feedback_tests.py` to check the public example.\nYour submission is graded on separate inputs.",
+  "initial_files": {
+    "feedback_tests.py": "from solution import reverse_words\n\nassert reverse_words(\"python program\")==(\"program python\")\n"
+  },
+  "grader": {
+    "module_path": "solution.py",
+    "function_name": "reverse_words",
+    "cases": [
+      {
+        "args": [
+          "java language"
+        ],
+        "expected": "language java"
+      },
+      {
+        "args": [
+          "indian man"
+        ],
+        "expected": "man indian"
+      }
+    ]
+  },
+  "environment_id": "linux-bwrap-v1",
+  "reference_implementation": "def reverse_words(s):\n        return ' '.join(reversed(s.split()))",
+  "implementation_paths": [
+    "solution.py"
+  ],
+  "feedback_command": "python3 feedback_tests.py",
+  "origin": {
+    "dataset": "google-research/mbpp",
+    "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+    "source_sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
+    "original_task_id": "604",
+    "family_id": "mbpp/604",
+    "split": "train"
+  },
+  "task_type": "short_program",
+  "variant_id": "base",
+  "feedback_start_id": "c8d97de6c3bc6671e5bb32ee8499bccf87d821cbb76b967fb64040fa10d45537",
+  "environment_variant_id": "70a74cae2c2a90ec3e87bd5c85d5d1a09d856cd521cc7f2a728f620dd0a17b67"
+}

@@ -253,6 +253,13 @@ def main() -> None:
     )
     collection.add_argument("plan", type=Path)
     _execution_options(collection)
+    pilot_report = commands.add_parser(
+        "report-collection-pilot", help="Report reviewed paired v3/v4 evidence"
+    )
+    pilot_report.add_argument("plan", type=Path)
+    pilot_report.add_argument("--collection", action="append", type=Path, required=True)
+    pilot_report.add_argument("--review", action="append", type=Path, required=True)
+    pilot_report.add_argument("--output-dir", type=Path, required=True)
     freeze = commands.add_parser(
         "freeze-demonstrations", help="Replay, load and audit reviewed training data"
     )
@@ -339,6 +346,18 @@ def main() -> None:
     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "report-collection-pilot":
+            from .curation.pilot import report_collection_pilot
+
+            print(
+                report_collection_pilot(
+                    options.plan,
+                    options.collection,
+                    options.review,
+                    options.output_dir,
+                )
+            )
+            return
         if options.command == "evaluate-acceptance":
             from .evaluation.suite import evaluate_acceptance
             from .monitoring import MonitorConfig

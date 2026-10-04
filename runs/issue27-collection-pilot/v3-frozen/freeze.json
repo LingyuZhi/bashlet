@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "status": "frozen",
+  "created_at": "2026-10-04T13:11:45.012898+00:00",
+  "sha256": {
+    "collection.json": "228d52f092e8f8a2545e216dbc6f8d18b8dbc363d8d1a99367371b621d32c499",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/blobs/a4c7082b0aeaeee81f2db7d106c00a81fdde38cddcd4859cdfb05ddd984129dc": "a4c7082b0aeaeee81f2db7d106c00a81fdde38cddcd4859cdfb05ddd984129dc",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/blobs/e2b2681100ac6a42a1c98f65bf7b220ce30ec67eef2218a709d78fbf9aabe5e7": "e2b2681100ac6a42a1c98f65bf7b220ce30ec67eef2218a709d78fbf9aabe5e7",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/private/host-private.txt": "4d52bed6b46e38aca12b0ad3fb4e6fcf53b5f232e61809543093c02ba845e4b8",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/private/source-run.json": "e71179d526d3d1f1113891eabaf36c51822bbd1f9470ae76d1a815122908eaf6",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/private/task.json": "614526516db733d6fd02987171224ff623a1cdaecafe6183dc9214366498419f",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/probe/writable": "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/run.json": "60e73131d93f092113bab79ba00e93e071adf77ee28dedd929ac9219af2c741f",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/workspace/app/headers.py": "a4c7082b0aeaeee81f2db7d106c00a81fdde38cddcd4859cdfb05ddd984129dc",
+    "data/episodes/32b31b71fb784f92a23377f9b68ad3de/workspace/check_header_key.py": "e2b2681100ac6a42a1c98f65bf7b220ce30ec67eef2218a709d78fbf9aabe5e7",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/blobs/57778fbdfb5d1c6c32a86235d5c6e5644be1430af20216261ddffa3425cee6b3": "57778fbdfb5d1c6c32a86235d5c6e5644be1430af20216261ddffa3425cee6b3",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/blobs/cc9e145d7c5f26a22631483d4c6b00af6adcd0a21fdf12118fe6c59acbd8033b": "cc9e145d7c5f26a22631483d4c6b00af6adcd0a21fdf12118fe6c59acbd8033b",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/private/grading-workspace/feedback_tests.py": "57778fbdfb5d1c6c32a86235d5c6e5644be1430af20216261ddffa3425cee6b3",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/private/grading-workspace/solution.py": "cc9e145d7c5f26a22631483d4c6b00af6adcd0a21fdf12118fe6c59acbd8033b",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/private/host-private.txt": "4d52bed6b46e38aca12b0ad3fb4e6fcf53b5f232e61809543093c02ba845e4b8",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/private/sft.json": "1e0ceb87bb0b31fc26b2682372f2664ec6b55277be9f013c73ac1df48f47450e",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/private/source-run.json": "a5ea4464c8b7362fff83a4b9c9084d1903e3d2452faef04b64c7a81a48962d27",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/private/task.json": "2668ec346fd121ae7ed70a072e9fdcd5a08c838d546db2125fe98ccf1fe17f2b",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/probe/writable": "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/run.json": "e4483a6d657a0ec253544db25bc022d4e266f7a4b8200b7c2b9b345ace25cc1a",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/submission/feedback_tests.py": "57778fbdfb5d1c6c32a86235d5c6e5644be1430af20216261ddffa3425cee6b3",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/submission/solution.py": "cc9e145d7c5f26a22631483d4c6b00af6adcd0a21fdf12118fe6c59acbd8033b",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/workspace/feedback_tests.py": "57778fbdfb5d1c6c32a86235d5c6e5644be1430af20216261ddffa3425cee6b3",
+    "data/episodes/c95477515c5e4df5b1d137eef0724984/workspace/solution.py": "cc9e145d7c5f26a22631483d4c6b00af6adcd0a21fdf12118fe6c59acbd8033b",
+    "data/examples.jsonl": "1cd8ce7f49235e695092e99c17052be06fb93f450ac718d055e7f6ccb69e619c",
+    "data/manifest.json": "789901dc0aea46b3f8fe36fe86d6ad1cbbd7e2bbf1216be1b5c969e6465e93f5",
+    "data/review.json": "9f87a83aa8a4ccb84fd2f557c069c2f84623fe14348d0956dd06e8f1165e57c2",
+    "export-review.json": "9f87a83aa8a4ccb84fd2f557c069c2f84623fe14348d0956dd06e8f1165e57c2",
+    "plan.json": "6dfef4fac86d17e080abafaaf7ce631f4f59b1e9cc2cb5db36875fa525e293bb",
+    "quality-review.json": "a3dd88a1069897ce2feb1d39db51843a16d9e98a1e5c72c0743dad8c051043c7",
+    "report.json": "bde6291f8a408f2fb53f8fa286ab15c873c3db283157729d220e88a6fbc05b3d"
+  },
+  "source_runs": [
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/5ce31916eb2745f2bf844e9e7b633a79/run.json",
+      "sha256": "7d578e258e6153eb7497a1fe4ce54311814c9f157233a0624ca2ed8eaac5a32e"
+    },
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/e4f78c7076c7443c95cde2ef762d7764/run.json",
+      "sha256": "7f7b76f859688d07a9b3740c1aa1b1eb0dfc8a8237a7611c19106c508661d4de"
+    },
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/d022aeb61003445f9469501d88aa6183/run.json",
+      "sha256": "a5ea4464c8b7362fff83a4b9c9084d1903e3d2452faef04b64c7a81a48962d27"
+    },
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/09fe738538bc45deb0ca5c4d62bf6620/run.json",
+      "sha256": "e71179d526d3d1f1113891eabaf36c51822bbd1f9470ae76d1a815122908eaf6"
+    },
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/801cfaef16744b06b194d8a12c728221/run.json",
+      "sha256": "10acd6e7f81bc63bb1cb4016bbc618c9ccc2fa6c841ab4e965940d2fcddafa07"
+    },
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/e5b40a3f9fd24cc5a8e4566c9fc5a658/run.json",
+      "sha256": "7e71410dcfcb0d306933eb37d361533a8c18264353a1e89d8957eed11d64ab2a"
+    },
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/5845f1b03e1a42b3a3a2112b1d2f54bf/run.json",
+      "sha256": "2b517c5e4ceaaebec1b487b0853923a146ddccfeb6f78aa3a1717f2ef4755ea6"
+    },
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/579b1b86effd473495f3cb59922e842d/run.json",
+      "sha256": "0474c53c930dc92f1e15cf7d9b1dc3917d7e374616c87ae1733d73dc0cf4b165"
+    },
+    {
+      "path": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v3-collection/episodes/6e11aee83bce463d820347d8ca3b5e9d/run.json",
+      "sha256": "2ed168fb39993bbb8c5fee28dcb094817e835391dfcdf324c426fae7821c6226"
+    }
+  ],
+  "load_verified": true,
+  "on_policy_eligible": false
+}

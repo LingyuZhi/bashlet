@@ -1,0 +1,50 @@
+{
+  "task_id": "harness/csv-field",
+  "prompt": "Repair `export/fields.py`: Return a CSV field: quote fields containing comma, quote, or newline and double embedded quotes; otherwise return the text unchanged.\nThe existing function is `csv_field`. Run `python3 check_csv_field.py` for public feedback, then submit. Keep feedback files unchanged; grading uses separate cases.",
+  "initial_files": {
+    "export/fields.py": "def csv_field(text):\n    return '\"' + text + '\"' if ',' in text else text\n",
+    "check_csv_field.py": "from export.fields import csv_field\nassert csv_field(*['a,b']) == '\"a,b\"'\nprint('feedback passed')\n"
+  },
+  "grader": {
+    "module_path": "export/fields.py",
+    "function_name": "csv_field",
+    "cases": [
+      {
+        "args": [
+          "a\"b"
+        ],
+        "expected": "\"a\"\"b\""
+      },
+      {
+        "args": [
+          "one\ntwo"
+        ],
+        "expected": "\"one\ntwo\""
+      },
+      {
+        "args": [
+          "abc"
+        ],
+        "expected": "abc"
+      }
+    ]
+  },
+  "environment_id": "linux-bwrap-v1",
+  "reference_implementation": "def csv_field(text):\n    if any(c in text for c in ',\"\\n'):\n        return '\"' + text.replace('\"', '\"\"') + '\"'\n    return text\n",
+  "implementation_paths": [
+    "export/fields.py"
+  ],
+  "feedback_command": "python3 check_csv_field.py",
+  "origin": {
+    "dataset": "bashlet/harness-authored",
+    "revision": "harness-authored-v1",
+    "source_sha256": "3469016aa5f1ce861ed18a97fd1768b0985abe190918c76d6faf5cafb979d41f",
+    "original_task_id": "csv-field",
+    "family_id": "harness/csv-field",
+    "split": "train"
+  },
+  "task_type": "code_edit",
+  "variant_id": "base",
+  "feedback_start_id": "2543e21c71d1ef2d1417182c0a5112125d31fb8007fa8edeae3a1aba52770196",
+  "environment_variant_id": "48822ffad32a214221a7e1b5fd53b9509a292ccbe62a50a5cf0dd62d4af43ee7"
+}

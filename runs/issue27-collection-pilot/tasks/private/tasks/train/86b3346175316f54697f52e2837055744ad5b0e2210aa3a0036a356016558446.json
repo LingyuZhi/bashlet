@@ -1,0 +1,37 @@
+{
+  "task_id": "harness/service-owners",
+  "prompt": "Complete the workspace task described in `docs/service-owners.md` using the actual files here. Implement `tools/service_owners.py` and run `python3 verify_service_owners.py` for public feedback. Keep the input and feedback files unchanged. Submit the workspace when ready; grading also checks a separate fixture.",
+  "initial_files": {
+    "config/services.json": "{\n  \"api\": \"blue\",\n  \"ui\": \"red\",\n  \"batch\": \"green\"\n}\n",
+    "config/teams.json": "{\n  \"blue\": \"sam\",\n  \"red\": \"lee\"\n}\n",
+    "docs/service-owners.md": "Read config/services.json and config/teams.json. Return each service mapped to its team's contact; missing teams map to null.\nWrite the JSON result to reports/service-owners.json.\n",
+    "verify_service_owners.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\nresult = json.loads(Path('reports/service-owners.json').read_text())\nassert result['api'] == 'sam'\nprint('feedback passed')\n"
+  },
+  "grader": {
+    "command": "python3 _grading/check.py",
+    "hidden_files": {
+      "config/services.json": "{\n  \"api\": \"blue\",\n  \"ui\": \"red\",\n  \"batch\": \"green\"\n}\n",
+      "config/teams.json": "{\n  \"blue\": \"sam\",\n  \"red\": \"lee\"\n}\n",
+      "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\nassert json.loads(Path('reports/service-owners.json').read_text()) == {'api': 'sam', 'ui': 'lee', 'batch': None}\nPath('config/teams.json').write_text('{\"blue\": \"new\", \"green\": \"pat\"}\\n')\nsubprocess.run([sys.executable, 'tools/service_owners.py'], check=True)\nassert json.loads(Path('reports/service-owners.json').read_text()) == {'api': 'new', 'ui': None, 'batch': 'pat'}\n",
+      "_grading/check.py": "import os, shutil, tempfile\nfrom pathlib import Path\nwith tempfile.TemporaryDirectory() as directory:\n    shutil.copytree('/workspace', directory + '/task')\n    os.chdir(directory + '/task')\n    for path in Path('.').rglob('*'):\n        if path.is_file(): path.chmod(0o600)\n    source = Path('_grading/cases.py').read_text()\n    exec(compile(source, '_grading/cases.py', 'exec'))\n"
+    }
+  },
+  "environment_id": "linux-bwrap-v1",
+  "reference_implementation": "import json\nfrom pathlib import Path\nfrom collections import Counter\nservices = json.loads(Path('config/services.json').read_text())\nteams = json.loads(Path('config/teams.json').read_text())\nresult = {s: teams.get(t) for s, t in services.items()}\nPath('reports').mkdir(exist_ok=True)\nPath('reports/service-owners.json').write_text(json.dumps(result, sort_keys=True) + '\\n')\n",
+  "implementation_paths": [
+    "tools/service_owners.py"
+  ],
+  "feedback_command": "python3 verify_service_owners.py",
+  "origin": {
+    "dataset": "bashlet/harness-authored",
+    "revision": "harness-authored-v1",
+    "source_sha256": "3469016aa5f1ce861ed18a97fd1768b0985abe190918c76d6faf5cafb979d41f",
+    "original_task_id": "service-owners",
+    "family_id": "harness/service-owners",
+    "split": "train"
+  },
+  "task_type": "workspace",
+  "variant_id": "base",
+  "feedback_start_id": "b1cfb6c9ae9fee86e7d8be9dcadbe2cf86f1255f3091d46f78c5d16d18910f00",
+  "environment_variant_id": "ddb0e94d8d923c255607d0341e34ff3216be31e689dedaf7bbfd850ac3cd8b11"
+}

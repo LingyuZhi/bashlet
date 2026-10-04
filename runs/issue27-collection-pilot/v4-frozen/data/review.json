@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "trajectories": [
+    {
+      "task_id": "mbpp/604",
+      "run_dir": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/75368d99d5e54b00b51484749671a7e4",
+      "run_sha256": "cfaa62a44277da9cd3701932730f9f8b9441f30af8a90c185e4888bc474e55d6",
+      "actions": [
+        {
+          "supervise": true,
+          "reason": "Writes a complete implementation of the stated task using the actual available information.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Executes the original feedback command and receives its real result.",
+          "author": "model"
+        },
+        {
+          "supervise": false,
+          "reason": "The echo only restates completion and neither changes nor checks the implementation; exclude this generated span.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Inspects real workspace or implementation state; observations come from the sandbox.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Emits the exact submission marker as the first output line and terminates the episode.",
+          "author": "model"
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "task_id": "mbpp/606",
+      "run_dir": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/efa7784c2c744910806daaf2f739d560",
+      "run_sha256": "1dcbef75110183974b44d2bcfd3fdbd6b43830909c087b06353443ee017e374b",
+      "actions": [
+        {
+          "supervise": true,
+          "reason": "Writes a complete implementation of the stated task using the actual available information.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Executes the original feedback command and receives its real result.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Emits the exact submission marker as the first output line and terminates the episode.",
+          "author": "model"
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "task_id": "harness/header-key",
+      "run_dir": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/ee24117ddd6a4a9d9bfd88518194f7f6",
+      "run_sha256": "13c0829964029b159a4a833be718ce688ade3efb46a7693d87135dd55b58fb54",
+      "actions": [
+        {
+          "supervise": true,
+          "reason": "Reads actual task or feedback material before deciding how to implement the requirement.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Reads actual task or feedback material before deciding how to implement the requirement.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Runs unchanged public feedback, observes a real failure, and subsequently repairs the implementation; useful failure recovery.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Changes the implementation to satisfy the requirement, including cases missed by public feedback.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Executes the original feedback command and receives its real result.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Inspects real workspace or implementation state; observations come from the sandbox.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Emits the exact submission marker as the first output line and terminates the episode.",
+          "author": "model"
+        }
+      ],
+      "corrections": []
+    },
+    {
+      "task_id": "harness/csv-field",
+      "run_dir": "/data/home/zdhs0148/opd/bashlet/runs/issue27-collection-pilot/v4-collection/episodes/33a396bb3e1b464d99b5b1ec4280bd84",
+      "run_sha256": "4f24783f0ca82d6eda879dc06cb19a29e8f74d9aff63cc19be6981ce7797c865",
+      "actions": [
+        {
+          "supervise": true,
+          "reason": "Reads actual task or feedback material before deciding how to implement the requirement.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Reads actual task or feedback material before deciding how to implement the requirement.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Executes the original feedback command and receives its real result.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Checks additional relevant cases against the current implementation; expected and actual values remain distinct.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Changes the implementation to satisfy the requirement, including cases missed by public feedback.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Executes the original feedback command and receives its real result.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Checks additional relevant cases against the current implementation; expected and actual values remain distinct.",
+          "author": "model"
+        },
+        {
+          "supervise": true,
+          "reason": "Emits the exact submission marker as the first output line and terminates the episode.",
+          "author": "model"
+        }
+      ],
+      "corrections": []
+    }
+  ]
+}
