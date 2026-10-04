@@ -1,0 +1,15 @@
+# Same inference conditions as serve.yaml; only the loaded snapshot changes.
+model: /data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/local-step8/merged-model
+tokenizer: /data/home/zdhs0148/opd/bashlet/runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+tokenizer-revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+served-model-name: bounded-sft-step8
+host: 127.0.0.1
+port: 8000
+dtype: bfloat16
+max-model-len: 8192
+gpu-memory-utilization: 0.6
+max-num-seqs: 1
+enforce-eager: true
+generation-config: vllm
+language-model-only: true

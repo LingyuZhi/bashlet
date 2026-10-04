@@ -1,0 +1,55 @@
+{
+  "recorded_at": "2026-10-04T06:15:37.642403+00:00",
+  "before_development_screening": true,
+  "results": [
+    {
+      "task_id": "mbpp/623",
+      "task_type": "short_program",
+      "status": "completed",
+      "passed": true,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 76,
+        "invalid_actions": 0,
+        "elapsed_seconds": 14.552606707438827
+      },
+      "run": "runs/issue26-bounded-sft/probes-step8/short_program/536bcffc9497489c836c91f811d876aa/run.json",
+      "run_sha256": "3677790f01c02df3b3c4086e79921f9d27c629305c7499548e30c708808a0f7c",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_19taybw3zq00/sampler_weights/sampler-0008:0df7c78acf25c64a9c8ce8587f0a93d2a3706837dc8052291f3dac2c2424a7e6"
+    },
+    {
+      "task_id": "harness/last-record",
+      "task_type": "code_edit",
+      "status": "budget_exhausted",
+      "passed": false,
+      "usage": {
+        "steps": 6,
+        "generated_tokens": 652,
+        "invalid_actions": 1,
+        "elapsed_seconds": 22.679549541324377
+      },
+      "run": "runs/issue26-bounded-sft/probes-step8/code_edit/ab7c706a49e34a31910611889b9c44cf/run.json",
+      "run_sha256": "8bac63e33c50298d6edefa6fa2200b3904dec337d0a06cae1914eb2071e85209",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_19taybw3zq00/sampler_weights/sampler-0008:0df7c78acf25c64a9c8ce8587f0a93d2a3706837dc8052291f3dac2c2424a7e6"
+    },
+    {
+      "task_id": "harness/stock-value",
+      "task_type": "workspace",
+      "status": "budget_exhausted",
+      "passed": false,
+      "usage": {
+        "steps": 6,
+        "generated_tokens": 434,
+        "invalid_actions": 0,
+        "elapsed_seconds": 14.948858646675944
+      },
+      "run": "runs/issue26-bounded-sft/probes-step8/workspace/2396d63aa13b407cbea2dea71225099c/run.json",
+      "run_sha256": "30a8b737fd02e6b3690019b60e031cc6aa8ee1c240ed9884b6d14bcd50a8f9ed",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_19taybw3zq00/sampler_weights/sampler-0008:0df7c78acf25c64a9c8ce8587f0a93d2a3706837dc8052291f3dac2c2424a7e6"
+    }
+  ],
+  "scope": "training-split diagnostics only",
+  "training_complete": true,
+  "additional_updates_allowed": false,
+  "reason": "Short-program probe preserved; code-edit and workspace can execute real actions but do not submit successfully within six steps. No task gain can be inferred from formatting or reading. Complete the frozen screening; never append training."
+}

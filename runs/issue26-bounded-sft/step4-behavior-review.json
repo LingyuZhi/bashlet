@@ -1,0 +1,54 @@
+{
+  "recorded_at": "2026-10-04T05:40:42.224997+00:00",
+  "before_development_screening": true,
+  "results": [
+    {
+      "task_id": "mbpp/623",
+      "task_type": "short_program",
+      "status": "completed",
+      "passed": true,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 76,
+        "invalid_actions": 0,
+        "elapsed_seconds": 14.24426974914968
+      },
+      "run": "runs/issue26-bounded-sft/probes-step4/short_program/bdf16aad1e824568aed9da67d6339e32/run.json",
+      "run_sha256": "397487b128e0b687627b6623ddef5c3c4664d652e7c2f1a13ace3b9880384331",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_nj3845mq49yo/sampler_weights/sampler-0004:2016b405dc16ed7870b2a852f3b28d49a8f97a0b631423d12a3516e2891fd1de"
+    },
+    {
+      "task_id": "harness/last-record",
+      "task_type": "code_edit",
+      "status": "format_error",
+      "passed": false,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 36,
+        "invalid_actions": 3,
+        "elapsed_seconds": 1.4072047304362059
+      },
+      "run": "runs/issue26-bounded-sft/probes-step4/code_edit/1ea7e0a322924952a3815dbf18d7e2b2/run.json",
+      "run_sha256": "6f6ce1b806840b4d8bbfc5fa8cb0ef3b621b34a5bfd96dc173e8194226c7c79f",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_nj3845mq49yo/sampler_weights/sampler-0004:2016b405dc16ed7870b2a852f3b28d49a8f97a0b631423d12a3516e2891fd1de"
+    },
+    {
+      "task_id": "harness/stock-value",
+      "task_type": "workspace",
+      "status": "budget_exhausted",
+      "passed": false,
+      "usage": {
+        "steps": 6,
+        "generated_tokens": 417,
+        "invalid_actions": 0,
+        "elapsed_seconds": 14.365188173949718
+      },
+      "run": "runs/issue26-bounded-sft/probes-step4/workspace/498c22c2490743a58de18aba82176f84/run.json",
+      "run_sha256": "98dda7f015f31ee654d25c2665b09b25be69d8bbc4db2e8e672ae445e23ece08",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_nj3845mq49yo/sampler_weights/sampler-0004:2016b405dc16ed7870b2a852f3b28d49a8f97a0b631423d12a3516e2891fd1de"
+    }
+  ],
+  "scope": "training-split diagnostics only",
+  "stop_training": false,
+  "reason": "Short-program probe preserved; code-edit still invalid; workspace now executes valid actions but does not submit within the unchanged budget. No clear new collapse, and protocol gain is not task benefit. Run the frozen screening before any further update."
+}

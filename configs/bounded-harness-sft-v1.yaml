@@ -1,0 +1,33 @@
+# Eight frozen trajectories: 7838 input tokens, 1332 supervised tokens, 6/1/1 types.
+# One seeded pass, batch=1, eight updates. Inspect after steps 1, 4 and 8.
+# Use --stop-after 1, then --resume --stop-after 4, then --resume.
+# LR=1e-5 limits each update on this small, uneven dataset. Keep the output head
+# frozen to limit broad vocabulary changes. This is a pilot, not a causal ablation.
+dataset: runs/issue24-curated-harness/frozen-v1/data/manifest.json
+base_model: Qwen/Qwen3.5-4B
+model_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+rank: 16
+seed: 4
+train_mlp: true
+train_attn: true
+train_unembed: false
+batch_size: 1
+steps: 8
+max_epochs: 1
+checkpoint_every: 4
+learning_rate: 0.00001
+ledger_path: runs/spend.sqlite3
+spend_config: configs/spend.yaml
+# This existing common allocation covers export/preflight, training and any
+# remote checks. Global project, funded-balance and unresolved-cost caps apply.
+group: local-snapshot-inference
+timeout_seconds: 300
+api_key_env: pytrio_api_key
+dotenv_path: .env
+monitor:
+  project: bashlet
+  entity: lingyuzhi-chinese-academy-of-sciences
+  group: issue26-bounded-harness-sft-v1
+  mode: online
+  log_every: 1
+  timeout_seconds: 20

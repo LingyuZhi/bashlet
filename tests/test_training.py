@@ -182,6 +182,32 @@ def training_config(tmp_path: Path, manifest: Path) -> Path:
     return config
 
 
+def test_single_pass_limit_refuses_extra_updates_before_training(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = training_input(tmp_path)
+    config = training_config(tmp_path, manifest)
+    settings = yaml.safe_load(config.read_text())
+    settings["max_epochs"] = 1
+    config.write_text(yaml.safe_dump(settings))
+    external_sdks(tmp_path, monkeypatch)
+    with (tmp_path / "sitecustomize.py").open("a") as stream:
+        stream.write("import training_sdk\ntraining_sdk.install()\n")
+    monkeypatch.setenv("PYTRIO_API_KEY", "test-key")
+    monkeypatch.setenv("FAKE_TRAINING_ROOT", str(tmp_path))
+    process = cli(
+        "train-sft",
+        str(config),
+        "--output-dir",
+        str(tmp_path / "training"),
+        "--stop-after",
+        "1",
+        cwd=tmp_path,
+    )
+    assert process.returncode == 2 and "exceeds max_epochs" in process.stderr
+    assert not (tmp_path / "training-requests.jsonl").exists()
+
+
 @pytest.mark.parametrize("monitor_outage", ["none", "network", "revoked"])
 def test_training_waits_for_updates_and_resumes_optimizer_without_relogging_steps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, monitor_outage: str
@@ -201,6 +227,12 @@ def test_training_waits_for_updates_and_resumes_optimizer_without_relogging_step
     assert first.returncode == 0, first.stdout + first.stderr
     state: dict[str, Any] = json.loads((output / "training.json").read_text())
     assert state["optimizer_step"] == 1
+    supervised = json.loads((tmp_path / "examples.jsonl").read_text())["metadata"][
+        "supervised_tokens"
+    ]
+    assert state["data_progress"]["samples_processed"] == 1
+    assert state["data_progress"]["supervised_tokens_processed"] == supervised
+    assert state["data_progress"]["epochs_processed"] == 1.0
     assert state["checkpoints"][0]["sampler"]["kind"] == "sampler_weights"
     assert state["checkpoints"][0]["training_state"]["kind"] == "training_state"
     if monitor_outage == "network":
@@ -218,6 +250,10 @@ def test_training_waits_for_updates_and_resumes_optimizer_without_relogging_step
     assert second.returncode == 0, second.stdout + second.stderr
     final = json.loads((output / "training.json").read_text())
     assert final["optimizer_step"] == 2
+    assert final["data_progress"]["samples_processed"] == 2
+    assert final["data_progress"]["supervised_tokens_processed"] == 2 * supervised
+    assert final["data_progress"]["epochs_processed"] == 2.0
+    assert final["checkpoints"][-1]["data_progress"] == final["data_progress"]
     assert final["run_id"] == state["run_id"]
     assert final["status"] == "complete"
     remote = json.loads((tmp_path / "training-service.json").read_text())

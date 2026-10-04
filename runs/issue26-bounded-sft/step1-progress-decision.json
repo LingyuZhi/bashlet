@@ -1,0 +1,30 @@
+{
+  "recorded_at": "2026-10-04T05:24:52.591733+00:00",
+  "completed_optimizer_step": 1,
+  "harness": {
+    "base": 4,
+    "candidate": 7,
+    "denominator": 30
+  },
+  "coding": {
+    "base": 27,
+    "candidate": 26,
+    "denominator": 37
+  },
+  "workspace": {
+    "base": 0,
+    "candidate": 0,
+    "denominator": 10
+  },
+  "promising": false,
+  "qualified": false,
+  "confirmation_run": false,
+  "next_planned_step": 4,
+  "continue_training": true,
+  "reason": "A one-task coding decrease in one seed does not establish clear regression under the frozen rules. No new qualitative collapse was observed. Continue only the preplanned half-pass checkpoint, without extra epochs, seed searches or automatic promotion.",
+  "unmet_requirements": [
+    "coding preservation not established",
+    "workspace task benefit missing",
+    "confirmation seeds absent"
+  ]
+}

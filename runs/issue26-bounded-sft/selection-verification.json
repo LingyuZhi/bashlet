@@ -1,0 +1,14 @@
+{
+  "no_qualified_snapshot": true,
+  "candidate_steps": [
+    1,
+    4,
+    8
+  ],
+  "all_candidates_insufficient": true,
+  "all_screenings_not_promising": true,
+  "initializer_fields_null": true,
+  "OPSD_executed": false,
+  "extra_epochs_or_parameter_search": false,
+  "reason_for_no_confirmation": "No candidate gained workspace tasks under the frozen screening rule; one-seed data do not establish coding preservation or regression."
+}

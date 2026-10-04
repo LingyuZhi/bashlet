@@ -1,0 +1,110 @@
+{
+  "recorded_at": "2026-10-04T05:11:23.767428+00:00",
+  "before_development_screening": true,
+  "scope": "training-split behavioral probes only; not acceptance numerator",
+  "results": [
+    {
+      "group": "probes-base",
+      "task_id": "mbpp/623",
+      "task_type": "short_program",
+      "status": "completed",
+      "passed": true,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 76,
+        "invalid_actions": 0,
+        "elapsed_seconds": 21.36396961286664
+      },
+      "run": "runs/issue26-bounded-sft/probes-base/short_program/eb014f5e6a454479a368814ea80f7047/run.json",
+      "run_sha256": "a3d679c00c86cccecb88a91daade2c067d4e00e32f5672e2da28ffd7dd147f00",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    },
+    {
+      "group": "probes-base",
+      "task_id": "harness/last-record",
+      "task_type": "code_edit",
+      "status": "format_error",
+      "passed": false,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 45,
+        "invalid_actions": 3,
+        "elapsed_seconds": 9.164290241897106
+      },
+      "run": "runs/issue26-bounded-sft/probes-base/code_edit/40bfadcc446a4d78b1cb86dfa29409de/run.json",
+      "run_sha256": "0bc0dae8fdc5961031864932b9944336aaa6d1b93980930c733532e99c8aeacc",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    },
+    {
+      "group": "probes-base",
+      "task_id": "harness/stock-value",
+      "task_type": "workspace",
+      "status": "format_error",
+      "passed": false,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 175,
+        "invalid_actions": 3,
+        "elapsed_seconds": 8.812788672745228
+      },
+      "run": "runs/issue26-bounded-sft/probes-base/workspace/fbd107bbb3e74e10a4d0bca8d6487167/run.json",
+      "run_sha256": "d1c9ff5fa3681c5beed7d9aa181ef581246b96da9c1b6a3f0dbee4704f2f7268",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    },
+    {
+      "group": "probes-step1",
+      "task_id": "mbpp/623",
+      "task_type": "short_program",
+      "status": "completed",
+      "passed": true,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 76,
+        "invalid_actions": 0,
+        "elapsed_seconds": 8.4958390686661
+      },
+      "run": "runs/issue26-bounded-sft/probes-step1/short_program/ed09fcd8fa3f4cd5b7fdd391de02c904/run.json",
+      "run_sha256": "c8318298b2f4dad591049974b4e33e2358cc1810456e4091569deba0e10a0b48",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_10r9qn2fe1ai/sampler_weights/sampler-0001:3049bd28a22feda47539a1f1fe070d10e3272e8417124d9ae1edfaf235d756e4"
+    },
+    {
+      "group": "probes-step1",
+      "task_id": "harness/last-record",
+      "task_type": "code_edit",
+      "status": "format_error",
+      "passed": false,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 45,
+        "invalid_actions": 3,
+        "elapsed_seconds": 17.5943100489676
+      },
+      "run": "runs/issue26-bounded-sft/probes-step1/code_edit/1a73ac9d3c154ce2bf31ca7ee1a716f0/run.json",
+      "run_sha256": "fa854bc97a112195b8cb5f83b06621bc0f9a40c68d532f3b01540c83a9291d64",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_10r9qn2fe1ai/sampler_weights/sampler-0001:3049bd28a22feda47539a1f1fe070d10e3272e8417124d9ae1edfaf235d756e4"
+    },
+    {
+      "group": "probes-step1",
+      "task_id": "harness/stock-value",
+      "task_type": "workspace",
+      "status": "format_error",
+      "passed": false,
+      "usage": {
+        "steps": 3,
+        "generated_tokens": 169,
+        "invalid_actions": 3,
+        "elapsed_seconds": 9.562516819685698
+      },
+      "run": "runs/issue26-bounded-sft/probes-step1/workspace/9513fde5fe5a47bea2b169d1d3a17c80/run.json",
+      "run_sha256": "693480542c7f73153db0b7053f603a5823e3e2f1b7e7638f8f6e9a476b51ad1d",
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_10r9qn2fe1ai/sampler_weights/sampler-0001:3049bd28a22feda47539a1f1fe070d10e3272e8417124d9ae1edfaf235d756e4"
+    }
+  ],
+  "observations": {
+    "short_program": "Both models write nth_nums correctly, execute the real feedback tests and submit.",
+    "code_edit": "Both emit synthetic returncode/output instead of a bash action and terminate after three invalid replies.",
+    "workspace": "Both fail protocol before reading the real inventory; step1 adds thinking-tagged prose but no executable action. This is not evidence of state use."
+  },
+  "stop_training": false,
+  "reason": "No clear new collapse on these three probes; retain failure limitations and run frozen screening before further updates."
+}

@@ -1,0 +1,31 @@
+{
+  "full_suite": {
+    "command": "uv run --locked pytest -q --junitxml=runs/issue26-bounded-sft/tests.xml",
+    "tests": 383,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 1693.942,
+    "junit_sha256": "a029cee02aa7c09b47d42803d8e224e91f15ded05c3ee8ce53a37bfdfadb0edf"
+  },
+  "training_file": {
+    "tests": 12,
+    "passed": 12,
+    "seconds": 73.44
+  },
+  "tdd": {
+    "single_pass_cap": "red then green through train-sft CLI",
+    "cumulative_resume_progress": "red then green through train-sft CLI"
+  },
+  "mypy": {
+    "source_files": 52,
+    "result": "passed"
+  },
+  "ruff_check": "passed",
+  "ruff_format": {
+    "files": 52,
+    "result": "passed"
+  },
+  "implementation_patch_sha256": "c1eaa0e9eb0a02099eb4006cae78067d09b38aa89891dac7336356b824b47daa",
+  "test_scope": "SDK doubles and real sandbox integration; pilot task performance is separate experimental evidence",
+  "implementation_patch_format": "unified=0; apply with git apply --unidiff-zero"
+}

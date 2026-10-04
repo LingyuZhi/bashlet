@@ -52,6 +52,7 @@ class SFTConfig:
     train_unembed: bool = True
     batch_size: int = 8
     steps: int = 24
+    max_epochs: int | None = None
     checkpoint_every: int = 12
     learning_rate: float = 0.0001
     ledger_path: str = "runs/spend.sqlite3"
@@ -79,6 +80,10 @@ class SFTConfig:
                 raise ValueError(f"{name} must be a positive integer")
         if not math.isfinite(config.learning_rate) or config.learning_rate <= 0:
             raise ValueError("learning_rate must be finite and positive")
+        if config.max_epochs is not None and (
+            type(config.max_epochs) is not int or config.max_epochs < 1
+        ):
+            raise ValueError("max_epochs must be a positive integer")
         if type(config.seed) is not int or not 4 <= config.rank <= 64:
             raise ValueError("LoRA requires integer seed and rank between 4 and 64")
         if any(
@@ -347,6 +352,24 @@ def training_cost(ledger: SpendLedger, run_id: str) -> dict[str, Any]:
     return summarize_cost(snapshot, entries)
 
 
+def _data_progress(
+    datums: list[trio.Datum], updates: list[dict[str, Any]]
+) -> dict[str, int | float]:
+    samples = sum(update["samples"] for update in updates)
+    return {
+        "dataset_samples": len(datums),
+        "dataset_supervised_tokens": int(
+            sum(sum(d.loss_fn_inputs["weights"].tolist()) for d in datums)
+        ),
+        "samples_processed": samples,
+        "epochs_processed": samples / len(datums),
+        "input_tokens_processed": sum(update["input_tokens"] for update in updates),
+        "supervised_tokens_processed": sum(
+            update["supervised_tokens"] for update in updates
+        ),
+    }
+
+
 def _train_sft(
     config_path: Path,
     output_dir: Path,
@@ -358,6 +381,11 @@ def _train_sft(
         raise ValueError("stop_after must be a positive optimizer step")
     config = SFTConfig.read(config_path)
     manifest, datums = load_demonstrations(Path(config.dataset))
+    batches_per_epoch = math.ceil(len(datums) / config.batch_size)
+    if config.max_epochs is not None and (
+        config.steps > config.max_epochs * batches_per_epoch
+    ):
+        raise ValueError("Planned SFT training exceeds max_epochs")
     details = manifest["encoding_details"]
     if details.get("revision") != config.model_revision:
         raise ValueError("Training model and demonstration tokenizer identity differ")
@@ -380,6 +408,8 @@ def _train_sft(
     settings = asdict(config)
     settings.pop("api_key_env")
     settings.pop("dotenv_path")
+    if config.max_epochs is None:
+        settings.pop("max_epochs")
     # Tokenizer identity comes from executed input evidence, never re-encoding.
     metadata = {
         "base_model": config.base_model,
@@ -405,6 +435,8 @@ def _train_sft(
         },
         "loss_aggregation": "sum masked cross-entropy / supervised token count",
     }
+    if config.max_epochs is not None:
+        metadata["training"]["max_epochs"] = config.max_epochs
     if resume:
         record = json.loads(path.read_text())
         if record["config"] != settings or record["metadata"] != metadata:
@@ -452,6 +484,7 @@ def _train_sft(
         metadata=metadata | {"code_revision": record["code_revision"]},
         require_online=True,
     )
+    record["data_progress"] = _data_progress(datums, record["updates"])
     write_document(path, record)
     try:
         backend = PyTRIOTraining(config, ledger, record["run_id"], restore)
@@ -466,7 +499,6 @@ def _train_sft(
                 }
             )
         record["status"] = "training"
-        batches_per_epoch = math.ceil(len(datums) / config.batch_size)
         for step in range(record["optimizer_step"] + 1, final_step + 1):
             epoch, batch_index = divmod(step - 1, batches_per_epoch)
             indices = list(range(len(datums)))
@@ -483,6 +515,7 @@ def _train_sft(
             update = backend.update(batch, step)
             record["updates"].append(update)
             record["optimizer_step"], record["pending_update"] = step, None
+            record["data_progress"] = _data_progress(datums, record["updates"])
             record["cost"] = training_cost(ledger, record["run_id"])
             write_document(path, record)
             if step % monitor.config.log_every == 0 or step == final_step:
@@ -499,9 +532,13 @@ def _train_sft(
                     )
                 }
                 metrics.update(spend_metrics(record["cost"]))
+                metrics.update(
+                    {f"train/{k}": v for k, v in record["data_progress"].items()}
+                )
                 monitor.log(f"update-{step}", metrics)
             if step % config.checkpoint_every == 0 or step == final_step:
                 checkpoint = backend.save(step)
+                checkpoint["data_progress"] = dict(record["data_progress"])
                 record["checkpoints"].append(checkpoint)
                 write_document(path, record)
                 monitor.log(

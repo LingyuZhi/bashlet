@@ -1,0 +1,1089 @@
+{
+  "schema_version": 1,
+  "issue": 26,
+  "status": "completed-pilot; insufficient-qualification-evidence",
+  "conclusion": "insufficient_evidence",
+  "qualified_snapshot": null,
+  "student_snapshot": null,
+  "frozen_teacher_snapshot": null,
+  "OPSD_executed": false,
+  "preflight": {
+    "path": "runs/issue26-bounded-sft/preflight.json",
+    "sha256": "a7c9dddfd2a6e5b7c7879d14da4bbded55f6338c6dd7c0b02dbbfb2d18ea48cb"
+  },
+  "config": {
+    "path": "configs/bounded-harness-sft-v1.yaml",
+    "sha256": "4d5a6f33d23dfa09edef705ff632b5decb97976576470369de6b2bed5191ca00"
+  },
+  "dataset_manifest": {
+    "path": "runs/issue24-curated-harness/frozen-v1/data/manifest.json",
+    "sha256": "80b36dee3f3c60663eb20972c16edceb5e8af2cb08b0ad9d90d19797bac211ab"
+  },
+  "dataset_sha256": "1fcbf1d54ec2dd5695585b8ef17b9c2c0338a711ca38b20ecfe8b68258faf4ef",
+  "frozen_acceptance_sha256": "4265077a30b820c4deb97bfaf1d3c1022fdeb9437d96befa732945b7c29367ec",
+  "training": {
+    "path": "runs/issue26-bounded-sft/training/training.json",
+    "sha256": "4a8b3a97fefee9e674d135f5100a312ef943404f62358dbe4f731e13edbeed9b"
+  },
+  "training_config": {
+    "rank": 16,
+    "seed": 4,
+    "train_mlp": true,
+    "train_attn": true,
+    "train_unembed": false,
+    "steps": 8,
+    "batch_size": 1,
+    "learning_rate": 1e-05,
+    "checkpoint_every": 4,
+    "max_epochs": 1
+  },
+  "training_volume": {
+    "dataset_samples": 8,
+    "dataset_supervised_tokens": 1332,
+    "samples_processed": 8,
+    "epochs_processed": 1.0,
+    "input_tokens_processed": 7838,
+    "supervised_tokens_processed": 1332
+  },
+  "checkpoints": [
+    {
+      "optimizer_step": 1,
+      "sampler": {
+        "kind": "sampler_weights",
+        "path": "trio://run_10r9qn2fe1ai/sampler_weights/sampler-0001"
+      },
+      "training_state": {
+        "kind": "training_state",
+        "path": "trio://run_10r9qn2fe1ai/weights/state-0001"
+      },
+      "training_run_cuid": "run_10r9qn2fe1ai",
+      "data_progress": {
+        "dataset_samples": 8,
+        "dataset_supervised_tokens": 1332,
+        "samples_processed": 1,
+        "epochs_processed": 0.125,
+        "input_tokens_processed": 630,
+        "supervised_tokens_processed": 76
+      }
+    },
+    {
+      "optimizer_step": 4,
+      "sampler": {
+        "kind": "sampler_weights",
+        "path": "trio://run_nj3845mq49yo/sampler_weights/sampler-0004"
+      },
+      "training_state": {
+        "kind": "training_state",
+        "path": "trio://run_nj3845mq49yo/weights/state-0004"
+      },
+      "training_run_cuid": "run_nj3845mq49yo",
+      "data_progress": {
+        "dataset_samples": 8,
+        "dataset_supervised_tokens": 1332,
+        "samples_processed": 4,
+        "epochs_processed": 0.5,
+        "input_tokens_processed": 4029,
+        "supervised_tokens_processed": 818
+      }
+    },
+    {
+      "optimizer_step": 8,
+      "sampler": {
+        "kind": "sampler_weights",
+        "path": "trio://run_19taybw3zq00/sampler_weights/sampler-0008"
+      },
+      "training_state": {
+        "kind": "training_state",
+        "path": "trio://run_19taybw3zq00/weights/state-0008"
+      },
+      "training_run_cuid": "run_19taybw3zq00",
+      "data_progress": {
+        "dataset_samples": 8,
+        "dataset_supervised_tokens": 1332,
+        "samples_processed": 8,
+        "epochs_processed": 1.0,
+        "input_tokens_processed": 7838,
+        "supervised_tokens_processed": 1332
+      }
+    }
+  ],
+  "loss_updates": [
+    {
+      "optimizer_step": 1,
+      "loss": 0.13509878359342875,
+      "samples": 1,
+      "supervised_tokens": 76,
+      "input_tokens": 630,
+      "learning_rate": 1e-05,
+      "seconds": 7.148679848760366,
+      "ledger_request": "2b289e1f96e44ece839a1d7afa77d6c0",
+      "remote_optimizer_metrics": {}
+    },
+    {
+      "optimizer_step": 2,
+      "loss": 0.53317237121771,
+      "samples": 1,
+      "supervised_tokens": 323,
+      "input_tokens": 1231,
+      "learning_rate": 1e-05,
+      "seconds": 8.666013484820724,
+      "ledger_request": "727f76c4f0654f5ea6e13ed3314615ba",
+      "remote_optimizer_metrics": {}
+    },
+    {
+      "optimizer_step": 3,
+      "loss": 0.2563490256285056,
+      "samples": 1,
+      "supervised_tokens": 156,
+      "input_tokens": 906,
+      "learning_rate": 1e-05,
+      "seconds": 2.80428552813828,
+      "ledger_request": "5680ff5d250d476a86d03ac8762b6856",
+      "remote_optimizer_metrics": {}
+    },
+    {
+      "optimizer_step": 4,
+      "loss": 0.16575210629307272,
+      "samples": 1,
+      "supervised_tokens": 263,
+      "input_tokens": 1262,
+      "learning_rate": 1e-05,
+      "seconds": 3.3344343174248934,
+      "ledger_request": "9b77ad1959604c0e889ff9cd84721da6",
+      "remote_optimizer_metrics": {}
+    },
+    {
+      "optimizer_step": 5,
+      "loss": 0.6150105470305036,
+      "samples": 1,
+      "supervised_tokens": 157,
+      "input_tokens": 1231,
+      "learning_rate": 1e-05,
+      "seconds": 9.674619132652879,
+      "ledger_request": "6b9bc8eb24f8475fa19a0a54a3c27852",
+      "remote_optimizer_metrics": {}
+    },
+    {
+      "optimizer_step": 6,
+      "loss": 0.21906009855724518,
+      "samples": 1,
+      "supervised_tokens": 105,
+      "input_tokens": 798,
+      "learning_rate": 1e-05,
+      "seconds": 3.3087552711367607,
+      "ledger_request": "29d17b03884a467ab5fc21d48f653c74",
+      "remote_optimizer_metrics": {}
+    },
+    {
+      "optimizer_step": 7,
+      "loss": 0.3494138962183243,
+      "samples": 1,
+      "supervised_tokens": 156,
+      "input_tokens": 996,
+      "learning_rate": 1e-05,
+      "seconds": 3.2843062467873096,
+      "ledger_request": "f2eca3678fb6453dab1a85b9747d0502",
+      "remote_optimizer_metrics": {}
+    },
+    {
+      "optimizer_step": 8,
+      "loss": 0.10236853361129761,
+      "samples": 1,
+      "supervised_tokens": 96,
+      "input_tokens": 784,
+      "learning_rate": 1e-05,
+      "seconds": 3.3677686788141727,
+      "ledger_request": "7092db1553464e609fb10ea46afa3cd8",
+      "remote_optimizer_metrics": {}
+    }
+  ],
+  "results": {
+    "base": {
+      "suite": {
+        "path": "runs/issue25-acceptance/base-v1/acceptance.json",
+        "sha256": "108f341b6dfff119aba21f00203376b0eafcde3bac686b9bc575962296e70761"
+      },
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "tracks": {
+        "harness": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/base-v1/harness/35a7bb3d998142f3aff44b05c735e366/evaluation.json",
+          "sha256": "7bf166753504ba7727812c9bfb3c3236e23ced2f1ed0fdaea8e65d849b9da1da",
+          "summary": {
+            "planned_tasks": 30,
+            "passed_tasks": 4,
+            "final_pass_rate": 0.13333333333333333,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 7,
+            "first_implementation_pass_rate": 0.23333333333333334,
+            "outcomes": {
+              "budget_exhausted": 6,
+              "protocol_error": 20,
+              "passed": 4
+            },
+            "by_task_type": {
+              "short_program": {
+                "planned_tasks": 10,
+                "passed_tasks": 4,
+                "final_pass_rate": 0.4,
+                "outcomes": {
+                  "budget_exhausted": 1,
+                  "protocol_error": 5,
+                  "passed": 4
+                },
+                "protocol_errors": 19,
+                "command_problems": {
+                  "command_failed": 2
+                },
+                "submitted_tasks": 4,
+                "terminations": {
+                  "budget_exhausted": 1,
+                  "format_error": 5,
+                  "submitted": 4
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/069d2d0348fc4bdd942579a517f75bf5",
+                  "protocol_error": "episodes/1894e1649a9f4b6b9f1c82297008cb3b",
+                  "passed": "episodes/0076cc2439714517915b930ce46cea23"
+                }
+              },
+              "code_edit": {
+                "planned_tasks": 10,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "protocol_error": 6,
+                  "budget_exhausted": 4
+                },
+                "protocol_errors": 24,
+                "command_problems": {
+                  "command_failed": 2
+                },
+                "submitted_tasks": 0,
+                "terminations": {
+                  "format_error": 6,
+                  "budget_exhausted": 4
+                },
+                "typical_trajectories": {
+                  "protocol_error": "episodes/a2436c763bec4984b659fca1a7ef2732",
+                  "budget_exhausted": "episodes/12e83576cad644f18f1b8bfbe2b818ae"
+                }
+              },
+              "workspace": {
+                "planned_tasks": 10,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "protocol_error": 9,
+                  "budget_exhausted": 1
+                },
+                "protocol_errors": 27,
+                "command_problems": {},
+                "submitted_tasks": 0,
+                "terminations": {
+                  "format_error": 9,
+                  "budget_exhausted": 1
+                },
+                "typical_trajectories": {
+                  "protocol_error": "episodes/3b541120693f43298f569d0f8edf2ebd",
+                  "budget_exhausted": "episodes/a73c4e68b9de4117b06ba0060fa636c1"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [
+                "harness/query-encoding",
+                "harness/currency-rounding",
+                "harness/header-value",
+                "harness/network-port"
+              ],
+              "denominator": 4,
+              "recovered_task_ids": [],
+              "rate": 0.0
+            },
+            "typical_trajectories": {
+              "budget_exhausted": "episodes/069d2d0348fc4bdd942579a517f75bf5",
+              "protocol_error": "episodes/1894e1649a9f4b6b9f1c82297008cb3b",
+              "passed": "episodes/0076cc2439714517915b930ce46cea23"
+            }
+          }
+        },
+        "coding": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/base-v1/coding/3525e5f730bb4946bd6cafd44420dbc0/evaluation.json",
+          "sha256": "ef605f02d7c9abc8cee10212511b633e1732aba862e7f6ccadf366a944d423c7",
+          "summary": {
+            "planned_tasks": 37,
+            "passed_tasks": 27,
+            "final_pass_rate": 0.7297297297297297,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 0,
+            "first_implementation_pass_rate": 0.0,
+            "outcomes": {
+              "passed": 27,
+              "model_failure": 10
+            },
+            "by_task_type": {
+              "short_program": {
+                "planned_tasks": 37,
+                "passed_tasks": 27,
+                "final_pass_rate": 0.7297297297297297,
+                "outcomes": {
+                  "passed": 27,
+                  "model_failure": 10
+                },
+                "protocol_errors": 1,
+                "command_problems": {},
+                "submitted_tasks": 36,
+                "terminations": {
+                  "submitted": 36,
+                  "model_failure": 1
+                },
+                "typical_trajectories": {
+                  "passed": "episodes/b5f1f2c652f1440bb5f07516f3050b7d",
+                  "model_failure": "episodes/e9aea679676e45d29209b378d2d57807"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [],
+              "denominator": 0,
+              "recovered_task_ids": [],
+              "rate": null
+            },
+            "typical_trajectories": {
+              "passed": "episodes/b5f1f2c652f1440bb5f07516f3050b7d",
+              "model_failure": "episodes/e9aea679676e45d29209b378d2d57807"
+            }
+          }
+        },
+        "variant": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue25-acceptance/base-v1/variant/6c3e342eca7448ada3794931c5e41115/evaluation.json",
+          "sha256": "73726d7efa2ef7b07245ee70b97f5a93c6e187e13c23ee0fc834ba9086675523",
+          "summary": {
+            "planned_tasks": 1,
+            "passed_tasks": 0,
+            "final_pass_rate": 0.0,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 0,
+            "first_implementation_pass_rate": 0.0,
+            "outcomes": {
+              "protocol_error": 1
+            },
+            "by_task_type": {
+              "workspace": {
+                "planned_tasks": 1,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "protocol_error": 1
+                },
+                "protocol_errors": 3,
+                "command_problems": {},
+                "submitted_tasks": 0,
+                "terminations": {
+                  "format_error": 1
+                },
+                "typical_trajectories": {
+                  "protocol_error": "episodes/be64cde01b3d4f4fadfab70c5c8f80ff"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [],
+              "denominator": 0,
+              "recovered_task_ids": [],
+              "rate": null
+            },
+            "typical_trajectories": {
+              "protocol_error": "episodes/be64cde01b3d4f4fadfab70c5c8f80ff"
+            }
+          }
+        }
+      }
+    },
+    "step1": {
+      "suite": {
+        "path": "runs/issue26-bounded-sft/step1-screening/acceptance.json",
+        "sha256": "55500212446764b92706498b2772de38f24b6a8e69655f913d8951bb5a9a9795"
+      },
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_10r9qn2fe1ai/sampler_weights/sampler-0001:3049bd28a22feda47539a1f1fe070d10e3272e8417124d9ae1edfaf235d756e4",
+      "tracks": {
+        "harness": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step1-screening/harness/seed-4/evaluation.json",
+          "sha256": "8663c4804fdd6ebd6f952c5000e87f101aaacbeba3ff29174d97efa249883a30",
+          "summary": {
+            "planned_tasks": 30,
+            "passed_tasks": 7,
+            "final_pass_rate": 0.23333333333333334,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 13,
+            "first_implementation_pass_rate": 0.43333333333333335,
+            "outcomes": {
+              "budget_exhausted": 11,
+              "passed": 7,
+              "protocol_error": 12
+            },
+            "by_task_type": {
+              "short_program": {
+                "planned_tasks": 10,
+                "passed_tasks": 7,
+                "final_pass_rate": 0.7,
+                "outcomes": {
+                  "budget_exhausted": 1,
+                  "passed": 7,
+                  "protocol_error": 2
+                },
+                "protocol_errors": 7,
+                "command_problems": {
+                  "command_failed": 2
+                },
+                "submitted_tasks": 7,
+                "terminations": {
+                  "budget_exhausted": 1,
+                  "submitted": 7,
+                  "format_error": 2
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/2e4ea67ebe7d4fbfb21d5bf459ba1a64",
+                  "passed": "episodes/35d46c249f964276840bc073aed5f064",
+                  "protocol_error": "episodes/eddf2109ae524a5ab56302643065d949"
+                }
+              },
+              "code_edit": {
+                "planned_tasks": 10,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "protocol_error": 6,
+                  "budget_exhausted": 4
+                },
+                "protocol_errors": 22,
+                "command_problems": {
+                  "command_failed": 2
+                },
+                "submitted_tasks": 0,
+                "terminations": {
+                  "format_error": 6,
+                  "budget_exhausted": 4
+                },
+                "typical_trajectories": {
+                  "protocol_error": "episodes/b164450076814f668952885338938fb4",
+                  "budget_exhausted": "episodes/666891138e5e4d718d6356d276647bb4"
+                }
+              },
+              "workspace": {
+                "planned_tasks": 10,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "protocol_error": 4,
+                  "budget_exhausted": 6
+                },
+                "protocol_errors": 12,
+                "command_problems": {
+                  "command_failed": 1
+                },
+                "submitted_tasks": 0,
+                "terminations": {
+                  "format_error": 4,
+                  "budget_exhausted": 6
+                },
+                "typical_trajectories": {
+                  "protocol_error": "episodes/27b6cd8388254079a3e5b2ad64d45070",
+                  "budget_exhausted": "episodes/c74f586cd0934350ad90d2096d099aba"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [
+                "harness/query-encoding",
+                "harness/currency-rounding",
+                "harness/header-value",
+                "harness/network-port"
+              ],
+              "denominator": 4,
+              "recovered_task_ids": [],
+              "rate": 0.0
+            },
+            "typical_trajectories": {
+              "budget_exhausted": "episodes/2e4ea67ebe7d4fbfb21d5bf459ba1a64",
+              "passed": "episodes/35d46c249f964276840bc073aed5f064",
+              "protocol_error": "episodes/eddf2109ae524a5ab56302643065d949"
+            }
+          }
+        },
+        "coding": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step1-screening/coding/seed-4/evaluation.json",
+          "sha256": "4f1c9d4e4cf80613f188afc41913e34ace47ea1b2a59f2dd1797756f573bcc50",
+          "summary": {
+            "planned_tasks": 37,
+            "passed_tasks": 26,
+            "final_pass_rate": 0.7027027027027027,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 0,
+            "first_implementation_pass_rate": 0.0,
+            "outcomes": {
+              "passed": 26,
+              "model_failure": 11
+            },
+            "by_task_type": {
+              "short_program": {
+                "planned_tasks": 37,
+                "passed_tasks": 26,
+                "final_pass_rate": 0.7027027027027027,
+                "outcomes": {
+                  "passed": 26,
+                  "model_failure": 11
+                },
+                "protocol_errors": 0,
+                "command_problems": {},
+                "submitted_tasks": 37,
+                "terminations": {
+                  "submitted": 37
+                },
+                "typical_trajectories": {
+                  "passed": "episodes/c9336414ed4f41d7afd6eb7d911597ad",
+                  "model_failure": "episodes/0e0bec81b356461aa837ae072f17fcf7"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [],
+              "denominator": 0,
+              "recovered_task_ids": [],
+              "rate": null
+            },
+            "typical_trajectories": {
+              "passed": "episodes/c9336414ed4f41d7afd6eb7d911597ad",
+              "model_failure": "episodes/0e0bec81b356461aa837ae072f17fcf7"
+            }
+          }
+        },
+        "variant": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step1-screening/variant/seed-4/evaluation.json",
+          "sha256": "635eac4957a24813045b7e3adb044a915edbd1a6cdd449ddf1b0112c9f828847",
+          "summary": {
+            "planned_tasks": 1,
+            "passed_tasks": 0,
+            "final_pass_rate": 0.0,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 0,
+            "first_implementation_pass_rate": 0.0,
+            "outcomes": {
+              "protocol_error": 1
+            },
+            "by_task_type": {
+              "workspace": {
+                "planned_tasks": 1,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "protocol_error": 1
+                },
+                "protocol_errors": 3,
+                "command_problems": {},
+                "submitted_tasks": 0,
+                "terminations": {
+                  "format_error": 1
+                },
+                "typical_trajectories": {
+                  "protocol_error": "episodes/b64527da52c24200a0154a231c975e8f"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [],
+              "denominator": 0,
+              "recovered_task_ids": [],
+              "rate": null
+            },
+            "typical_trajectories": {
+              "protocol_error": "episodes/b64527da52c24200a0154a231c975e8f"
+            }
+          }
+        }
+      }
+    },
+    "step4": {
+      "suite": {
+        "path": "runs/issue26-bounded-sft/step4-screening/acceptance.json",
+        "sha256": "079beb1d8756c311402672c8eaa09d98e35de9504ec4242a556d13513cc4a267"
+      },
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_nj3845mq49yo/sampler_weights/sampler-0004:2016b405dc16ed7870b2a852f3b28d49a8f97a0b631423d12a3516e2891fd1de",
+      "tracks": {
+        "harness": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step4-screening/harness/seed-4/evaluation.json",
+          "sha256": "dd1332c913f04fc940088c3a75de44bea0bd65e99b860d946e9b3af00a9706b6",
+          "summary": {
+            "planned_tasks": 30,
+            "passed_tasks": 8,
+            "final_pass_rate": 0.26666666666666666,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 11,
+            "first_implementation_pass_rate": 0.36666666666666664,
+            "outcomes": {
+              "budget_exhausted": 19,
+              "passed": 8,
+              "protocol_error": 3
+            },
+            "by_task_type": {
+              "short_program": {
+                "planned_tasks": 10,
+                "passed_tasks": 8,
+                "final_pass_rate": 0.8,
+                "outcomes": {
+                  "budget_exhausted": 2,
+                  "passed": 8
+                },
+                "protocol_errors": 0,
+                "command_problems": {
+                  "command_failed": 5
+                },
+                "submitted_tasks": 8,
+                "terminations": {
+                  "budget_exhausted": 2,
+                  "submitted": 8
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/f21fd9ba87b046419226c8d4a0cc3edb",
+                  "passed": "episodes/b538eea7523444dc992a5ab9c07c1c5c"
+                }
+              },
+              "code_edit": {
+                "planned_tasks": 10,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "budget_exhausted": 7,
+                  "protocol_error": 3
+                },
+                "protocol_errors": 9,
+                "command_problems": {
+                  "command_failed": 3
+                },
+                "submitted_tasks": 0,
+                "terminations": {
+                  "budget_exhausted": 7,
+                  "format_error": 3
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/c5c24ccd2b8140ec80854a79f2586415",
+                  "protocol_error": "episodes/eff0b121c52046158e0e32a306627987"
+                }
+              },
+              "workspace": {
+                "planned_tasks": 10,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "budget_exhausted": 10
+                },
+                "protocol_errors": 0,
+                "command_problems": {
+                  "command_failed": 4
+                },
+                "submitted_tasks": 0,
+                "terminations": {
+                  "budget_exhausted": 10
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/541ed0003fca48fba9518a7646d6022e"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [
+                "mbpp/562",
+                "mbpp/563",
+                "harness/nested-setting",
+                "harness/query-encoding",
+                "harness/currency-rounding",
+                "harness/header-value",
+                "harness/tab-stops",
+                "harness/named-template",
+                "harness/priority-queue",
+                "harness/timezone-offsets"
+              ],
+              "denominator": 10,
+              "recovered_task_ids": [
+                "mbpp/563"
+              ],
+              "rate": 0.1
+            },
+            "typical_trajectories": {
+              "budget_exhausted": "episodes/f21fd9ba87b046419226c8d4a0cc3edb",
+              "passed": "episodes/b538eea7523444dc992a5ab9c07c1c5c",
+              "protocol_error": "episodes/eff0b121c52046158e0e32a306627987"
+            }
+          }
+        },
+        "coding": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step4-screening/coding/seed-4/evaluation.json",
+          "sha256": "6eec2a958e3941fc4170c46920417d9652a5f55bd19ad1d6695f9eabe58d3d11",
+          "summary": {
+            "planned_tasks": 37,
+            "passed_tasks": 27,
+            "final_pass_rate": 0.7297297297297297,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 0,
+            "first_implementation_pass_rate": 0.0,
+            "outcomes": {
+              "passed": 27,
+              "model_failure": 10
+            },
+            "by_task_type": {
+              "short_program": {
+                "planned_tasks": 37,
+                "passed_tasks": 27,
+                "final_pass_rate": 0.7297297297297297,
+                "outcomes": {
+                  "passed": 27,
+                  "model_failure": 10
+                },
+                "protocol_errors": 1,
+                "command_problems": {},
+                "submitted_tasks": 36,
+                "terminations": {
+                  "submitted": 36,
+                  "model_failure": 1
+                },
+                "typical_trajectories": {
+                  "passed": "episodes/f783a5e68606436caba74d155bcb8587",
+                  "model_failure": "episodes/4aeed96a41e342228950b52c376c4143"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [],
+              "denominator": 0,
+              "recovered_task_ids": [],
+              "rate": null
+            },
+            "typical_trajectories": {
+              "passed": "episodes/f783a5e68606436caba74d155bcb8587",
+              "model_failure": "episodes/4aeed96a41e342228950b52c376c4143"
+            }
+          }
+        },
+        "variant": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step4-screening/variant/seed-4/evaluation.json",
+          "sha256": "672eb1d88c4afb46c62068ca06669a0d9677079d3a01393b164bc5e6d3d77f42",
+          "summary": {
+            "planned_tasks": 1,
+            "passed_tasks": 0,
+            "final_pass_rate": 0.0,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 0,
+            "first_implementation_pass_rate": 0.0,
+            "outcomes": {
+              "budget_exhausted": 1
+            },
+            "by_task_type": {
+              "workspace": {
+                "planned_tasks": 1,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "budget_exhausted": 1
+                },
+                "protocol_errors": 0,
+                "command_problems": {},
+                "submitted_tasks": 0,
+                "terminations": {
+                  "budget_exhausted": 1
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/ce9f6780f6bb4f8781a51d93cc55aa34"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [],
+              "denominator": 0,
+              "recovered_task_ids": [],
+              "rate": null
+            },
+            "typical_trajectories": {
+              "budget_exhausted": "episodes/ce9f6780f6bb4f8781a51d93cc55aa34"
+            }
+          }
+        }
+      }
+    },
+    "step8": {
+      "suite": {
+        "path": "runs/issue26-bounded-sft/step8-screening/acceptance.json",
+        "sha256": "a0c37c7606dc86ebd86441e69dc681a8e1892a40190ea22307367c287d02631d"
+      },
+      "snapshot": "vllm/Qwen/Qwen3.5-4B@trio://run_19taybw3zq00/sampler_weights/sampler-0008:0df7c78acf25c64a9c8ce8587f0a93d2a3706837dc8052291f3dac2c2424a7e6",
+      "tracks": {
+        "harness": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step8-screening/harness/seed-4/evaluation.json",
+          "sha256": "cc9061c1d7519b1954d6b9876b01158e34442904594df0bb9ebf0315203cdab6",
+          "summary": {
+            "planned_tasks": 30,
+            "passed_tasks": 7,
+            "final_pass_rate": 0.23333333333333334,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 11,
+            "first_implementation_pass_rate": 0.36666666666666664,
+            "outcomes": {
+              "budget_exhausted": 23,
+              "passed": 7
+            },
+            "by_task_type": {
+              "short_program": {
+                "planned_tasks": 10,
+                "passed_tasks": 7,
+                "final_pass_rate": 0.7,
+                "outcomes": {
+                  "budget_exhausted": 3,
+                  "passed": 7
+                },
+                "protocol_errors": 0,
+                "command_problems": {
+                  "command_failed": 4
+                },
+                "submitted_tasks": 7,
+                "terminations": {
+                  "budget_exhausted": 3,
+                  "submitted": 7
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/0cc7617818cd406ab12c4d00a5307960",
+                  "passed": "episodes/7b766a06eacb4e459e88062793c3dfa9"
+                }
+              },
+              "code_edit": {
+                "planned_tasks": 10,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "budget_exhausted": 10
+                },
+                "protocol_errors": 0,
+                "command_problems": {
+                  "command_failed": 3
+                },
+                "submitted_tasks": 0,
+                "terminations": {
+                  "budget_exhausted": 10
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/23c03146ca3e430f85d1b2823474b9e4"
+                }
+              },
+              "workspace": {
+                "planned_tasks": 10,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "budget_exhausted": 10
+                },
+                "protocol_errors": 0,
+                "command_problems": {
+                  "command_failed": 7
+                },
+                "submitted_tasks": 0,
+                "terminations": {
+                  "budget_exhausted": 10
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/37a0a70d707d4ca8b2a555fe0646f292"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [
+                "mbpp/562",
+                "mbpp/563",
+                "harness/nested-setting",
+                "harness/duration-units",
+                "harness/query-encoding",
+                "harness/currency-rounding",
+                "harness/header-value",
+                "harness/tab-stops",
+                "harness/named-template",
+                "harness/ansi-colors",
+                "harness/network-port",
+                "harness/priority-queue",
+                "harness/test-matrix"
+              ],
+              "denominator": 13,
+              "recovered_task_ids": [],
+              "rate": 0.0
+            },
+            "typical_trajectories": {
+              "budget_exhausted": "episodes/0cc7617818cd406ab12c4d00a5307960",
+              "passed": "episodes/7b766a06eacb4e459e88062793c3dfa9"
+            }
+          }
+        },
+        "coding": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step8-screening/coding/seed-4/evaluation.json",
+          "sha256": "3faddce31f5d0771433face622a0c778332d331d4043ed4f2fdeb01b00a62388",
+          "summary": {
+            "planned_tasks": 37,
+            "passed_tasks": 27,
+            "final_pass_rate": 0.7297297297297297,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 0,
+            "first_implementation_pass_rate": 0.0,
+            "outcomes": {
+              "passed": 27,
+              "model_failure": 10
+            },
+            "by_task_type": {
+              "short_program": {
+                "planned_tasks": 37,
+                "passed_tasks": 27,
+                "final_pass_rate": 0.7297297297297297,
+                "outcomes": {
+                  "passed": 27,
+                  "model_failure": 10
+                },
+                "protocol_errors": 1,
+                "command_problems": {},
+                "submitted_tasks": 36,
+                "terminations": {
+                  "submitted": 36,
+                  "model_failure": 1
+                },
+                "typical_trajectories": {
+                  "passed": "episodes/f5b596848e644e4faff09fcde6a06449",
+                  "model_failure": "episodes/d6c68c72c6f14f68bbb35f9d63560737"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [],
+              "denominator": 0,
+              "recovered_task_ids": [],
+              "rate": null
+            },
+            "typical_trajectories": {
+              "passed": "episodes/f5b596848e644e4faff09fcde6a06449",
+              "model_failure": "episodes/d6c68c72c6f14f68bbb35f9d63560737"
+            }
+          }
+        },
+        "variant": {
+          "path": "/data/home/zdhs0148/opd/bashlet/runs/issue26-bounded-sft/step8-screening/variant/seed-4/evaluation.json",
+          "sha256": "e6474938b0115d8d7e5e66305ed5e71701e4e9e3ba6b01b99f088dfdf799db7b",
+          "summary": {
+            "planned_tasks": 1,
+            "passed_tasks": 0,
+            "final_pass_rate": 0.0,
+            "missing_task_ids": [],
+            "first_grading_missing_task_ids": [],
+            "first_implementation_passed": 0,
+            "first_implementation_pass_rate": 0.0,
+            "outcomes": {
+              "budget_exhausted": 1
+            },
+            "by_task_type": {
+              "workspace": {
+                "planned_tasks": 1,
+                "passed_tasks": 0,
+                "final_pass_rate": 0.0,
+                "outcomes": {
+                  "budget_exhausted": 1
+                },
+                "protocol_errors": 0,
+                "command_problems": {
+                  "command_failed": 1
+                },
+                "submitted_tasks": 0,
+                "terminations": {
+                  "budget_exhausted": 1
+                },
+                "typical_trajectories": {
+                  "budget_exhausted": "episodes/b767b5ad7d6e440c949f239da06e8dd9"
+                }
+              }
+            },
+            "recovery": {
+              "task_ids": [],
+              "denominator": 0,
+              "recovered_task_ids": [],
+              "rate": null
+            },
+            "typical_trajectories": {
+              "budget_exhausted": "episodes/b767b5ad7d6e440c949f239da06e8dd9"
+            }
+          }
+        }
+      }
+    }
+  },
+  "per_task": "per-task.json",
+  "selection": {
+    "path": "runs/issue26-bounded-sft/selection/selection.json",
+    "sha256": "002d91be0b97de055d16921517403688e78d80e9d8c1b17ff205eac6229c550c"
+  },
+  "confirmation": {
+    "frozen_seeds": [
+      4,
+      17,
+      29
+    ],
+    "executed_seeds": [
+      4
+    ],
+    "reason": "Every candidate fails the frozen promising screen: no workspace task gain. Do not add seeds to fish for qualification."
+  },
+  "environment_or_feedback_task_benefit": "not established under the frozen workspace criterion",
+  "coding_preservation": "one-seed count matches baseline at steps4/8; no three-seed preservation claim",
+  "spend": {
+    "path": "runs/issue26-bounded-sft/spend.json",
+    "sha256": "5dd7044e746461ee5628f4d28d038e30bfa8ecdd4a64dca5c008d096800ad069"
+  },
+  "new_paid_upper_bound_cny": 0.32,
+  "actual_paid_cny": null,
+  "validation": {
+    "path": "runs/issue26-bounded-sft/validation.json",
+    "sha256": "238142da10cd894bd3978604f9337c0077862d04a7388b4841e39a093f1571ee"
+  },
+  "training_verification": {
+    "path": "runs/issue26-bounded-sft/training-verification.json",
+    "sha256": "05145b18ddeb8f6694dec67804ba1ed68128e012e916124de4f9a1ed26efd5f4"
+  },
+  "behavior_reviews": [
+    {
+      "path": "runs/issue26-bounded-sft/step1-behavior-review.json",
+      "sha256": "d53b0410ceaae1293515d06d9cd86b1506a998ffea4824a71d5e95b65472cc20"
+    },
+    {
+      "path": "runs/issue26-bounded-sft/step4-behavior-review.json",
+      "sha256": "81e755de46a11aa7bae1c72f52d9b2e450bbb960ca86fc5dadd8b7ec52f0c8d8"
+    },
+    {
+      "path": "runs/issue26-bounded-sft/step8-behavior-review.json",
+      "sha256": "ebe7fd59cb73b11c1c82f39f7c2f5afc27b4a52462814368c412c7b00d928c1f"
+    }
+  ],
+  "coverage_limitation": {
+    "path": "runs/issue26-bounded-sft/coverage-diagnosis.json",
+    "sha256": "4dda0adbb109db2cc74b1187eb9e9e70387059f687024fc3552a720cad352e32"
+  },
+  "scope": "8 frozen training families (6/1/1 types), 30 Harness and 37 coding development tasks; shared families/seeds/variants are not independent tasks. No held-out testing or causal attribution to old templates or learning rate.",
+  "monitoring_verification": {
+    "path": "runs/issue26-bounded-sft/wandb-verification.json",
+    "sha256": "0bd44feead6bef3543a8a46fd0add57113af4759a885dd2dfd1ea4804a0de117",
+    "verified_runs": 13
+  },
+  "service_restoration": {
+    "path": "runs/issue26-bounded-sft/service-restored.json",
+    "scope": "pre-existing diagnostic service; no qualified initializer"
+  }
+}
