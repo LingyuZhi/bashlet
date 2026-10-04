@@ -1052,7 +1052,7 @@
   "actual_paid_cny": null,
   "validation": {
     "path": "runs/issue26-bounded-sft/validation.json",
-    "sha256": "238142da10cd894bd3978604f9337c0077862d04a7388b4841e39a093f1571ee"
+    "sha256": "6eb187b56b9eb164d2b18a6e56368eed3926c5104ee986006141ce35a3b8ad79"
   },
   "training_verification": {
     "path": "runs/issue26-bounded-sft/training-verification.json",
@@ -1076,7 +1076,17 @@
     "path": "runs/issue26-bounded-sft/coverage-diagnosis.json",
     "sha256": "4dda0adbb109db2cc74b1187eb9e9e70387059f687024fc3552a720cad352e32"
   },
-  "scope": "8 frozen training families (6/1/1 types), 30 Harness and 37 coding development tasks; shared families/seeds/variants are not independent tasks. No held-out testing or causal attribution to old templates or learning rate.",
+  "historical_training_records": [
+    {
+      "path": "runs/issue26-bounded-sft/training/step1-record.json",
+      "sha256": "04e19eb3774bd97ffee1bf44f37c8421e9cb8b5fe9367a3a33419ad67d797a8d"
+    },
+    {
+      "path": "runs/issue26-bounded-sft/training/step4-record.json",
+      "sha256": "41d5421b1f2d483036f266c6648acf3d33210aa58803d2be0e742e0f87882fba"
+    }
+  ],
+  "historical_record_provenance": "Reconstructed from the completed journal; each byte hash matches the training-record hash captured by its original export.",
   "monitoring_verification": {
     "path": "runs/issue26-bounded-sft/wandb-verification.json",
     "sha256": "0bd44feead6bef3543a8a46fd0add57113af4759a885dd2dfd1ea4804a0de117",
@@ -1084,6 +1094,8 @@
   },
   "service_restoration": {
     "path": "runs/issue26-bounded-sft/service-restored.json",
+    "sha256": "536693233c272cc9827997e0c93f0fad76597896d63669e70a4c3b90dfe429e9",
     "scope": "pre-existing diagnostic service; no qualified initializer"
-  }
+  },
+  "scope": "8 frozen training families (6/1/1 types), 30 Harness and 37 coding development tasks; shared families/seeds/variants are not independent tasks. No held-out testing or causal attribution to old templates or learning rate."
 }

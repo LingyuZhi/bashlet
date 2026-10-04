@@ -93,4 +93,4 @@ uv run --locked bashlet monitor sync runs/issue26-bounded-sft/selection
 uv run --locked python runs/issue26-bounded-sft/verify-monitoring.py
 ```
 
-实现验证使用 `uv run --locked mypy`、`uv run --locked ruff check`、`uv run --locked ruff format --check src tests`、`uv run --locked pytest -q tests/test_training.py` 和最终全量 `uv run --locked pytest -q`。原运行记录中的 code revision 是实施前父提交 `b3d6c2b`；实际实现差异保存在 `implementation.patch`，其哈希见 `validation.json`，并随当前分支提交。原始模型路径和数据依赖来自任务 21、24、25 的已保留产物。
+实现验证使用 `uv run --locked mypy`、`uv run --locked ruff check`、`uv run --locked ruff format --check src tests`、`uv run --locked pytest -q tests/test_training.py` 和最终全量 `uv run --locked pytest -q`。原运行记录中的 code revision 是实施前父提交 `b3d6c2b`；实际实现差异保存在 `implementation.patch`，其哈希见 `validation.json`，并随当前分支提交。该补丁为无上下文格式，恢复时使用 `git apply --unidiff-zero`。step 1/4 的历史训练记录由完成日志重建，字节哈希与对应导出当时捕获的哈希完全相同，保存在 `training/step1-record.json` 与 `training/step4-record.json`。原始模型路径和数据依赖来自任务 21、24、25 的已保留产物。

@@ -79,6 +79,14 @@ report = {
     "training_verification": reference(root / "training-verification.json"),
     "behavior_reviews": [reference(root / f"step{step}-behavior-review.json") for step in (1, 4, 8)],
     "coverage_limitation": reference(root / "coverage-diagnosis.json"),
+    "historical_training_records": [
+        reference(root / f"training/step{step}-record.json") for step in (1, 4)
+    ],
+    "historical_record_provenance": "Reconstructed from the completed journal; each byte hash matches the training-record hash captured by its original export.",
+    "monitoring_verification": reference(root / "wandb-verification.json") | {"verified_runs": 13},
+    "service_restoration": reference(root / "service-restored.json") | {
+        "scope": "pre-existing diagnostic service; no qualified initializer",
+    },
     "scope": "8 frozen training families (6/1/1 types), 30 Harness and 37 coding development tasks; shared families/seeds/variants are not independent tasks. No held-out testing or causal attribution to old templates or learning rate.",
 }
 (root / "per-task.json").write_text(json.dumps({"rows": task_rows}, indent=2))
