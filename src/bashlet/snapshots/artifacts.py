@@ -1,5 +1,6 @@
 """Export existing sampler checkpoints and prepare validated local weights."""
 
+import hashlib
 import json
 import math
 import shutil
@@ -101,7 +102,9 @@ def export_snapshot(
 ) -> Path:
     """Download a saved sampler, without creating a trainer or a sampler client."""
     training_path = training_run / "training.json"
-    training = json.loads(training_path.read_text())
+    training_bytes = training_path.read_bytes()
+    training = json.loads(training_bytes)
+    training_digest = hashlib.sha256(training_bytes).hexdigest()
     if version("pytrio") != SDK_VERSION:
         raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
     if training["metadata"]["base_model"] != MODEL:
@@ -120,6 +123,14 @@ def export_snapshot(
     destination = output_dir / "export.json"
     if destination.exists():
         raise ValueError("Export already exists; preserve it or use a new directory")
+    archived = training_run.resolve() / "training-records" / f"{training_digest}.json"
+    archived.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        with archived.open("xb") as stream:
+            stream.write(training_bytes)
+    except FileExistsError:
+        if archived.read_bytes() != training_bytes:
+            raise ValueError("Archived training record hash mismatch") from None
     import pytrio as trio
 
     trio.configure(
@@ -162,8 +173,8 @@ def export_snapshot(
         {
             "schema_version": 1,
             "sdk_version": SDK_VERSION,
-            "training_record": str(training_path.resolve()),
-            "training_record_sha256": file_sha256(training_path),
+            "training_record": str(archived),
+            "training_record_sha256": training_digest,
             "optimizer_step": step,
             "base_model": MODEL,
             "server_model_revision": training["metadata"]["server_model_revision"],

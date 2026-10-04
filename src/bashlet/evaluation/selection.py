@@ -402,6 +402,45 @@ def _assess(
     return result
 
 
+def _training_record_matches(
+    digest: Any,
+    training_path: Path,
+    training: dict[str, Any],
+    checkpoint: dict[str, Any],
+) -> bool:
+    """Bind an export to this run, including journals captured before a resume."""
+    if digest == file_hash(training_path):
+        return True
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+    ):
+        return False
+    path = training_path.parent / "training-records" / f"{digest}.json"
+    try:
+        if file_hash(path) != digest:
+            return False
+        captured = json.loads(path.read_text())
+        return (
+            bool(captured["run_id"])
+            and all(
+                captured[key] == training[key]
+                for key in ("run_id", "config", "metadata", "code_revision")
+            )
+            and checkpoint in captured["checkpoints"]
+            and captured["checkpoints"]
+            == training["checkpoints"][: len(captured["checkpoints"])]
+            and captured["updates"] == training["updates"][: len(captured["updates"])]
+            and checkpoint["optimizer_step"]
+            <= captured["optimizer_step"]
+            <= training["optimizer_step"]
+            and captured["optimizer_step"] == len(captured["updates"])
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def select_sft(
     run_dir: Path,
     baseline: Path,
@@ -479,8 +518,12 @@ def select_sft(
                         adapter = evaluation["snapshot_details"].get("adapter") or {}
                         checkpoint = checkpoints.get(snapshot, {})
                         if (
-                            adapter.get("training_record_sha256")
-                            != file_hash(training_path)
+                            not _training_record_matches(
+                                adapter.get("training_record_sha256"),
+                                training_path,
+                                training,
+                                checkpoint,
+                            )
                             or adapter.get("checkpoint", {}).get("path") != snapshot
                             or adapter.get("optimizer_step")
                             != checkpoint.get("optimizer_step")

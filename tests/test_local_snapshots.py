@@ -141,6 +141,17 @@ def test_export_preserves_the_existing_sampler_identity_and_download_hashes(
     assert record["adapter_config"]["r"] == 16
     assert record["server_model_revision"] is None
     assert record["training_encoding"] == "test-training-encoding"
+    archived = Path(record["training_record"])
+    assert archived == (
+        training / "training-records" / f"{record['training_record_sha256']}.json"
+    )
+    original = (training / "training.json").read_bytes()
+    (training / "training.json").write_text('{"status": "resumed"}')
+    assert archived.read_bytes() == original
+    assert (
+        hashlib.sha256(archived.read_bytes()).hexdigest()
+        == (record["training_record_sha256"])
+    )
     assert (output / "adapter/adapter_model.safetensors").read_bytes() == (
         b"external weights"
     )

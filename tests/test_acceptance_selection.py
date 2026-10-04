@@ -264,6 +264,94 @@ def test_candidate_without_harness_records_retains_its_identity_and_evidence_gap
     assert result["student_snapshot"] is None
 
 
+@pytest.mark.parametrize(
+    "defect",
+    ["none", "missing", "hash", "run", "config", "updates", "checkpoint"],
+)
+def test_resumed_selection_requires_the_original_checkpoint_journal(
+    paired_acceptance: tuple[Path, Path, Path], tmp_path: Path, defect: str
+) -> None:
+    source, original_base, original_candidate = paired_acceptance
+    training = tmp_path / "training"
+    training.mkdir()
+    historical = json.loads((source / "training.json").read_text())
+    historical.update(
+        run_id="original-training-run",
+        config={"dataset": "frozen-data", "learning_rate": 1e-5},
+        code_revision="original-code",
+        optimizer_step=12,
+        updates=[{"optimizer_step": step} for step in range(1, 13)],
+    )
+    current = json.loads(json.dumps(historical))
+    current["optimizer_step"] = 13
+    current["updates"].append({"optimizer_step": 13})
+    (training / "training.json").write_text(json.dumps(current))
+    if defect == "run":
+        historical["run_id"] = "different-training-run"
+    elif defect == "config":
+        historical["config"]["learning_rate"] = 1e-4
+    elif defect == "updates":
+        historical["updates"][0]["loss"] = 999
+    elif defect == "checkpoint":
+        historical["checkpoints"][0]["training_state"]["path"] = "trio://other/state"
+    captured = json.dumps(historical).encode()
+    digest = hashlib.sha256(captured).hexdigest()
+    archive = training / "training-records" / f"{digest}.json"
+    if defect != "missing":
+        archive.parent.mkdir()
+        archive.write_bytes(captured + (b" " if defect == "hash" else b""))
+
+    suites = []
+    for name, original in (
+        ("baseline", original_base),
+        ("candidate", original_candidate),
+    ):
+        suite = json.loads(original.read_text())
+        suite["evidence_kind"] = "experimental"
+        suite["snapshot"] = "vllm/Qwen/Qwen3.5-4B@" + (
+            "a" * 40 if name == "baseline" else "trio://run/sampler-12:" + "b" * 64
+        )
+        for track, refs in suite["runs"].items():
+            for seed, ref in refs.items():
+                raw = json.loads(Path(ref["path"]).read_text())
+                raw["snapshot_details"] = {
+                    "adapter": {
+                        "training_record_sha256": digest,
+                        "checkpoint": {"path": "trio://run/sampler-12"},
+                        "optimizer_step": 12,
+                    }
+                }
+                path = tmp_path / f"{name}-{track}-{seed}.json"
+                path.write_text(json.dumps(raw))
+                refs[seed] = {
+                    "path": str(path),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(suite))
+        suites.append(path)
+    process = cli(
+        "select-sft",
+        str(training),
+        "--baseline",
+        str(suites[0]),
+        "--evaluation",
+        str(suites[1]),
+        "--output-dir",
+        str(tmp_path),
+        cwd=tmp_path,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    selection = json.loads((tmp_path / "selection.json").read_text())
+    gaps = selection["candidates"][0]["gaps"]
+    identity_gaps = [
+        gap for gap in gaps if gap.startswith("sft_training_identity_mismatch")
+    ]
+    assert bool(identity_gaps) == (defect != "none")
+    # These declared records still lack verified runtime evidence and cannot start OPSD.
+    assert selection["student_snapshot"] is None
+
+
 @dataclass
 class AcceptanceExperiment:
     root: Path
