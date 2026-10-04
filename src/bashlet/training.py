@@ -107,8 +107,10 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
     ):
         raise ValueError("SFT dataset must be complete with its recorded content hash")
     rows = [json.loads(line) for line in data.splitlines()]
+    identified = manifest["schema_version"] == 3
+    identity_field = "demonstration_id" if identified else "task_id"
     accepted = {
-        entry["task_id"]: entry
+        entry[identity_field]: entry
         for entry in manifest["tasks"]
         if entry["status"] == "accepted"
     }
@@ -120,6 +122,7 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
         raise ValueError("SFT dataset accepted count does not match its examples")
     datums = []
     seen = set()
+    family_counts: dict[str, int] = {}
     for row in rows:
         meta = row["metadata"]
         origin = TaskOrigin(**meta["origin"])
@@ -133,14 +136,29 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
             or meta["encoding"] != manifest["encoding"]
             or meta["encoding_details"] != manifest["encoding_details"]
             or meta["fingerprints"] != manifest["fingerprints"]
-            or meta["task_id"] in seen
-            or meta["task_id"] not in accepted
+            or meta[identity_field] in seen
+            or meta[identity_field] not in accepted
         ):
             raise ValueError(
                 "SFT requires distinct, verified training-split demonstrations"
             )
-        seen.add(meta["task_id"])
-        entry = accepted[meta["task_id"]]
+        seen.add(meta[identity_field])
+        entry = accepted[meta[identity_field]]
+        if identified:
+            if (
+                not isinstance(meta[identity_field], str)
+                or not meta[identity_field].strip()
+                or entry["task_id"] != meta["task_id"]
+                or entry["task_sha256"] != meta["task_sha256"]
+                or entry["origin"] != meta["origin"]
+                or family_counts.get(origin.family_id, 0) >= 2
+                or (
+                    family_counts.get(origin.family_id, 0)
+                    and not meta.get("complementary_reason", "").strip()
+                )
+            ):
+                raise ValueError("Invalid demonstration identity or family admission")
+            family_counts[origin.family_id] = family_counts.get(origin.family_id, 0) + 1
         run_dir = path.parent / entry["run_dir"]
         if (
             hashlib.sha256((run_dir / "run.json").read_bytes()).hexdigest()

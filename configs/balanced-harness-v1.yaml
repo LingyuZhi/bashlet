@@ -1,0 +1,17 @@
+# Static source text uses the student tokenizer; execution and grading stay real.
+model:
+  class: ReplayModel
+  tokenizer: Qwen/Qwen3.5-4B
+  tokenizer_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  tokenizer_cache_dir: runs/tokenizers
+  thinking: false
+  sampling:
+    max_tokens: 1024
+    temperature: 1.0
+    top_p: 1.0
+    seed: 4
+budget:
+  max_steps: 10
+  max_generated_tokens: 8192
+  max_seconds: 300.0
+  max_consecutive_invalid: 3

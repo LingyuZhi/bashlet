@@ -30,18 +30,19 @@ def _save(path: Path, data: dict[str, Any]) -> None:
 
 def _plan(path: Path) -> dict[str, Any]:
     plan: dict[str, Any] = json.loads(path.read_text())
+    version = plan.get("schema_version")
+    if version not in (1, 2):
+        raise ValueError("Unsupported collection plan")
     for name, ceiling in (
-        ("max_attempts", 60),
-        ("max_accepted", 60),
-        ("max_corrections", 3),
+        ("max_attempts", 60 if version == 1 else 180),
+        ("max_accepted", 60 if version == 1 else 120),
+        ("max_corrections", 3 if version == 1 else 180),
         ("max_context_tokens", 32768),
     ):
         value = plan.get(name)
         minimum = 0 if name == "max_corrections" else 1
         if type(value) is not int or not minimum <= value <= ceiling:
             raise ValueError(f"{name} must be an integer in [{minimum}, {ceiling}]")
-    if plan["schema_version"] != 1:
-        raise ValueError("Unsupported collection plan")
     selected = plan["tasks"]
     if (
         not selected
@@ -64,6 +65,10 @@ def _plan(path: Path) -> dict[str, Any]:
             or task.task_type != item["task_type"]
         ):
             raise ValueError("Selected task differs from the frozen training family")
+    if version == 2:
+        from .balanced import validate_sources
+
+        validate_sources(plan)
     return plan
 
 
@@ -76,6 +81,10 @@ def collect_demonstrations(
     leave an incomplete ledger; failed attempts are never silently replaced.
     """
     plan = _plan(plan_path)
+    if plan["schema_version"] == 2:
+        from .balanced import collect
+
+        return collect(plan_path, plan, output_dir, config)
     model = load_model(config.model)
     if not isinstance(model, VLLMModel) or model.identity != plan["expected_policy"]:
         raise ValueError("Collection requires the planned local vLLM base snapshot")
@@ -169,6 +178,10 @@ def freeze_demonstrations(
 
     root = collection_path.resolve().parent
     plan = _plan(root / "plan.json")
+    if plan["schema_version"] == 2:
+        from .balanced import freeze
+
+        return freeze(collection_path, review_path, output_dir, config, plan)
     collection = json.loads(collection_path.read_text())
     review = json.loads(review_path.read_text())
     attempts = collection["attempts"]

@@ -249,7 +249,7 @@ def main() -> None:
     )
     _execution_options(demonstrations)
     collection = commands.add_parser(
-        "collect-demonstrations", help="Collect one bounded base attempt per family"
+        "collect-demonstrations", help="Collect bounded, explicitly sourced attempts"
     )
     collection.add_argument("plan", type=Path)
     _execution_options(collection)

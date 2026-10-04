@@ -82,7 +82,7 @@ def _validate_reference(task: Task) -> None:
         raise ValueError("Reference demonstrations require a feedback command")
 
 
-def _reference_replies(
+def reference_replies(
     task: Task, encoding: QwenChatMLEncoding, config: ExperimentConfig
 ) -> list[str]:
     _validate_reference(task)
@@ -106,7 +106,7 @@ def reference_demonstration(
 ) -> ReplayModel:
     """Construct three replies; all observations still come from the Harness."""
     return ReplayModel(
-        _reference_replies(task, encoding, config),
+        reference_replies(task, encoding, config),
         encoding=encoding,
         identity=f"replay/{SOURCE}",
     )
@@ -338,6 +338,9 @@ def export_demonstration(
     *,
     supervision: Sequence[ActionSupervision] | None = None,
     max_context_tokens: int = 32768,
+    demonstration_id: str | None = None,
+    provenance: dict[str, Any] | None = None,
+    complementary_reason: str = "",
 ) -> None:
     """Export executed reference or reviewed trajectories, preserving raw tokens."""
     source = SOURCE if supervision is None else EXECUTED_SOURCE
@@ -406,7 +409,7 @@ def export_demonstration(
             result.demonstration["reason"] = str(error)
             return
     else:
-        replies = _reference_replies(task, model.encoding, config)
+        replies = reference_replies(task, model.encoding, config)
     if supervision is None and (
         len(steps) != 3
         or any(
@@ -487,6 +490,12 @@ def export_demonstration(
             max_context_tokens=max_context_tokens,
             action_supervision_sha256=protocol.fingerprint(decisions),
         )
+        if demonstration_id is not None:
+            metadata.update(
+                demonstration_id=demonstration_id,
+                provenance=provenance or {},
+                complementary_reason=complementary_reason,
+            )
         if isinstance(model, RecordedTrajectoryModel):
             source_data = (result.run_dir / "private/source-run.json").read_bytes()
             if json.loads(source_data) != model.record:
@@ -758,8 +767,17 @@ def _prepare_trajectories(
         raise ValueError("max_context_tokens must be an integer of at least two")
     review_data = review_path.read_bytes()
     review = json.loads(review_data)
-    if review["schema_version"] != 1 or not review["trajectories"]:
+    if review["schema_version"] not in (1, 2) or not review["trajectories"]:
         raise ValueError("Select a non-empty versioned trajectory review")
+    identified = review["schema_version"] == 2
+    if identified:
+        identifiers = [item.get("demonstration_id") for item in review["trajectories"]]
+        if any(
+            not isinstance(value, str) or not value.strip() for value in identifiers
+        ):
+            raise ValueError("Every demonstration needs a non-empty identity")
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("Duplicate demonstration identity")
     encoding = load_model(config.model).encoding
     if not isinstance(encoding, QwenChatMLEncoding):
         raise ValueError("Trajectory export requires Qwen ChatML encoding")
@@ -767,7 +785,7 @@ def _prepare_trajectories(
     output_dir.mkdir(parents=True, mode=0o700)
     writer = _DatasetWriter(output_dir / "examples.jsonl", encoding.identity)
     manifest: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3 if identified else 2,
         "status": "preparing",
         "source": EXECUTED_SOURCE,
         "source_manifest": str(task_manifest.resolve()),
@@ -795,6 +813,8 @@ def _prepare_trajectories(
     destination = output_dir / "manifest.json"
 
     writer.save_manifest(manifest, destination)
+    family_counts: dict[str, int] = {}
+    behaviors: dict[str, set[str]] = {}
     try:
         for index, item in enumerate(review["trajectories"]):
             entry: dict[str, Any] = {
@@ -804,6 +824,8 @@ def _prepare_trajectories(
                 "status": "rejected",
                 "reason": "",
             }
+            if identified:
+                entry["demonstration_id"] = item["demonstration_id"]
             manifest["tasks"].append(entry)
             try:
                 source_dir = (review_path.parent / item["run_dir"]).resolve()
@@ -813,9 +835,10 @@ def _prepare_trajectories(
                 original = json.loads(source_data)
                 task_id = original["task_id"]
                 entry["task_id"] = task_id
-                if task_id in manifest["task_ids"]:
+                if not identified and task_id in manifest["task_ids"]:
                     raise ValueError("Duplicate task in trajectory selection")
-                manifest["task_ids"].append(task_id)
+                if task_id not in manifest["task_ids"]:
+                    manifest["task_ids"].append(task_id)
                 task_data = task_path(task_manifest, task_id, "train").read_bytes()
                 if hashlib.sha256(task_data).hexdigest() != original["task_sha256"]:
                     raise ValueError(
@@ -824,6 +847,35 @@ def _prepare_trajectories(
                 task = task_from_record(json.loads(task_data))
                 if task.origin is None or task.origin.split != "train":
                     raise ValueError("Source must identify a training task")
+                family = task.origin.family_id
+                if identified:
+                    if family_counts.get(family, 0) >= 2:
+                        raise ValueError(
+                            "At most two demonstrations per training family"
+                        )
+                    if (
+                        family_counts.get(family, 0)
+                        and not item.get("complementary_reason", "").strip()
+                    ):
+                        raise ValueError(
+                            "Second demonstration needs a complementary reason"
+                        )
+                    behavior = protocol.fingerprint(
+                        [
+                            step["action"]
+                            for step, label in zip(
+                                original["trajectory"], item["actions"], strict=True
+                            )
+                            if label["supervise"]
+                        ]
+                        + [
+                            c["reply"]
+                            for c in item.get("corrections", [])
+                            if c["supervision"]["supervise"]
+                        ]
+                    )
+                    if behavior in behaviors.get(family, set()):
+                        raise ValueError("Meaningless repeated demonstration")
                 validate_history(original, task, encoding, config.protocol)
                 if any(
                     original["fingerprints"][key] != fingerprints(config)[key]
@@ -883,6 +935,9 @@ def _prepare_trajectories(
                     writer,
                     supervision=decisions,
                     max_context_tokens=max_context_tokens,
+                    demonstration_id=item["demonstration_id"] if identified else None,
+                    provenance=item.get("provenance"),
+                    complementary_reason=item.get("complementary_reason", ""),
                 )
                 save_record(
                     result,
@@ -899,6 +954,9 @@ def _prepare_trajectories(
                         (result.run_dir / "run.json").read_bytes()
                     ).hexdigest(),
                 )
+                if identified and entry["status"] == "accepted":
+                    family_counts[family] = family_counts.get(family, 0) + 1
+                    behaviors.setdefault(family, set()).add(behavior)
             except (ValueError, KeyError, TypeError) as error:
                 entry["reason"] = str(error)
             except OSError as error:
