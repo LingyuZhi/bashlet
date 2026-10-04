@@ -366,5 +366,13 @@
     ]
   },
   "interpretation": "Screening only. SFT has fewer Harness and coding successes and no workspace benefit. No three-seed confirmation was triggered, no confirmed capability improvement or regression is claimed, and no OPSD start is emitted.",
-  "monitoring": "Offline metrics and caches retained; initial online action was rejected by automatic approval."
+  "monitoring": {
+    "status": "synced-and-verified",
+    "runs": 7,
+    "entity": "lingyuzhi-chinese-academy-of-sciences",
+    "project": "bashlet",
+    "group": "issue25-dual-track-v1",
+    "verification_file": "wandb-sync-verification.json",
+    "verification_sha256": "7156912919db2fdfd72f7d7afdafd0a261a14bfaed6c1569a34938a97c14cb2c"
+  }
 }

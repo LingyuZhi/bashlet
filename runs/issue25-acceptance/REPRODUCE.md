@@ -49,6 +49,6 @@ uv run --locked bashlet select-sft runs/issue07-sft-v1 \
 
 早期 `base/` 在离线监控被错误要求在线验证时退出，尚无任务采样；`sft-step12-identity-rejected/` 因传入错误快照哈希被拒绝，也没有任务尝试。这些记录单独保留，不计为追加实验样本。
 
-监控清单为 `monitoring-upload.json`，包含 7 个完成运行及其允许字段。直接编程监控使用 `coding-base-monitor/`、`coding-sft-monitor/` 从原评测导入，明确为历史导入，并排除未计算的首次实现／恢复指标。原始数据和哈希未改。自动审批两次拒绝在线上传，因此当前仅保存离线缓存；获明确授权后，可对清单中的各 `run_dir` 使用 `bashlet monitor sync` 同步到既有 `lingyuzhi-chinese-academy-of-sciences/bashlet`。
+监控清单为 `monitoring-upload.json`，包含 7 个完成运行及其允许字段。直接编程监控使用 `coding-base-monitor/`、`coding-sft-monitor/` 从原评测导入，明确为历史导入，并排除未计算的首次实现／恢复指标。原始数据和哈希未改。自动审批曾两次拒绝在线上传。2026-10-04 用户明确授权后，清单中的 7 个运行均通过 `bashlet monitor sync` 同步到既有 `lingyuzhi-chinese-academy-of-sciences/bashlet`。已从云端逐项核对通过数、固定分母、通过率／选优状态及历史步数；同步证明和 URL 在 `wandb-sync-verification.json`。
 
 `validation.json` 与 `review.json` 记录验证范围及两轴审查。全量 382 项通过；最后的 HTTP 策略修正另跑受影响文件，不把此前全量结果冒充修正后的全量复跑。
