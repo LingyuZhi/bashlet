@@ -1060,7 +1060,7 @@
   "actual_paid_cny": null,
   "validation": {
     "path": "runs/issue26-bounded-sft/validation.json",
-    "sha256": "5eefa7b2def0e0b944901642778ec328307374a45d26928e4de67c5997e3e560"
+    "sha256": "7fef1d4c9f52626f1913fe6b589141f042cfafb88b7bf10b9b5b447e563136bc"
   },
   "training_verification": {
     "path": "runs/issue26-bounded-sft/training-verification.json",

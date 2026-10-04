@@ -53,4 +53,4 @@ step 4/8 的单 seed 编程通过数与基线相同；step 1 少 1 题。这些�
 
 训练继续使用 [既有 W&B 项目中的训练运行](https://wandb.ai/lingyuzhi-chinese-academy-of-sciences/bashlet/runs/06e28c14a2ce4dd99942bd6c3df7d942)。训练、开发成绩、模型引用和费用仅上传允许字段；原始轨迹、代码、权重及隐藏评分材料留在原存储位置。离线缓存通过既有入口恢复；云端历史逐行核对见 [W&B 核验](wandb-verification.json)。
 
-复跑命令、数据与配置身份见 [REPRODUCE.md](REPRODUCE.md)。实现加入 `max_epochs` 防止误跑第二遍，并记录样本、输入 token、监督 token 与检查点进度。CLI 的提前停止、恢复及计数验证通过；选择器实际拒绝产生不合格起点。全量 383 项测试通过，mypy 与 Ruff 通过，详见 [validation.json](validation.json)。
+复跑命令、数据与配置身份见 [REPRODUCE.md](REPRODUCE.md)。实现加入 `max_epochs` 防止误跑第二遍，并记录样本、输入 token、监督 token 与检查点进度。CLI 的提前停止、恢复及计数验证通过；选择器实际拒绝产生不合格起点。身份链修复后全量 390 项测试通过，mypy 与 Ruff 通过，详见 [validation.json](validation.json)。Standards 与 Spec 两轴复审均无未解决发现，见 [审查记录](code-review.md)。

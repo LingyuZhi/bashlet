@@ -1,11 +1,15 @@
 {
   "full_suite": {
-    "command": "uv run --locked pytest -q --junitxml=runs/issue26-bounded-sft/tests.xml",
-    "tests": 383,
+    "command": "uv run --locked pytest -q --junitxml=runs/issue26-bounded-sft/tests-final.xml",
+    "tests": 390,
     "failures": 0,
     "errors": 0,
-    "seconds": 1693.942,
-    "junit_sha256": "a029cee02aa7c09b47d42803d8e224e91f15ded05c3ee8ce53a37bfdfadb0edf"
+    "skipped": 0,
+    "seconds": 1700.042,
+    "junit_file": "runs/issue26-bounded-sft/tests-final.xml",
+    "junit_sha256": "97313155091e9430928642607ece6042cc8a8d676a73f76161e24daad26a4b1f",
+    "tested_source_commit": "2f56359",
+    "source_changed_during_final_suite": false
   },
   "training_file": {
     "tests": 12,
@@ -36,5 +40,13 @@
     "command": "uv run --locked pytest -q tests/test_local_snapshots.py tests/test_acceptance_selection.py -k 'export_preserves or resumed_selection'",
     "code_commit": "2f56359",
     "runtime_claim": "SDK doubles through existing CLI; actual unchanged local evaluations separately reselected"
+  },
+  "pre_review_full_suite": {
+    "command": "uv run --locked pytest -q --junitxml=runs/issue26-bounded-sft/tests.xml",
+    "tests": 383,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 1693.942,
+    "junit_sha256": "a029cee02aa7c09b47d42803d8e224e91f15ded05c3ee8ce53a37bfdfadb0edf"
   }
 }

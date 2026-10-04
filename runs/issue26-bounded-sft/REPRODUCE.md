@@ -83,6 +83,8 @@ uv run --locked python runs/issue26-bounded-sft/build-report.py
 
 检查 `student_snapshot`、`frozen_teacher_snapshot`、`sft_training_state` 均为 null。此结果不能初始化 OPSD。权威选择为 `selection-verified/selection.json`；`selection/selection.json` 保留修复前的身份误判。两次选择使用相同评测，没有增加采样分母。选择器从当前 journal 或对应内容哈希归档核验训练身份，不能用异源训练记录代替。完整训练状态及原始轨迹保持不变。
 
+`build-report.py` 汇总本次保留记录。新实验应先改好其中的产物路径，再生成自己的摘要。
+
 监控断网恢复使用既有入口，云端仅接收允许字段：
 
 ```bash
