@@ -31,7 +31,9 @@
 
 两轨共享 10 个 MBPP 家族，环境变体属于已有家族。各 seed、变体及检查点均不能作为新的独立题目。逐题结果与轨迹引用保存在 [per-task.json](per-task.json)，逐类诊断见 [acceptance.json](acceptance.json)。未使用最终测试集。
 
-step 4/8 的单 seed 编程通过数与基线相同；step 1 少 1 题。这些结果不能确认编程保持或回退。所有候选的工作区通过数为零，因此初筛均不满足任务 25 的有希望规则，未扩展 seed 17/29。未用格式、效率或 loss 抵消未满足的资格要求。最终选择器将三个候选均记为 `insufficient`，三个生产起点字段均为 null。见 [selection.json](selection/selection.json)。
+step 4/8 的单 seed 编程通过数与基线相同；step 1 少 1 题。这些结果不能确认编程保持或回退。所有候选的工作区通过数为零，因此初筛均不满足任务 25 的有希望规则，未扩展 seed 17/29。未用格式、效率或 loss 抵消未满足的资格要求。最终选择器将三个候选均记为 `insufficient`，三个生产起点字段均为 null。见 [selection.json](selection-verified/selection.json)。
+
+审查发现选择器曾把早期导出时的训练记录哈希与最终可变记录比较，错误记下 step 1/4 的身份缺口。修复后，导出会按内容哈希归档训练记录；选择器校验同一 run、配置、元数据、更新前缀和对应完整检查点。旧导出和评测未修改，已保存的历史字节与旧导出哈希一致。使用相同评测重新选优后，六个身份误判消除，三个候选的资格结论保持不变。原选择保留在 `selection/`，修复后的选择保存在 `selection-verified/`。没有新增训练或采样。核验见 [selection-verification.json](selection-verification.json)。
 
 ## 行为证据与缺口
 

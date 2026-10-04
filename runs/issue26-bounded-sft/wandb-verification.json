@@ -31,6 +31,16 @@
       }
     },
     {
+      "local_run": "runs/issue26-bounded-sft/selection-verified",
+      "url": "https://wandb.ai/lingyuzhi-chinese-academy-of-sciences/bashlet/runs/a4bf09e26e2d48ef866bbec3b7e057c3",
+      "history_rows": 1,
+      "all_local_metric_rows_match": true,
+      "summary": {
+        "checkpoint/acceptance_status": "no_qualified_snapshot",
+        "checkpoint/qualified_candidates": 0
+      }
+    },
+    {
       "local_run": "runs/issue26-bounded-sft/step1-screening/coding/seed-4",
       "url": "https://wandb.ai/lingyuzhi-chinese-academy-of-sciences/bashlet/runs/c015eaad0fd844858ec311dbc6e858b2",
       "history_rows": 38,

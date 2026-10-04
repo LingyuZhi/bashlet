@@ -21,7 +21,7 @@ uv run --env-file configs/bounded-harness-training.env --locked bashlet train-sf
 
 ## 导出与本地服务
 
-对 1、4、8 三个检查点分别使用对应目录。以 step 8 为例：
+对 1、4、8 三个检查点分别使用对应目录。导出会把当时的训练 journal 保存为 `training/training-records/<sha256>.json`，使早期快照在训练恢复后仍可验证。以 step 8 为例：
 
 ```bash
 uv run --locked bashlet export-snapshot runs/issue26-bounded-sft/training \
@@ -81,7 +81,7 @@ uv run --locked bashlet select-sft runs/issue26-bounded-sft/training \
 uv run --locked python runs/issue26-bounded-sft/build-report.py
 ```
 
-检查 `student_snapshot`、`frozen_teacher_snapshot`、`sft_training_state` 均为 null。此结果不能初始化 OPSD。原选择记录、完整训练状态及原始轨迹保持不变。
+检查 `student_snapshot`、`frozen_teacher_snapshot`、`sft_training_state` 均为 null。此结果不能初始化 OPSD。权威选择为 `selection-verified/selection.json`；`selection/selection.json` 保留修复前的身份误判。两次选择使用相同评测，没有增加采样分母。选择器从当前 journal 或对应内容哈希归档核验训练身份，不能用异源训练记录代替。完整训练状态及原始轨迹保持不变。
 
 监控断网恢复使用既有入口，云端仅接收允许字段：
 
@@ -89,7 +89,7 @@ uv run --locked python runs/issue26-bounded-sft/build-report.py
 uv run --locked bashlet monitor sync runs/issue26-bounded-sft/step8-screening/harness/seed-4
 uv run --locked bashlet monitor sync runs/issue26-bounded-sft/step8-screening/coding/seed-4
 uv run --locked bashlet monitor sync runs/issue26-bounded-sft/step8-screening/variant/seed-4
-uv run --locked bashlet monitor sync runs/issue26-bounded-sft/selection
+uv run --locked bashlet monitor sync runs/issue26-bounded-sft/selection-verified
 uv run --locked python runs/issue26-bounded-sft/verify-monitoring.py
 ```
 

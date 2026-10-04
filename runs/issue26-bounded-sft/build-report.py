@@ -16,7 +16,7 @@ def reference(path):
 
 baseline_path = Path("runs/issue25-acceptance/base-v1/acceptance.json")
 baseline = read(baseline_path)
-selection = read(root / "selection/selection.json")
+selection = read(root / "selection-verified/selection.json")
 training = read(root / "training/training.json")
 records = {"base": (baseline_path, baseline)}
 for step in (1, 4, 8):
@@ -67,7 +67,9 @@ report = {
     "training_config": training["metadata"]["training"],
     "training_volume": training["data_progress"],
     "checkpoints": training["checkpoints"], "loss_updates": training["updates"],
-    "results": tracks, "per_task": "per-task.json", "selection": reference(root / "selection/selection.json"),
+    "results": tracks, "per_task": "per-task.json", "selection": reference(root / "selection-verified/selection.json"),
+    "selection_verification": reference(root / "selection-verification.json"),
+    "code_review": reference(root / "code-review.md"),
     "confirmation": {"frozen_seeds": [4, 17, 29], "executed_seeds": [4],
                      "reason": "Every candidate fails the frozen promising screen: no workspace task gain. Do not add seeds to fish for qualification."},
     "environment_or_feedback_task_benefit": "not established under the frozen workspace criterion",
@@ -83,7 +85,12 @@ report = {
         reference(root / f"training/step{step}-record.json") for step in (1, 4)
     ],
     "historical_record_provenance": "Reconstructed from the completed journal; each byte hash matches the training-record hash captured by its original export.",
-    "monitoring_verification": reference(root / "wandb-verification.json") | {"verified_runs": 13},
+    "immutable_training_records": [
+        reference(path) for path in sorted((root / "training/training-records").glob("*.json"))
+    ],
+    "monitoring_verification": reference(root / "wandb-verification.json") | {
+        "verified_runs": len(read(root / "wandb-verification.json")["verified"])
+    },
     "service_restoration": reference(root / "service-restored.json") | {
         "scope": "pre-existing diagnostic service; no qualified initializer",
     },

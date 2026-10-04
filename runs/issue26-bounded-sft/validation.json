@@ -14,7 +14,8 @@
   },
   "tdd": {
     "single_pass_cap": "red then green through train-sft CLI",
-    "cumulative_resume_progress": "red then green through train-sft CLI"
+    "cumulative_resume_progress": "red then green through train-sft CLI",
+    "checkpoint_journal_identity": "3 red failures reproduced; 9 green CLI cases, including damaged and foreign journals"
   },
   "mypy": {
     "source_files": 52,
@@ -25,7 +26,15 @@
     "files": 52,
     "result": "passed"
   },
-  "implementation_patch_sha256": "c1eaa0e9eb0a02099eb4006cae78067d09b38aa89891dac7336356b824b47daa",
+  "implementation_patch_sha256": "6511c20a13d0ea35f683661d19cf8cb3f989d6cad6233c1154d47d763e6a1fb6",
   "test_scope": "SDK doubles and real sandbox integration; pilot task performance is separate experimental evidence",
-  "implementation_patch_format": "unified=0; apply with git apply --unidiff-zero"
+  "implementation_patch_format": "unified=0; apply with git apply --unidiff-zero",
+  "identity_regression": {
+    "tests": 9,
+    "passed": 9,
+    "seconds": 32.01,
+    "command": "uv run --locked pytest -q tests/test_local_snapshots.py tests/test_acceptance_selection.py -k 'export_preserves or resumed_selection'",
+    "code_commit": "2f56359",
+    "runtime_claim": "SDK doubles through existing CLI; actual unchanged local evaluations separately reselected"
+  }
 }

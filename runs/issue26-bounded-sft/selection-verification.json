@@ -10,5 +10,80 @@
   "initializer_fields_null": true,
   "OPSD_executed": false,
   "extra_epochs_or_parameter_search": false,
-  "reason_for_no_confirmation": "No candidate gained workspace tasks under the frozen screening rule; one-seed data do not establish coding preservation or regression."
+  "reason_for_no_confirmation": "No candidate gained workspace tasks under the frozen screening rule; one-seed data do not establish coding preservation or regression.",
+  "identity_repair": {
+    "original_selection": {
+      "path": "runs/issue26-bounded-sft/selection/selection.json",
+      "sha256": "002d91be0b97de055d16921517403688e78d80e9d8c1b17ff205eac6229c550c"
+    },
+    "verified_selection": {
+      "path": "runs/issue26-bounded-sft/selection-verified/selection.json",
+      "sha256": "8a28119566c1922583680d5cb3b6923f480ff797b915f1fa669517b94776dcfc"
+    },
+    "new_sampling_or_training": false,
+    "candidates": [
+      {
+        "step": 1,
+        "removed_false_identity_gaps": [
+          "sft_training_identity_mismatch:harness:seed-4",
+          "sft_training_identity_mismatch:coding:seed-4",
+          "sft_training_identity_mismatch:variant:seed-4"
+        ],
+        "remaining_gaps": [
+          "missing:harness:seed-17",
+          "missing:harness:seed-29",
+          "missing:coding:seed-17",
+          "missing:coding:seed-29",
+          "missing:variant:seed-17",
+          "missing:variant:seed-29",
+          "missing:harness:seed-17",
+          "missing:harness:seed-29",
+          "missing:coding:seed-17",
+          "missing:coding:seed-29",
+          "missing:variant:seed-17",
+          "missing:variant:seed-29"
+        ]
+      },
+      {
+        "step": 4,
+        "removed_false_identity_gaps": [
+          "sft_training_identity_mismatch:harness:seed-4",
+          "sft_training_identity_mismatch:coding:seed-4",
+          "sft_training_identity_mismatch:variant:seed-4"
+        ],
+        "remaining_gaps": [
+          "missing:harness:seed-17",
+          "missing:harness:seed-29",
+          "missing:coding:seed-17",
+          "missing:coding:seed-29",
+          "missing:variant:seed-17",
+          "missing:variant:seed-29",
+          "missing:harness:seed-17",
+          "missing:harness:seed-29",
+          "missing:coding:seed-17",
+          "missing:coding:seed-29",
+          "missing:variant:seed-17",
+          "missing:variant:seed-29"
+        ]
+      },
+      {
+        "step": 8,
+        "removed_false_identity_gaps": [],
+        "remaining_gaps": [
+          "missing:harness:seed-17",
+          "missing:harness:seed-29",
+          "missing:coding:seed-17",
+          "missing:coding:seed-29",
+          "missing:variant:seed-17",
+          "missing:variant:seed-29",
+          "missing:harness:seed-17",
+          "missing:harness:seed-29",
+          "missing:coding:seed-17",
+          "missing:coding:seed-29",
+          "missing:variant:seed-17",
+          "missing:variant:seed-29"
+        ]
+      }
+    ]
+  }
 }
