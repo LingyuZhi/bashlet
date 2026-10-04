@@ -422,7 +422,6 @@ def freeze(
     candidates = []
     rejected = []
     corrections = 0
-    records = {}
     sources = {source["name"]: source for source in plan["sources"]}
     for index, (attempt, decision) in enumerate(zip(attempts, decisions, strict=True)):
         provenance = attempt["provenance"]
@@ -451,7 +450,6 @@ def freeze(
         record = _evidence(root, collection, attempt, decision, task_info)
         reason = decision["reason"] if not decision["accept"] else ""
         if record is not None:
-            records[attempt["demonstration_id"]] = record
             task = task_from_record(
                 json.loads(
                     task_path(
@@ -544,7 +542,7 @@ def freeze(
                 }
             )
     report = _report(
-        plan, collection, decisions, records, rows, rejected, len(candidates), outcomes
+        plan, collection, decisions, rows, rejected, len(candidates), outcomes
     )
     _save(output_dir / "report.json", report)
     _save(
@@ -577,7 +575,6 @@ def _report(
     plan: dict[str, Any],
     collection: dict[str, Any],
     decisions: list[dict[str, Any]],
-    records: dict[str, Any],
     rows: list[dict[str, Any]],
     rejected: list[dict[str, Any]],
     candidates: int,
