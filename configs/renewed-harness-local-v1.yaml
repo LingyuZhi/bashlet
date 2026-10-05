@@ -1,0 +1,13 @@
+# Layer after local-base.yaml; use the same server settings for all snapshots.
+model:
+  base_url: http://127.0.0.1:18029
+  timeout_seconds: 120
+  max_retries: 0
+  sampling:
+    max_tokens: 1024
+    temperature: 1.0
+    top_p: 1.0
+budget:
+  max_steps: 10
+  max_generated_tokens: 8192
+  max_seconds: 300.0

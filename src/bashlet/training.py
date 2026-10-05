@@ -121,6 +121,7 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
     ):
         raise ValueError("SFT dataset accepted count does not match its examples")
     datums = []
+    verified_examples = []
     seen = set()
     family_counts: dict[str, int] = {}
     for row in rows:
@@ -203,7 +204,18 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
         ):
             raise ValueError("Invalid shifted assistant-only SFT supervision")
         datums.append(datum)
-    return manifest, datums
+        verified_examples.append(
+            {
+                "demonstration_id": meta[identity_field],
+                "family_id": origin.family_id,
+                "task_type": meta.get("task_type") or "short_program",
+                "source": meta.get("provenance", {}).get("generation_method")
+                or meta["source"],
+                "input_tokens": len(inputs),
+                "supervised_tokens": int(sum(weights)),
+            }
+        )
+    return manifest | {"verified_examples": verified_examples}, datums
 
 
 class PyTRIOTraining:
@@ -372,19 +384,52 @@ def training_cost(ledger: SpendLedger, run_id: str) -> dict[str, Any]:
 
 def _data_progress(
     datums: list[trio.Datum], updates: list[dict[str, Any]]
-) -> dict[str, int | float]:
+) -> dict[str, int | float | None]:
     samples = sum(update["samples"] for update in updates)
+    identities_known = all("demonstration_ids" in update for update in updates)
     return {
         "dataset_samples": len(datums),
+        "dataset_input_tokens": sum(len(d.model_input.to_ints()) for d in datums),
         "dataset_supervised_tokens": int(
             sum(sum(d.loss_fn_inputs["weights"].tolist()) for d in datums)
         ),
         "samples_processed": samples,
+        "unique_demonstrations_processed": len(
+            {identity for update in updates for identity in update["demonstration_ids"]}
+        )
+        if identities_known
+        else None,
+        "unique_families_processed": len(
+            {family for update in updates for family in update["family_ids"]}
+        )
+        if identities_known
+        else None,
         "epochs_processed": samples / len(datums),
         "input_tokens_processed": sum(update["input_tokens"] for update in updates),
         "supervised_tokens_processed": sum(
             update["supervised_tokens"] for update in updates
         ),
+    }
+
+
+def _dataset_inventory(examples: list[dict[str, Any]]) -> dict[str, Any]:
+    def summarize(rows: list[dict[str, Any]]) -> dict[str, int]:
+        return {
+            "demonstrations": len(rows),
+            "families": len({row["family_id"] for row in rows}),
+            "input_tokens": sum(row["input_tokens"] for row in rows),
+            "supervised_tokens": sum(row["supervised_tokens"] for row in rows),
+        }
+
+    return summarize(examples) | {
+        "examples": examples,
+        **{
+            f"by_{field}": {
+                value: summarize([row for row in examples if row[field] == value])
+                for value in sorted({row[field] for row in examples})
+            }
+            for field in ("task_type", "source")
+        },
     }
 
 
@@ -399,6 +444,7 @@ def _train_sft(
         raise ValueError("stop_after must be a positive optimizer step")
     config = SFTConfig.read(config_path)
     manifest, datums = load_demonstrations(Path(config.dataset))
+    inventory = _dataset_inventory(manifest["verified_examples"])
     batches_per_epoch = math.ceil(len(datums) / config.batch_size)
     if config.max_epochs is not None and (
         config.steps > config.max_epochs * batches_per_epoch
@@ -459,6 +505,8 @@ def _train_sft(
         record = json.loads(path.read_text())
         if record["config"] != settings or record["metadata"] != metadata:
             raise ValueError("Resume must preserve training configuration and data")
+        if record.get("dataset_inventory", inventory) != inventory:
+            raise ValueError("Resume must preserve verified demonstration identities")
         if record["pending_update"] is not None:
             raise ValueError("Uncertain remote update must be reconciled before resume")
         restore = next(
@@ -503,6 +551,7 @@ def _train_sft(
         require_online=True,
     )
     record["data_progress"] = _data_progress(datums, record["updates"])
+    record["dataset_inventory"] = inventory
     write_document(path, record)
     try:
         backend = PyTRIOTraining(config, ledger, record["run_id"], restore)
@@ -521,16 +570,19 @@ def _train_sft(
             epoch, batch_index = divmod(step - 1, batches_per_epoch)
             indices = list(range(len(datums)))
             random.Random(config.seed + epoch).shuffle(indices)
-            batch = [
-                datums[i]
-                for i in indices[
-                    batch_index * config.batch_size : (batch_index + 1)
-                    * config.batch_size
-                ]
+            batch_indices = indices[
+                batch_index * config.batch_size : (batch_index + 1) * config.batch_size
             ]
+            batch = [datums[i] for i in batch_indices]
             record["pending_update"] = step
             write_document(path, record)
             update = backend.update(batch, step)
+            update["epoch"] = epoch
+            update["batch_index"] = batch_index
+            for field in ("demonstration_id", "family_id", "task_type", "source"):
+                update[f"{field}s"] = [
+                    manifest["verified_examples"][i][field] for i in batch_indices
+                ]
             record["updates"].append(update)
             record["optimizer_step"], record["pending_update"] = step, None
             record["data_progress"] = _data_progress(datums, record["updates"])
@@ -551,7 +603,11 @@ def _train_sft(
                 }
                 metrics.update(spend_metrics(record["cost"]))
                 metrics.update(
-                    {f"train/{k}": v for k, v in record["data_progress"].items()}
+                    {
+                        f"train/{k}": v
+                        for k, v in record["data_progress"].items()
+                        if v is not None
+                    }
                 )
                 monitor.log(f"update-{step}", metrics)
             if step % config.checkpoint_every == 0 or step == final_step:

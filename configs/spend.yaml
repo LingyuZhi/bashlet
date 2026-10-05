@@ -11,6 +11,7 @@ limits:
     sft: 4
     sft-development: 4
     local-snapshot-inference: 5
+    renewed-harness-sft: 1.28
 prices_cny_per_million:
   prefill: 1.49
   cache: 0.30

@@ -160,6 +160,36 @@ def test_executed_loader_rejects_a_modified_submission(tmp_path: Path) -> None:
         load_demonstrations(path)
 
 
+def test_resumed_epochs_report_unique_demonstrations_and_families(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = training_input(tmp_path, executed=True)
+    config = training_config(tmp_path, manifest)
+    external_sdks(tmp_path, monkeypatch)
+    with (tmp_path / "sitecustomize.py").open("a") as stream:
+        stream.write("import training_sdk\ntraining_sdk.install()\n")
+    monkeypatch.setenv("PYTRIO_API_KEY", "test-key")
+    monkeypatch.setenv("FAKE_TRAINING_ROOT", str(tmp_path))
+    output = tmp_path / "training"
+    args = ["train-sft", str(config), "--output-dir", str(output)]
+    first = cli(*args, "--stop-after", "1", cwd=tmp_path, timeout=60)
+    assert first.returncode == 0, first.stdout + first.stderr
+    second = cli(*args, "--resume", cwd=tmp_path, timeout=60)
+    assert second.returncode == 0, second.stdout + second.stderr
+    record = json.loads((output / "training.json").read_text())
+    progress = record["data_progress"]
+    assert progress["samples_processed"] == 2
+    assert progress["unique_demonstrations_processed"] == 1
+    assert progress["unique_families_processed"] == 1
+    assert record["dataset_inventory"]["families"] == 1
+    assert record["dataset_inventory"]["demonstrations"] == 1
+    assert record["updates"][0]["demonstration_ids"] == record["updates"][1][
+        "demonstration_ids"
+    ]
+    assert record["updates"][0]["family_ids"] == record["updates"][1]["family_ids"]
+    assert record["checkpoints"][-1]["data_progress"] == progress
+
+
 def training_config(tmp_path: Path, manifest: Path) -> Path:
     config = tmp_path / "training.yaml"
     config.write_text(

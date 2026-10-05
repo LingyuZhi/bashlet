@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 import yaml
 from adapters import ByteEncoding
+from huggingface_hub import snapshot_download
 from transformers import AutoTokenizer
 
 from bashlet import FunctionGrader, GradingCase, Task, run_experiment
@@ -403,9 +404,13 @@ def test_generation_at_the_context_limit_keeps_its_tokens_and_logprobs(
 def test_cli_selects_vllm_and_displays_only_development_evidence(
     tmp_path: Path, service: FakeVLLM
 ) -> None:
-    tokenizer = AutoTokenizer.from_pretrained(
+    snapshot = snapshot_download(
         "Qwen/Qwen3-1.7B",
         revision="70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+        local_files_only=True,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(
+        snapshot,
         local_files_only=True,
     )
     reply = (
