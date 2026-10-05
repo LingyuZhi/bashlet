@@ -1,7 +1,6 @@
 """OPSD behavior through run_experiment, with only model services replaced."""
 
 import json
-from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -10,7 +9,7 @@ from typing import Any
 
 import monitoring_sdk
 import pytest
-from adapters import ByteEncoding, ScriptedModel, bash, submit, turn_number, write_file
+from adapters import ByteEncoding, ControlledOPSD
 
 from bashlet import (
     FunctionGrader,
@@ -27,96 +26,15 @@ from bashlet.distillation import (
     TeacherScores,
     UpdateResult,
 )
-from bashlet.models import EpisodeResult, Generation, Model, TaskOrigin
+from bashlet.models import (
+    ContextExhausted,
+    EpisodeResult,
+    Generation,
+    Model,
+    ModelResponseError,
+    TaskOrigin,
+)
 from bashlet.monitoring import MonitorConfig
-
-
-class Future[T]:
-    def __init__(self, complete: Callable[[], T]) -> None:
-        self.complete = complete
-
-    def result(self, timeout: float | None = None) -> T:
-        return self.complete()
-
-
-class ControlledOPSD:
-    """Declared test SFT, token scorer, and completed optimizer receipt."""
-
-    teacher_identity = "test/sft@selected"
-    teacher_encoding = ByteEncoding()
-
-    def __init__(self) -> None:
-        self.student = ScriptedModel(self.respond, identity=self.teacher_identity)
-        self.scoring: list[tuple[int, ...]] = []
-        self.updates: list[dict[str, Any]] = []
-        self.refreshed: list[int] = []
-        self.completed = 0
-        self.restored: list[UpdateResult] = []
-        self.update_completion: Callable[[], None] = lambda: None
-        self.score_response: Callable[[TeacherScores], TeacherScores] = lambda value: (
-            value
-        )
-
-    def respond(self, context: str) -> Generation:
-        assert "TEACHER_ONLY_REFERENCE" not in context
-        turn = turn_number(context)
-        reply = {
-            1: write_file("def double(n): return n + 2\n"),
-            2: bash("python3 feedback.py"),
-            3: write_file("def double(n): return n * 2\n"),
-            4: bash("python3 feedback.py"),
-            5: bash("true"),
-            6: submit(),
-        }[turn]
-        if turn == 3:
-            assert "AssertionError" in context
-        from adapters import sample_text
-
-        raw = sample_text(reply, 1024)
-        return replace(raw, logprobs=(-1.0,) * len(raw.tokens))
-
-    def score(self, tokens: Sequence[int]) -> Future[TeacherScores]:
-        self.scoring.append(tuple(tokens))
-        assert "TEACHER_ONLY_REFERENCE" in self.teacher_encoding.render(tokens)
-        values: list[float | None] = [-0.25] * len(tokens)
-        values[0], values[-1] = None, -1.75
-        return Future(
-            lambda: self.score_response(
-                TeacherScores(
-                    tuple(tokens),
-                    tuple(values),
-                    self.teacher_identity,
-                    self.teacher_encoding.identity,
-                    f"score-{len(self.scoring)}",
-                )
-            )
-        )
-
-    def update(self, batch: list[Any], **kwargs: Any) -> Future[UpdateResult]:
-        self.updates.append({"batch": batch, **kwargs})
-
-        def complete() -> UpdateResult:
-            self.update_completion()
-            self.completed += 1
-            return UpdateResult(
-                kwargs["optimizer_step"],
-                0.125,
-                f"test/student@opsd-{self.completed}",
-                f"test/training-state@opsd-{self.completed}",
-            )
-
-        return Future(complete)
-
-    def refresh_student(self, update: UpdateResult) -> Model:
-        assert self.completed == update.optimizer_step
-        self.refreshed.append(update.optimizer_step)
-        self.student = ScriptedModel(self.respond, identity=update.student_policy)
-        return self.student
-
-    def restore_student(self, update: UpdateResult) -> Model:
-        self.restored.append(update)
-        self.completed = update.optimizer_step
-        return self.refresh_student(update)
 
 
 def repair_task() -> Task:
@@ -285,6 +203,14 @@ def test_update_metrics_use_supervised_denominator_and_keep_unknown_bills_distin
     assert row["spend/run_actual_known"] is False
     assert "spend/run_actual_cny" not in row
     assert row["spend/run_upper_cny"] > 0
+    assert row["checkpoint/sampler"] == "test/student@opsd-1"
+    assert row["checkpoint/training_state"] == "test/training-state@opsd-1"
+    assert remote["config"]["data_source"] == {
+        "dataset": "google-research/mbpp",
+        "revision": "test-revision",
+        "source_sha256": "a" * 64,
+        "split": "train",
+    }
     assert remote["config"]["evidence_kind"] == "test-double"
     assert not any(
         value in json.dumps(remote)
@@ -475,6 +401,12 @@ def test_rejected_remote_update_keeps_its_charge_and_allows_a_safe_new_batch(
     assert metrics[-1]["train/valid_batches"] == 1
     assert metrics[-1]["spend/run_upper_cny"] > metrics[0]["spend/run_upper_cny"]
     assert metrics[0]["run/reason"] == "remote_update_rejected:transient"
+    assert metrics[0]["train/training_submitted_input_tokens"] == len(
+        adapter.updates[0]["batch"][0].model_input.to_ints()
+    )
+    assert metrics[0]["train/training_seconds"] > 0
+    assert metrics[0]["train/training_usage_known"] is False
+    assert "train/training_input_tokens" not in metrics[0]
 
 
 @pytest.mark.parametrize(
@@ -923,3 +855,85 @@ def test_monitor_interrupt_after_completed_update_can_resume_without_duplicate_e
     assert json.loads((run.root / "monitor.json").read_text())["id"] == before["id"]
     rows = json.loads((run.root / "remote.json").read_text())["rows"]
     assert [row["train/optimizer_step"] for row in rows] == [1, 2]
+
+
+def test_token_specific_rollout_and_teacher_probabilities_remain_at_their_positions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run, adapter = controlled_run(tmp_path, monkeypatch)
+    student = adapter.student
+
+    def respond(context: str) -> Generation:
+        raw = adapter.respond(context)
+        values = [-2.0 if token == 301 else -1.0 for token in raw.tokens]
+        values[0], values[-1] = -0.75, -0.5
+        return replace(raw, logprobs=tuple(values))
+
+    def score(scores: TeacherScores) -> TeacherScores:
+        raw = student.generations[len(adapter.scoring) - 1].tokens
+        values = list(scores.logprobs)
+        offset = len(scores.tokens) - len(raw)
+        for index, token in enumerate(raw):
+            if token == 301:
+                values[offset + index] = -0.125
+        return replace(scores, logprobs=tuple(values))
+
+    student.respond, adapter.score_response = respond, score
+    result = run_experiment(
+        task=repair_task(),
+        model=student,
+        opsd_run=run,
+        output_dir=tmp_path / "episodes",
+    )
+    assert result.opsd is not None and result.opsd["status"] == "completed"
+    datum = adapter.updates[0]["batch"][0]
+    old = datum.loss_fn_inputs["logprobs"].tolist()
+    advantages = datum.loss_fn_inputs["advantages"].tolist()
+    for step in result.trajectory:
+        call = step.model_call
+        assert call is not None
+        start = call.context_offset - 1
+        assert old[start] == -0.75 and advantages[start] == 0.25
+        assert old[start + len(call.generation.tokens) - 1] == -0.5
+        assert advantages[start + len(call.generation.tokens) - 1] == -0.625
+        for index, token in enumerate(call.generation.tokens):
+            if token == 301:
+                assert old[start + index] == -2.0
+                assert advantages[start + index] == 0.9375
+
+
+@pytest.mark.parametrize("problem", ["model", "context"])
+def test_sampling_backend_exceptions_keep_their_semantic_outcome_and_raw_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    problem: str,
+) -> None:
+    run, adapter = controlled_run(tmp_path, monkeypatch)
+    raw = Generation((65, 301, 259), "stop", None, "rejected-raw")
+
+    def backend_error(context: str) -> Generation:
+        if problem == "model":
+            raise ModelResponseError("secret-opsd-key", raw)
+        raise ContextExhausted("secret-opsd-key")
+
+    adapter.student.respond = backend_error
+    result = run_experiment(
+        task=repair_task(),
+        model=run.student,
+        opsd_run=run,
+        output_dir=tmp_path / "episodes",
+    )
+    assert result.status == (
+        "model_error" if problem == "model" else "context_exhausted"
+    )
+    assert result.usage.generated_tokens == (3 if problem == "model" else 0)
+    assert result.rejected_generation == (raw if problem == "model" else None)
+    assert not adapter.updates and not adapter.refreshed
+    row = json.loads((run.root / "remote.json").read_text())["rows"][-1]
+    assert "secret-opsd-key" not in result.reason
+    assert "secret-opsd-key" not in json.dumps(row)
+    assert row["train/rollout_submitted_input_tokens"] > 0
+    assert row["train/rollout_seconds"] > 0
+    if problem == "model":
+        assert row["train/generated_tokens"] == 3

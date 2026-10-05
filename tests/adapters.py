@@ -2,6 +2,7 @@
 
 import shlex
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -15,7 +16,8 @@ from bashlet import (
     ReplayModel,
     SamplingParams,
 )
-from bashlet.models import JSONValue
+from bashlet.distillation import TeacherScores, UpdateResult
+from bashlet.models import JSONValue, Model
 
 SYSTEM, USER, ASSISTANT, END = 256, 257, 258, 259
 # Whole-word tokens a model may sample. ByteEncoding never produces them when
@@ -337,3 +339,91 @@ def condition_overrides(
     if bwrap is not None:
         overrides.append(f"environment.bwrap={bwrap}")
     return overrides
+
+
+class Future[T]:
+    def __init__(self, complete: Callable[[], T]) -> None:
+        self.complete = complete
+
+    def result(self, timeout: float | None = None) -> T:
+        return self.complete()
+
+
+class ControlledOPSD:
+    """Declared test SFT, token scorer, and completed optimizer receipt."""
+
+    teacher_identity = "test/sft@selected"
+    teacher_encoding = ByteEncoding()
+
+    def __init__(self) -> None:
+        self.student = ScriptedModel(self.respond, identity=self.teacher_identity)
+        self.scoring: list[tuple[int, ...]] = []
+        self.updates: list[dict[str, Any]] = []
+        self.refreshed: list[int] = []
+        self.completed = 0
+        self.restored: list[UpdateResult] = []
+        self.update_completion: Callable[[], None] = lambda: None
+        self.score_response: Callable[[TeacherScores], TeacherScores] = lambda value: (
+            value
+        )
+
+    def respond(self, context: str) -> Generation:
+        assert "TEACHER_ONLY_REFERENCE" not in context
+        turn = turn_number(context)
+        reply = {
+            1: write_file("def double(n): return n + 2\n"),
+            2: bash("python3 feedback.py"),
+            3: write_file("def double(n): return n * 2\n"),
+            4: bash("python3 feedback.py"),
+            5: bash("true"),
+            6: submit(),
+        }[turn]
+        if turn == 3:
+            assert "AssertionError" in context
+        from adapters import sample_text
+
+        raw = sample_text(reply, 1024)
+        return replace(raw, logprobs=(-1.0,) * len(raw.tokens))
+
+    def score(self, tokens: Sequence[int]) -> Future[TeacherScores]:
+        self.scoring.append(tuple(tokens))
+        assert "TEACHER_ONLY_REFERENCE" in self.teacher_encoding.render(tokens)
+        values: list[float | None] = [-0.25] * len(tokens)
+        values[0], values[-1] = None, -1.75
+        return Future(
+            lambda: self.score_response(
+                TeacherScores(
+                    tuple(tokens),
+                    tuple(values),
+                    self.teacher_identity,
+                    self.teacher_encoding.identity,
+                    f"score-{len(self.scoring)}",
+                )
+            )
+        )
+
+    def update(self, batch: list[Any], **kwargs: Any) -> Future[UpdateResult]:
+        self.updates.append({"batch": batch, **kwargs})
+
+        def complete() -> UpdateResult:
+            self.update_completion()
+            self.completed += 1
+            return UpdateResult(
+                kwargs["optimizer_step"],
+                0.125,
+                f"test/student@opsd-{self.completed}",
+                f"test/training-state@opsd-{self.completed}",
+            )
+
+        return Future(complete)
+
+    def refresh_student(self, update: UpdateResult) -> Model:
+        assert self.completed == update.optimizer_step
+        self.refreshed.append(update.optimizer_step)
+        self.student = ScriptedModel(self.respond, identity=update.student_policy)
+        return self.student
+
+    def restore_student(self, update: UpdateResult) -> Model:
+        self.restored.append(update)
+        self.completed = update.optimizer_step
+        return self.refresh_student(update)

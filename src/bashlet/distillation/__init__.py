@@ -10,6 +10,7 @@ import time
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TextIO
 
@@ -17,7 +18,16 @@ import yaml
 
 from ..config import ExperimentConfig
 from ..demonstrations import validate_history
-from ..models import Encoding, ExperimentResult, Generation, Model, SamplingParams, Task
+from ..models import (
+    ContextExhausted,
+    Encoding,
+    ExperimentResult,
+    Generation,
+    Model,
+    ModelResponseError,
+    SamplingParams,
+    Task,
+)
 from ..monitoring import (
     MonitorConfig,
     RunMonitor,
@@ -317,6 +327,7 @@ class OPSDRun:
 
     def begin(self, task: Task, model: Model, condition: ExperimentConfig) -> Model:
         self.validate_request(task, model)
+        assert task.origin is not None
         if self.record["pending_update"] is not None:
             raise ValueError("An uncertain remote update must be reconciled first")
         self._acquire_lock()
@@ -332,6 +343,10 @@ class OPSDRun:
                 "learning_rate": self.config.learning_rate,
             },
             "loss_aggregation": "sum importance-sampling loss / supervised token count",
+            "data_source": {
+                key: asdict(task.origin)[key]
+                for key in ("dataset", "revision", "source_sha256", "split")
+            },
         }
         try:
             latest = json.loads(self.path.read_text())
@@ -368,9 +383,25 @@ class OPSDRun:
         submit: Callable[[], RemoteFuture[T]],
     ) -> T:
         started = time.monotonic()
+        submitted: str | None = None
 
         def guarded_submit(entry: str) -> RemoteFuture[T]:
-            self.ledger.annotate(entry, {"run_id": self.record["run_id"]})
+            nonlocal submitted
+            submitted = entry
+            input_tokens = (
+                len(payload["prompt_tokens"])
+                if operation == "sampling"
+                else len(payload["tokens"])
+                if operation == "teacher_scoring"
+                else payload["input_tokens"]
+            )
+            self.ledger.annotate(
+                entry,
+                {
+                    "run_id": self.record["run_id"],
+                    "submitted_input_tokens": input_tokens,
+                },
+            )
             if operation == "opsd_update":
                 self.record["pending_update"] = {
                     "optimizer_step": payload["optimizer_step"],
@@ -387,12 +418,30 @@ class OPSDRun:
                 upper_cny=upper,
                 submit=guarded_submit,
                 timeout=self.config.timeout_seconds,
-                terminal_failure=lambda error: isinstance(error, UpdateRejected),
+                terminal_failure=lambda error: isinstance(
+                    error, (UpdateRejected, ModelResponseError, ContextExhausted)
+                ),
             )
+        except ModelResponseError as error:
+            if submitted is not None and error.generation is not None:
+                self.ledger.annotate(
+                    submitted,
+                    {
+                        "usage": {"output_tokens": len(error.generation.tokens)},
+                    },
+                )
+            raise ModelResponseError(
+                "Sampling response rejected", error.generation
+            ) from None
+        except ContextExhausted:
+            raise ContextExhausted("Sampling context exhausted") from None
         except (UpdateRejected, BudgetRefused):
             raise
         except Exception as error:
             raise _RemoteFailure(error) from None
+        finally:
+            if submitted is not None:
+                self.ledger.annotate(submitted, {"seconds": time.monotonic() - started})
         usage: dict[str, int] = {}
         if isinstance(result, Generation):
             usage = {
@@ -408,10 +457,45 @@ class OPSDRun:
             {
                 "run_id": self.record["run_id"],
                 "usage": usage,
-                "seconds": time.monotonic() - started,
             },
         )
         return result
+
+    def _score_step(
+        self,
+        result: ExperimentResult,
+        tokens: Sequence[int],
+        index: int,
+        target_start: int,
+    ) -> TeacherScores:
+        self._roles()
+        scores = self._call(
+            "teacher_scoring",
+            {
+                "teacher_policy": self.snapshot.identity,
+                "tokens": list(tokens),
+                "target_start": target_start,
+            },
+            self.pricing.upper_bound(len(tokens), 0, scoring=True),
+            partial(self.adapter.score, tokens),
+        )
+        # Preserve rejected responses locally before any identity/alignment check.
+        (result.run_dir / f"private/teacher-{index:04d}.json").write_text(
+            json.dumps(asdict(scores), indent=2)
+        )
+        self._roles()
+        if (
+            scores.policy != self.snapshot.identity
+            or scores.encoding != result.encoding
+        ):
+            raise ValueError(
+                "Teacher scoring identity or encoding differs from frozen SFT"
+            )
+        if list(scores.tokens) != list(tokens) or len(scores.logprobs) != len(tokens):
+            raise ValueError(
+                "Teacher token or probability lengths differ from the request"
+            )
+        return scores
 
     def _cost(self) -> dict[str, Any]:
         snapshot = self.ledger.snapshot()
@@ -428,24 +512,41 @@ class OPSDRun:
             for e in self.ledger.snapshot()["entries"]
             if e["evidence"]["payload"].get("run_id") == self.record["run_id"]
         ]
-        metrics = {}
+        metrics: dict[str, Any] = {}
         for operation, label in (
             ("sampling", "rollout"),
             ("teacher_scoring", "teacher"),
             ("opsd_update", "training"),
         ):
             rows = [e["evidence"] for e in entries if e["operation"] == operation]
-            metrics[f"train/{label}_input_tokens"] = sum(
+            known = all("input_tokens" in row.get("usage", {}) for row in rows)
+            token_count = sum(
                 row.get("usage", {}).get("input_tokens", 0) for row in rows
             )
-            metrics[f"train/{label}_usage_known"] = all("usage" in row for row in rows)
+            metrics[f"train/{label}_usage_known"] = known
+            metrics[f"train/{label}_submitted_input_tokens"] = sum(
+                row["submitted_input_tokens"] for row in rows
+            )
+            metrics[
+                f"train/{label}_input_tokens"
+                if known
+                else f"train/{label}_observed_input_tokens"
+            ] = token_count
             metrics[f"train/{label}_seconds"] = sum(
                 row.get("seconds", 0) for row in rows
             )
-        metrics["train/generated_tokens"] = sum(
+        sampling_entries = [e for e in entries if e["operation"] == "sampling"]
+        output_known = all(
+            "output_tokens" in e["evidence"].get("usage", {}) for e in sampling_entries
+        )
+        metrics["train/generated_tokens_known"] = output_known
+        metrics[
+            "train/generated_tokens"
+            if output_known
+            else "train/observed_generated_tokens"
+        ] = sum(
             e["evidence"].get("usage", {}).get("output_tokens", 0)
-            for e in entries
-            if e["operation"] == "sampling"
+            for e in sampling_entries
         )
         return metrics
 
@@ -466,6 +567,8 @@ class OPSDRun:
             "status": "rejected",
             "reason": "",
             "supervised_tokens": 0,
+            "rollout_seconds": result.usage.elapsed_seconds,
+            "interaction_steps": result.usage.steps,
         }
         result.opsd = batch
         self.record["batches"].append(batch)
@@ -508,7 +611,13 @@ class OPSDRun:
                 if generation.source != "sampled":
                     raise ValueError("OPSD rejects non-sampled generation sources")
             datum, audit = build_supervision(
-                self, result, task, model.encoding, condition
+                result,
+                task,
+                model.encoding,
+                condition,
+                config=self.config,
+                teacher_encoding=self.adapter.teacher_encoding,
+                score=partial(self._score_step, result),
             )
             batch.update(audit)
             self._roles()
@@ -617,12 +726,18 @@ class OPSDRun:
                 **spend_metrics(batch["cost"]),
                 **self._usage_metrics(),
             }
+            metrics["train/sampling_seconds"] = metrics["train/rollout_seconds"]
+            metrics["train/rollout_seconds"] = sum(
+                b["rollout_seconds"] for b in self.record["batches"]
+            )
             if "sampled_token_reverse_kl" in batch:
                 metrics["train/sampled_token_reverse_kl"] = batch[
                     "sampled_token_reverse_kl"
                 ]
             if "update" in batch:
                 metrics["train/loss"] = batch["update"]["loss"]
+                metrics["checkpoint/sampler"] = batch["update"]["student_policy"]
+                metrics["checkpoint/training_state"] = batch["update"]["training_state"]
             try:
                 self.monitor.log(f"batch-{batch['index']}", metrics)
             finally:

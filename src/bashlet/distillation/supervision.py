@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import math
-from dataclasses import asdict
-from functools import partial
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -16,27 +14,30 @@ from ..models import Encoding, ExperimentResult, Task
 if TYPE_CHECKING:
     import pytrio as trio
 
-    from . import OPSDRun
+    from . import OPSDConfig, TeacherScores
 
 
 def build_supervision(
-    run: OPSDRun,
     result: ExperimentResult,
     task: Task,
     encoding: Encoding,
     condition: ExperimentConfig,
+    *,
+    config: OPSDConfig,
+    teacher_encoding: Encoding,
+    score: Callable[[Sequence[int], int, int], TeacherScores],
 ) -> tuple[trio.Datum, dict[str, Any]]:
     import pytrio as trio
 
     initial = encoding.prompt(condition.protocol.system_prompt, task.prompt)
-    privileged = run.adapter.teacher_encoding.prompt(
+    privileged = teacher_encoding.prompt(
         condition.protocol.system_prompt,
         task.prompt
         + "\n\nReference implementation (teacher only):\n"
         + task.reference_implementation,
     )
     tokens = result.context_tokens
-    if len(tokens) > run.config.max_context_tokens:
+    if len(tokens) > config.max_context_tokens:
         raise ValueError("Student history exceeds the training context capacity")
     targets = [0] * (len(tokens) - 1)
     old = [0.0] * len(targets)
@@ -44,7 +45,6 @@ def build_supervision(
     differences: list[float] = []
     spans = []
     for index, step in enumerate(result.trajectory):
-        run._roles()
         call = step.model_call
         assert call is not None and call.generation.logprobs is not None
         raw, rollout = call.generation.tokens, call.generation.logprobs
@@ -53,35 +53,11 @@ def build_supervision(
         start, end = call.context_offset, call.context_offset + len(raw)
         teacher_tokens = [*privileged, *tokens[len(initial) : end]]
         teacher_start = len(privileged) + start - len(initial)
-        if len(teacher_tokens) > run.config.max_context_tokens:
+        if len(teacher_tokens) > config.max_context_tokens:
             raise ValueError(
                 "Privileged teacher history exceeds the scoring context capacity"
             )
-        scores = run._call(
-            "teacher_scoring",
-            {
-                "teacher_policy": run.snapshot.identity,
-                "tokens": teacher_tokens,
-                "target_start": teacher_start,
-            },
-            run.pricing.upper_bound(len(teacher_tokens), 0, scoring=True),
-            partial(run.adapter.score, teacher_tokens),
-        )
-        # Preserve even invalid responses before validation; they never reach telemetry.
-        (result.run_dir / f"private/teacher-{index:04d}.json").write_text(
-            json.dumps(asdict(scores), indent=2)
-        )
-        run._roles()
-        if scores.policy != run.snapshot.identity or scores.encoding != result.encoding:
-            raise ValueError(
-                "Teacher scoring identity or encoding differs from the frozen SFT"
-            )
-        if list(scores.tokens) != teacher_tokens or len(scores.logprobs) != len(
-            teacher_tokens
-        ):
-            raise ValueError(
-                "Teacher token or probability lengths do not match the scoring request"
-            )
+        scores = score(teacher_tokens, index, teacher_start)
         teacher = scores.logprobs[teacher_start:]
         if len(teacher) != len(raw) or any(
             value is None
@@ -97,7 +73,7 @@ def build_supervision(
         for student_lp, teacher_lp in zip(rollout, teacher, strict=True):
             assert teacher_lp is not None
             difference = student_lp - teacher_lp
-            advantage = run.config.distillation_coefficient * (teacher_lp - student_lp)
+            advantage = config.distillation_coefficient * (teacher_lp - student_lp)
             if not math.isfinite(advantage):
                 raise ValueError("Distillation advantage is not finite")
             differences.append(difference)
@@ -134,7 +110,7 @@ def build_supervision(
     return datum, {
         "loss_fn": "importance_sampling",
         "auto_shift": False,
-        "distillation_coefficient": run.config.distillation_coefficient,
+        "distillation_coefficient": config.distillation_coefficient,
         "supervised_tokens": len(differences),
         "spans": spans,
         "sampled_token_reverse_kl": math.fsum(differences) / len(differences),
