@@ -486,10 +486,16 @@ def spend_metrics(cost: dict[str, Any]) -> dict[str, Any]:
                 "project_pending_cny",
                 "funded_remaining_cny",
                 "project_remaining_cny",
+                "group_upper_cny",
+                "group_pending_cny",
             )
             if key in cost
         }
     )
+    if "project_actual_cny" in cost:
+        metrics["spend/project_actual_known"] = cost["project_actual_cny"] is not None
+        if cost["project_actual_cny"] is not None:
+            metrics["spend/project_actual_cny"] = cost["project_actual_cny"]
     return metrics
 
 

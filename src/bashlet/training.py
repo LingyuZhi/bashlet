@@ -25,7 +25,13 @@ from .monitoring import (
     spend_metrics,
     write_document,
 )
-from .pytrio import MODEL, SDK_VERSION, _credential
+from .pytrio import (
+    MODEL,
+    SDK_VERSION,
+    _credential,
+    save_training_checkpoints,
+    validate_training_capacity,
+)
 from .snapshots import encoding_condition
 from .spend import (
     DEFAULT_POLICY,
@@ -284,13 +290,7 @@ class PyTRIOTraining:
         import pytrio as trio
 
         lengths = [len(d.model_input.to_ints()) for d in batch]
-        for value, limit in (
-            (len(batch), self.limits.max_batch_size),
-            (max(lengths), self.limits.max_seq_len),
-            (sum(lengths), self.limits.max_tokens_per_request),
-        ):
-            if limit is not None and value > limit:
-                raise ValueError("Training batch exceeds the remote capacity")
+        validate_training_capacity(lengths, self.limits)
         payload = {
             "run_id": self.run_id,
             "optimizer_step": step,
@@ -352,22 +352,16 @@ class PyTRIOTraining:
         }
 
     def save(self, step: int) -> dict[str, Any]:
-        sampler = self.client.save_weights_for_sampler(f"sampler-{step:04d}").result(
-            timeout=self.config.timeout_seconds
+        sampler, state = save_training_checkpoints(
+            self.client,
+            self.config.base_model,
+            step,
+            time.monotonic() + self.config.timeout_seconds,
         )
-        state = self.client.save_state(f"state-{step:04d}").result(
-            timeout=self.config.timeout_seconds
-        )
-        if (
-            sampler.model != self.config.base_model
-            or state.model != self.config.base_model
-            or sampler.path == state.path
-        ):
-            raise ValueError("Checkpoint identities or model do not match")
         return {
             "optimizer_step": step,
-            "sampler": {"kind": "sampler_weights", "path": sampler.path},
-            "training_state": {"kind": "training_state", "path": state.path},
+            "sampler": {"kind": "sampler_weights", "path": sampler},
+            "training_state": {"kind": "training_state", "path": state},
             "training_run_cuid": self.client.training_run_cuid,
         }
 

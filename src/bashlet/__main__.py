@@ -273,6 +273,15 @@ def main() -> None:
     training.add_argument("--output-dir", type=Path, required=True)
     training.add_argument("--resume", action="store_true")
     training.add_argument("--stop-after", type=int)
+    opsd = commands.add_parser("train-opsd", help="Run a bounded, paired OPSD pilot")
+    opsd.add_argument("pilot_config", type=Path)
+    opsd.add_argument("--output-dir", type=Path, required=True)
+    opsd.add_argument("--resume", action="store_true")
+    verify_opsd = commands.add_parser(
+        "verify-opsd", help="Verify saved OPSD state and probabilities"
+    )
+    verify_opsd.add_argument("pilot_config", type=Path)
+    verify_opsd.add_argument("--output-dir", type=Path, required=True)
     selection = commands.add_parser(
         "select-sft", help="Select a saved SFT snapshot using development results"
     )
@@ -330,7 +339,10 @@ def main() -> None:
     reconcile = spend_commands.add_parser(
         "reconcile", help="Record verified completion and billing"
     )
-    for command in (status, reconcile):
+    total = spend_commands.add_parser(
+        "reconcile-total", help="Confirm cumulative spend; retain unknown request fees"
+    )
+    for command in (status, reconcile, total):
         command.add_argument("--ledger", type=Path, default=Path("runs/spend.sqlite3"))
         command.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     reconcile.add_argument("request_id")
@@ -342,10 +354,31 @@ def main() -> None:
         required=True,
         help="JSON completion and billing evidence",
     )
+    total.add_argument("--actual-cny", required=True)
+    total.add_argument("--evidence", type=Path, required=True)
+    total.add_argument(
+        "--group-actual-cny", action="append", default=[], metavar="GROUP=CNY"
+    )
     options = parser.parse_args()
     view = RunView(Console(), show_thinking=getattr(options, "show_thinking", False))
     previous_handler = signal.signal(signal.SIGINT, _interrupt)
     try:
+        if options.command == "verify-opsd":
+            from .distillation.pilot import verify_opsd_checkpoints
+
+            path = verify_opsd_checkpoints(options.pilot_config, options.output_dir)
+            record = json.loads(path.read_text())
+            print(f"{record['status']}\n{path}")
+            raise SystemExit(0 if record["status"] == "complete" else 2)
+        if options.command == "train-opsd":
+            from .distillation.pilot import run_opsd_pilot
+
+            path = run_opsd_pilot(
+                options.pilot_config, options.output_dir, resume=options.resume
+            )
+            record = json.loads(path.read_text())
+            print(f"{record['status']}: {record['decision']['action']}\n{path}")
+            raise SystemExit(0 if record["status"] == "complete" else 2)
         if options.command == "report-collection-pilot":
             from .curation.pilot import report_collection_pilot
 
@@ -526,16 +559,25 @@ def main() -> None:
             ledger = SpendLedger(
                 options.ledger, policy=SpendPolicy.read(options.policy)
             )
-            if options.spend_command == "reconcile":
+            if options.spend_command in ("reconcile", "reconcile-total"):
                 evidence = json.loads(options.evidence.read_text())
                 if not isinstance(evidence, dict):
                     raise ValueError("Billing evidence must be a JSON object")
-                ledger.reconcile(
-                    options.request_id,
-                    actual_cny=options.actual_cny,
-                    evidence=evidence,
-                    outcome=options.outcome,
-                )
+                if options.spend_command == "reconcile-total":
+                    ledger.reconcile_total(
+                        actual_cny=options.actual_cny,
+                        evidence=evidence,
+                        group_actual_cny=dict(
+                            item.split("=", 1) for item in options.group_actual_cny
+                        ),
+                    )
+                else:
+                    ledger.reconcile(
+                        options.request_id,
+                        actual_cny=options.actual_cny,
+                        evidence=evidence,
+                        outcome=options.outcome,
+                    )
             print(json.dumps(ledger.snapshot(), indent=2, ensure_ascii=True))
             return
         if options.command == "show":

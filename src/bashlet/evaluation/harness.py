@@ -227,6 +227,38 @@ def _cost(model: Model) -> dict[str, Any]:
     return summarize_cost(spend, entries)
 
 
+def _episode_row(row: dict[str, Any], path: Path, episode: dict[str, Any]) -> None:
+    if episode["task_sha256"] != row["task_sha256"]:
+        raise ValueError("Saved evaluation episode belongs to another task")
+    row.update(
+        outcome=_outcome(episode),
+        status=episode["status"],
+        reason=episode["reason"],
+        episode_status=episode["episode_status"],
+        budget_kind=episode.get("budget_kind"),
+        grade=episode["grade"],
+        first_implementation=episode.get("first_implementation") or {},
+        usage=episode["usage"],
+        episode_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+    row["protocol_errors"] = sum(
+        step["action"]["kind"] == "invalid" for step in episode["trajectory"]
+    )
+    row["command_problems"] = dict(
+        Counter(
+            step["observation"]["status"]
+            for step in episode["trajectory"]
+            if step.get("observation") and step["observation"]["status"] != "ok"
+        )
+    )
+    row["diagnostics"] = {
+        "verifications": sum(step["verification"] for step in episode["trajectory"]),
+        "repair_attempts": len(episode["repair_attempts"]),
+        "interaction_steps": len(episode["trajectory"]),
+        "counts_are_not_task_benefit": True,
+    }
+
+
 def evaluate(
     *,
     plan_path: Path,
@@ -238,11 +270,14 @@ def evaluate(
     training_run: Path | None = None,
     direct_code: DirectCodeConfig | None = None,
     run_dir: Path | None = None,
+    model: Model | None = None,
+    phase: str | None = None,
+    resume: bool = False,
 ) -> Path:
     """CLI orchestration; every planned attempt uses the existing experiment seam."""
     plan, tasks = _tasks(plan_path)
     track = "coding" if direct_code is not None else "harness"
-    model = load_model(condition.model)
+    model = model if model is not None else load_model(condition.model)
     if model.identity != snapshot:
         raise ValueError(
             f"Snapshot mismatch: expected {snapshot!r}, got {model.identity!r}"
@@ -263,7 +298,7 @@ def evaluate(
             "use --evidence-kind test-double for development backends"
         )
     run_dir = (run_dir or output_dir.resolve() / uuid.uuid4().hex).resolve()
-    run_dir.mkdir(parents=True, mode=0o700)
+    run_dir.mkdir(parents=True, mode=0o700, exist_ok=resume)
     path = run_dir / "evaluation.json"
     configuration = config_record(condition)
     rows = [
@@ -315,6 +350,56 @@ def evaluate(
         "comparison_sha256": _digest(comparison),
         "tasks": rows,
     }
+    previous_requests: set[str] = set()
+    if resume and path.exists():
+        previous = json.loads(path.read_text())
+        expected = json.loads(json.dumps(record))
+        if any(
+            previous.get(key) != expected[key]
+            for key in (
+                "version",
+                "track",
+                "snapshot",
+                "plan",
+                "config",
+                "evidence_kind",
+            )
+        ) or any(
+            previous["comparison"].get(key) != value
+            for key, value in expected["comparison"].items()
+        ):
+            raise ValueError(
+                "Evaluation resume must preserve snapshot, tasks and conditions"
+            )
+        if previous["status"] == "complete":
+            return path
+        record, rows, comparison = previous, previous["tasks"], previous["comparison"]
+        previous_requests = set(previous["cost"]["request_ids"])
+        for row in rows:
+            if row["outcome"] != "running":
+                continue
+            episode_path = run_dir / row["run"] / "run.json" if row["run"] else None
+            episode = (
+                json.loads(episode_path.read_text())
+                if episode_path and episode_path.exists()
+                else None
+            )
+            if (
+                episode
+                and episode["policy"] == snapshot
+                and episode["status"] not in {"running", "submitted"}
+            ):
+                assert episode_path is not None
+                _episode_row(row, episode_path, episode)
+            else:
+                row.update(
+                    outcome="interrupted",
+                    reason="Unfinished attempt preserved on resume",
+                )
+        record["status"] = "running"
+        record.pop("finished_at", None)
+    elif resume and any(run_dir.iterdir()):
+        raise ValueError("Evaluation recovery requires its existing record")
 
     def save() -> None:
         comparison["max_context_tokens"] = (
@@ -330,6 +415,14 @@ def evaluate(
         record["comparison_sha256"] = _digest(comparison)
         record["summary"] = _summary(rows)
         record["cost"] = _cost(model)
+        if previous_requests and isinstance(model, ModelBackend):
+            spend_details: dict[str, Any] = model.describe()
+            spend = spend_details.get("spend", {})
+            assert isinstance(spend, dict)
+            selected_ids = previous_requests | set(record["cost"]["request_ids"])
+            record["cost"] = summarize_cost(
+                spend, [e for e in spend.get("entries", []) if e["id"] in selected_ids]
+            )
         _write(path, record)
 
     save()  # All denominators are durable before any paid probe or task starts.
@@ -340,7 +433,8 @@ def evaluate(
             monitor = RunMonitor(
                 run_dir,
                 monitoring,
-                phase="coding-eval" if direct_code is not None else "dev-eval",
+                phase=phase
+                or ("coding-eval" if direct_code is not None else "dev-eval"),
                 metadata={
                     "snapshot": snapshot,
                     "evidence_kind": evidence_kind,
@@ -360,6 +454,8 @@ def evaluate(
                 require_online=evidence_kind == "experimental" and not local,
             )
         for task, row in zip(tasks, rows, strict=True):
+            if row["outcome"] != "not_started":
+                continue
             active_row = row
             row["outcome"] = "running"
             save()
@@ -378,37 +474,7 @@ def evaluate(
                 direct_code=direct_code,
             )
             episode = json.loads((result.run_dir / "run.json").read_text())
-            row.update(
-                outcome=_outcome(episode),
-                status=result.status,
-                reason=result.reason,
-                episode_status=result.episode_status,
-                budget_kind=result.budget_kind,
-                grade=episode["grade"],
-                first_implementation=episode.get("first_implementation") or {},
-                usage=episode["usage"],
-                episode_sha256=hashlib.sha256(
-                    (result.run_dir / "run.json").read_bytes()
-                ).hexdigest(),
-            )
-            row["protocol_errors"] = sum(
-                step["action"]["kind"] == "invalid" for step in episode["trajectory"]
-            )
-            row["command_problems"] = dict(
-                Counter(
-                    step["observation"]["status"]
-                    for step in episode["trajectory"]
-                    if step.get("observation") and step["observation"]["status"] != "ok"
-                )
-            )
-            row["diagnostics"] = {
-                "verifications": sum(
-                    step["verification"] for step in episode["trajectory"]
-                ),
-                "repair_attempts": len(episode["repair_attempts"]),
-                "interaction_steps": len(episode["trajectory"]),
-                "counts_are_not_task_benefit": True,
-            }
+            _episode_row(row, result.run_dir / "run.json", episode)
             if (
                 local
                 and isinstance(model, VLLMModel)
@@ -416,6 +482,7 @@ def evaluate(
             ):
                 row["outcome"] = "infrastructure_error"
             save()
+            active_row = None
             if monitor is not None:
                 monitor.update_metadata(
                     {"comparison_sha256": record["comparison_sha256"]}
@@ -455,7 +522,11 @@ def evaluate(
         save()
         if monitor is not None:
             monitor.update_metadata({"comparison_sha256": record["comparison_sha256"]})
-            monitor.log("finished", evaluation_metrics(record))
+            completed_tasks = len(rows) - len(summary["missing_task_ids"])
+            monitor.log(
+                f"finished-{completed_tasks}-{record['status']}",
+                evaluation_metrics(record),
+            )
             monitor.finish()
     return path
 

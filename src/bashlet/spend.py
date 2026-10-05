@@ -112,9 +112,16 @@ class SpendLedger:
                 current = asdict(policy)
                 previous_groups = previous.pop("groups")
                 current_groups = current.pop("groups")
-                if previous != current or any(
-                    current_groups.get(name) != limit
-                    for name, limit in previous_groups.items()
+                # Tightening current cash availability cannot reset any spend.
+                old_funded = previous.pop("funded_cny")
+                new_funded = current.pop("funded_cny")
+                if (
+                    previous != current
+                    or any(
+                        name not in current_groups or current_groups[name] > limit
+                        for name, limit in previous_groups.items()
+                    )
+                    or new_funded > old_funded
                 ):
                     raise ValueError(
                         "Ledger policy differs; restarting cannot reset cash limits"
@@ -183,8 +190,6 @@ class SpendLedger:
             raise BudgetRefused(
                 "A cost category, sub-budget and valid pool are required"
             )
-        if group not in self.policy.groups:
-            raise BudgetRefused(f"Unknown sub-budget {group!r}")
         fingerprint = hashlib.sha256(
             json.dumps(
                 {"operation": operation, "payload": payload},
@@ -193,6 +198,16 @@ class SpendLedger:
             ).encode()
         ).hexdigest()
         with self._transaction() as db:
+            # Another process may tighten caps while this instance is alive.
+            self.policy = SpendPolicy(
+                **json.loads(
+                    db.execute(
+                        "SELECT value FROM metadata WHERE key='policy'"
+                    ).fetchone()[0]
+                )
+            )
+            if group not in self.policy.groups:
+                raise BudgetRefused(f"Unknown sub-budget {group!r}")
             entries = db.execute("SELECT * FROM requests").fetchall()
             if any(row["charged_micros"] > row["upper_micros"] for row in entries):
                 raise BudgetRefused(
@@ -216,6 +231,29 @@ class SpendLedger:
                 )
 
             total = committed(entries)
+            group_total = committed(
+                [row for row in entries if row["budget_group"] == group]
+            )
+            bill = db.execute(
+                "SELECT value FROM metadata WHERE key='project_bill'"
+            ).fetchone()
+            if bill is not None:
+                reconciliation = json.loads(bill[0])
+                covered = set(reconciliation["request_ids"])
+                total = _micros(reconciliation["actual_cny"]) + committed(
+                    [row for row in entries if row["id"] not in covered]
+                )
+                group_bill = reconciliation.get("groups", {}).get(group)
+                if group_bill:
+                    covered_group = set(group_bill["request_ids"])
+                    group_total = _micros(group_bill["actual_cny"]) + committed(
+                        [
+                            row
+                            for row in entries
+                            if row["budget_group"] == group
+                            and row["id"] not in covered_group
+                        ]
+                    )
             # Names describe checks; a sub-budget cannot replace a hard limit.
             checks = [
                 ("project", total, _micros(self.policy.project_cny)),
@@ -231,7 +269,7 @@ class SpendLedger:
                 ),
                 (
                     group,
-                    committed([row for row in entries if row["budget_group"] == group]),
+                    group_total,
                     _micros(self.policy.groups[group]),
                 ),
             ]
@@ -341,8 +379,69 @@ class SpendLedger:
                 (actual, outcome, request_id),
             )
 
+    def reconcile_total(
+        self,
+        *,
+        actual_cny: object,
+        evidence: dict[str, Any],
+        group_actual_cny: dict[str, object] | None = None,
+    ) -> None:
+        """Confirm a cumulative bill without assigning unknown per-request fees.
+
+        Covers exactly the current terminal requests. Later requests and all
+        sub-budgets keep their own conservative ceilings. In-flight work must
+        be reconciled first; an account balance alone is not a cumulative bill.
+        """
+        actual = _micros(actual_cny)
+        if not evidence:
+            raise ValueError("Cumulative billing evidence is required")
+        with self._transaction() as db:
+            rows = db.execute(
+                "SELECT id, state, budget_group FROM requests ORDER BY rowid"
+            ).fetchall()
+            if not rows or any(row["state"] == "pending" for row in rows):
+                raise ValueError("Cumulative reconciliation requires terminal requests")
+            bill: dict[str, Any] = {
+                "actual_cny": actual / _MICROS,
+                "request_ids": [row["id"] for row in rows],
+                "evidence": evidence,
+                "recorded_at": datetime.now(UTC).isoformat(),
+                "groups": {
+                    group: {
+                        "actual_cny": _micros(value) / _MICROS,
+                        "request_ids": [
+                            row["id"] for row in rows if row["budget_group"] == group
+                        ],
+                    }
+                    for group, value in (group_actual_cny or {}).items()
+                },
+            }
+            if sum(
+                _micros(value) for value in (group_actual_cny or {}).values()
+            ) > actual or any(
+                not item["request_ids"] for item in bill["groups"].values()
+            ):
+                raise ValueError(
+                    "Group bills must cover requests within the total bill"
+                )
+            db.execute(
+                "INSERT OR REPLACE INTO metadata VALUES ('project_bill', ?)",
+                (json.dumps(bill, allow_nan=False),),
+            )
+            db.execute(
+                "INSERT INTO events VALUES ('project_bill', ?, ?)",
+                (bill["recorded_at"], json.dumps(bill, allow_nan=False)),
+            )
+
     def snapshot(self) -> dict[str, Any]:
         with self._transaction() as db:
+            self.policy = SpendPolicy(
+                **json.loads(
+                    db.execute(
+                        "SELECT value FROM metadata WHERE key='policy'"
+                    ).fetchone()[0]
+                )
+            )
             rows = db.execute("SELECT * FROM requests ORDER BY rowid").fetchall()
             entries = [
                 {
@@ -360,6 +459,17 @@ class SpendLedger:
                 for row in rows
             ]
             charged = sum(row["charged_micros"] for row in rows)
+            historical_ceiling = charged
+            bill_row = db.execute(
+                "SELECT value FROM metadata WHERE key='project_bill'"
+            ).fetchone()
+            bill = json.loads(bill_row[0]) if bill_row is not None else None
+            covered = set(bill["request_ids"]) if bill else set()
+            uncovered = [row for row in rows if row["id"] not in covered]
+            if bill:
+                charged = _micros(bill["actual_cny"]) + sum(
+                    row["charged_micros"] for row in uncovered
+                )
             pending = sum(
                 row["upper_micros"] for row in rows if row["state"] == "pending"
             )
@@ -368,6 +478,12 @@ class SpendLedger:
                 "policy": asdict(self.policy),
                 "entries": entries,
                 "charged_cny": charged / _MICROS,
+                "request_charged_upper_cny": historical_ceiling / _MICROS,
+                "project_bill": bill,
+                "project_actual_cny": charged / _MICROS
+                if rows
+                and all(row["billing_basis"] == "confirmed" for row in uncovered)
+                else None,
                 "pending_cny": pending / _MICROS,
                 "funded_remaining_cny": (
                     _micros(self.policy.funded_cny) - charged - pending
@@ -384,17 +500,51 @@ def summarize_cost(
     snapshot: dict[str, Any], entries: list[dict[str, Any]]
 ) -> dict[str, Any]:
     """Report one run's entries against the same point-in-time project ledger."""
+    groups = {entry["group"] for entry in entries}
+    group_rows = [e for e in snapshot.get("entries", []) if e["group"] in groups]
+    group_bills = (snapshot.get("project_bill") or {}).get("groups", {})
+    request_ids = {entry["id"] for entry in entries}
+    actual = (
+        round(sum(e["charged_cny"] for e in entries), 6)
+        if entries and all(e["billing_basis"] == "confirmed" for e in entries)
+        else None
+    )
+    covered: set[str] = set()
+    group_actual = 0.0
+    group_upper = sum(
+        e["upper_cny"] if e["state"] == "pending" else e["charged_cny"]
+        for e in group_rows
+    )
+    for group in groups:
+        bill = group_bills.get(group)
+        if not bill:
+            continue
+        covered_ids = set(bill["request_ids"])
+        group_upper += bill["actual_cny"] - sum(
+            e["charged_cny"] for e in group_rows if e["id"] in covered_ids
+        )
+        if covered_ids <= request_ids:
+            covered.update(covered_ids)
+            group_actual += bill["actual_cny"]
+    uncovered = [e for e in entries if e["id"] not in covered]
+    if covered and all(e["billing_basis"] == "confirmed" for e in uncovered):
+        actual = round(group_actual + sum(e["charged_cny"] for e in uncovered), 6)
     return {
         "ledger": snapshot.get("ledger"),
         "request_ids": [entry["id"] for entry in entries],
-        "charged_upper_bound_cny": round(sum(e["charged_cny"] for e in entries), 6),
+        "charged_upper_bound_cny": actual
+        if actual is not None
+        else round(sum(e["charged_cny"] for e in entries), 6),
+        "request_upper_bound_cny": round(sum(e["upper_cny"] for e in entries), 6),
         "pending_upper_bound_cny": round(
             sum(e["upper_cny"] for e in entries if e["state"] == "pending"), 6
         ),
-        "actual_cny": round(sum(e["charged_cny"] for e in entries), 6)
-        if entries and all(e["billing_basis"] == "confirmed" for e in entries)
-        else None,
+        "actual_cny": actual,
         "billing_note": "Unreconciled ceilings are not verified actual charges.",
+        "group_upper_cny": round(group_upper, 6),
+        "group_pending_cny": round(
+            sum(e["upper_cny"] for e in group_rows if e["state"] == "pending"), 6
+        ),
         **{
             k: snapshot[k]
             for k in ("funded_remaining_cny", "project_remaining_cny")
@@ -404,6 +554,7 @@ def summarize_cost(
             {
                 "project_upper_cny": snapshot["charged_cny"] + snapshot["pending_cny"],
                 "project_pending_cny": snapshot["pending_cny"],
+                "project_actual_cny": snapshot.get("project_actual_cny"),
             }
             if "charged_cny" in snapshot
             else {}

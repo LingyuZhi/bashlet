@@ -32,6 +32,41 @@ SDK_VERSION = "0.2.9"
 _SDK_LOG = logging.getLogger("pytrio.transport.actor.sampling_run.sample")
 
 
+def validate_training_capacity(lengths: list[int], limits: Any) -> None:
+    if not lengths or min(lengths) < 1:
+        raise ValueError("Training requires nonempty inputs")
+    for value, limit in (
+        (len(lengths), limits.max_batch_size),
+        (max(lengths), limits.max_seq_len),
+        (sum(lengths), limits.max_tokens_per_request),
+    ):
+        if limit is not None and value > limit:
+            raise ValueError("Training batch exceeds the remote capacity")
+
+
+def save_training_checkpoints(
+    client: Any,
+    model: str,
+    step: int,
+    deadline: float,
+) -> tuple[str, str]:
+    paths = []
+    for save, name in (
+        (client.save_weights_for_sampler, f"sampler-{step:04d}"),
+        (client.save_state, f"state-{step:04d}"),
+    ):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Checkpoint deadline exhausted")
+        receipt = save(name).result(timeout=remaining)
+        if receipt.model != model or not receipt.path:
+            raise ValueError("Checkpoint identity or model differs")
+        paths.append(receipt.path)
+    if paths[0] == paths[1]:
+        raise ValueError("Sampler and training state must be distinct checkpoints")
+    return paths[0], paths[1]
+
+
 def _credential(env: str, dotenv: Path) -> str:
     key = os.environ.get(env, "").strip()
     if not key and dotenv.is_file():
@@ -53,7 +88,7 @@ class _RequestIdentity(logging.Handler):
     ID must match it. Each sampling client has at most one active call here.
     """
 
-    def __init__(self, run: str, ledger: SpendLedger) -> None:
+    def __init__(self, run: str, ledger: SpendLedger | None = None) -> None:
         super().__init__(logging.DEBUG)
         self.run, self.ledger = run, ledger
         self.entry = ""
@@ -66,6 +101,8 @@ class _RequestIdentity(logging.Handler):
             return
         if record.msg == "Sending Actor sample request task=%s request=%s actor=%s":
             self.sent = str(args[1])
+            if self.ledger is None:
+                return
             self.ledger.annotate(
                 self.entry,
                 {
@@ -79,7 +116,8 @@ class _RequestIdentity(logging.Handler):
             == "Received Actor sample response task=%s request=%s sequences=%s actor=%s"
         ):
             self.received = str(args[1])
-            self.ledger.annotate(self.entry, {"response_request_id": self.received})
+            if self.ledger is not None:
+                self.ledger.annotate(self.entry, {"response_request_id": self.received})
 
 
 class PyTRIOModel:
@@ -108,6 +146,7 @@ class PyTRIOModel:
         group: str = "pytrio-smoke",
         operation: str = "sampling",
         probe_budget_cny: float = 0.20,
+        run_id: str | None = None,
     ) -> None:
         if model != MODEL:
             raise ValueError(f"This experiment requires {MODEL}")
@@ -153,6 +192,7 @@ class PyTRIOModel:
         self.timeout_seconds, self.max_retries = timeout_seconds, max_retries
         self.retry_delay_seconds = retry_delay_seconds
         self.group, self.operation = group, operation
+        self.run_id = run_id
         self._probe_cap = Decimal(str(probe_budget_cny))
         self._probe_reserved = Decimal(0)
         self._service = service_client
@@ -187,6 +227,16 @@ class PyTRIOModel:
                 )
             ),
         )
+
+    def validate_spend_owner(
+        self, ledger: SpendLedger, group: str, run_id: str
+    ) -> None:
+        if (
+            self.ledger.path != ledger.path
+            or self.group != group
+            or self.run_id != run_id
+        ):
+            raise ValueError("Paid student must share the OPSD ledger and sub-budget")
 
     def _connect(self) -> None:
         if self._sampler is not None:
@@ -276,6 +326,8 @@ class PyTRIOModel:
             "sampling": asdict(sampling),
             "scoring": scoring,
         }
+        if self.run_id is not None:
+            payload["run_id"] = self.run_id
         if self.model_path is not None:
             payload["model_path"] = self.model_path
         with self._lock:
@@ -300,6 +352,7 @@ class PyTRIOModel:
                         {
                             "service_session_cuid": self._service.service_session_cuid,
                             "sampling_run_cuid": self._sampler.sampling_run_cuid,
+                            "submitted_input_tokens": len(prompt),
                         },
                     )
                     token_input = trio.ModelInput.from_ints(list(prompt))
@@ -315,6 +368,7 @@ class PyTRIOModel:
                         return_text=False,
                     )
 
+                started = time.monotonic()
                 try:
                     value, entry = self.ledger.execute(
                         operation=operation,
@@ -354,7 +408,31 @@ class PyTRIOModel:
                     raise RuntimeError(reason) from None
                 finally:
                     _SDK_LOG.removeHandler(capture)
+                    if capture.entry:
+                        self.ledger.annotate(
+                            capture.entry, {"seconds": time.monotonic() - started}
+                        )
         raise RuntimeError("Unreachable retry state")
+
+    def verify_loaded_sampler(self) -> dict[str, JSONValue]:
+        """Check Control metadata against the exact requested sampler weights."""
+        self._connect()
+        metadata = (
+            self._service.create_rest_client()
+            .get_sampler(self._sampler.sampling_run_cuid)
+            .result(timeout=self.timeout_seconds)
+        )
+        if metadata.base_model != self.model or metadata.model_path != self.model_path:
+            raise ModelResponseError(
+                "Server sampler metadata differs from requested weights"
+            )
+        proof: dict[str, JSONValue] = {
+            "sampling_run_cuid": self._sampler.sampling_run_cuid,
+            "base_model": metadata.base_model,
+            "model_path": metadata.model_path,
+        }
+        self._details["load_proof"] = proof
+        return proof
 
     def _generate(
         self, prompt: Sequence[int], sampling: SamplingParams, *, probe: bool = False

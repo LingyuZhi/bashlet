@@ -23,7 +23,9 @@ from ..models import (
     Encoding,
     ExperimentResult,
     Generation,
+    JSONValue,
     Model,
+    ModelBackend,
     ModelResponseError,
     SamplingParams,
     Task,
@@ -51,8 +53,8 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class SFTSnapshot:
-    """A selected sampler identity. Controlled evidence stays explicitly labelled."""
+class InitialSnapshot:
+    """The selected original model or SFT weights, never an optimizer state."""
 
     identity: str
     encoding: str
@@ -62,13 +64,21 @@ class SFTSnapshot:
 
     def __post_init__(self) -> None:
         if not self.identity or not self.encoding:
-            raise ValueError("SFT snapshot and encoding identities are required")
-        if self.stage != "sft" or self.kind != "sampler_weights":
+            raise ValueError("Initial snapshot and encoding identities are required")
+        if (self.stage, self.kind) not in (
+            ("sft", "sampler_weights"),
+            ("base", "base_model"),
+            ("base", "sampler_weights"),
+        ):
             raise ValueError(
-                "OPSD requires SFT sampler weights, not base or training state"
+                "OPSD requires an original model or SFT weights, not training state"
             )
         if self.evidence_kind not in ("test-double", "experimental"):
-            raise ValueError("Unknown SFT snapshot evidence kind")
+            raise ValueError("Unknown initial snapshot evidence kind")
+
+
+# Existing schema-1 SFT records and imports remain valid without relabelling.
+SFTSnapshot = InitialSnapshot
 
 
 @dataclass(frozen=True)
@@ -145,7 +155,6 @@ class _RemoteFailure(Exception):
 class OPSDAdapter(Protocol):
     """External sampling, frozen scoring, updating and training-state restoration.
 
-    This task supplies controlled Adapters, not a verified live PyTRIO backend.
     ``update`` must wait for both forward/backward and optimizer completion.
     Its loss is the summed importance-sampling loss / supervised token count.
     ``restore_student`` must load the named full state including its optimizer.
@@ -193,6 +202,15 @@ class _Student:
     def sample(self, prompt: Sequence[int], sampling: SamplingParams) -> Generation:
         if self.model.identity != self.identity:
             raise ValueError("Student policy changed inside a rollout batch")
+        from ..pytrio import PyTRIOModel
+
+        if isinstance(self.model, PyTRIOModel):
+            self.model.validate_spend_owner(
+                self.run.ledger, self.run.config.group, self.run.record["run_id"]
+            )
+            generation = self.model.sample(prompt, sampling)
+            self.run.calls.append((tuple(prompt), sampling, generation))
+            return generation
         generation = self.run._call(
             "sampling",
             {
@@ -205,6 +223,21 @@ class _Student:
         )
         self.run.calls.append((tuple(prompt), sampling, generation))
         return generation
+
+    def probe(self) -> None:
+        if isinstance(self.model, ModelBackend):
+            self.model.probe()
+
+    @property
+    def max_context_tokens(self) -> int:
+        return (
+            self.model.max_context_tokens
+            if isinstance(self.model, ModelBackend)
+            else self.run.config.max_context_tokens
+        )
+
+    def describe(self) -> dict[str, JSONValue]:
+        return self.model.describe() if isinstance(self.model, ModelBackend) else {}
 
 
 class OPSDRun:
@@ -219,7 +252,7 @@ class OPSDRun:
         self,
         output_dir: Path,
         *,
-        snapshot: SFTSnapshot,
+        snapshot: InitialSnapshot,
         adapter: OPSDAdapter,
         ledger: SpendLedger,
         monitoring: MonitorConfig,
@@ -273,7 +306,7 @@ class OPSDRun:
                     )
                 self.record = previous
                 if adapter.teacher_identity != snapshot.identity:
-                    raise ValueError("Resume must preserve the frozen SFT teacher")
+                    raise ValueError("Resume must preserve the frozen initial teacher")
                 if previous["optimizer_step"]:
                     update = UpdateResult(**previous["last_update"])
                     if (
@@ -299,7 +332,9 @@ class OPSDRun:
 
     def _roles(self) -> None:
         if self.adapter.teacher_identity != self.snapshot.identity:
-            raise ValueError("Frozen teacher differs from the selected SFT snapshot")
+            raise ValueError(
+                "Frozen teacher differs from the selected initial snapshot"
+            )
         if self.student.identity != self.record["student_policy"]:
             raise ValueError("Student differs from the recorded policy")
         if (
@@ -318,7 +353,7 @@ class OPSDRun:
         if model.identity != self.record["student_policy"]:
             raise ValueError("Rollout must use the current student policy")
         if model.encoding.describe() != self.record["encoding_details"]:
-            raise ValueError("Rollout encoding differs from the SFT snapshot")
+            raise ValueError("Rollout encoding differs from the initial snapshot")
         if task.origin is None or task.origin.split != "train":
             raise ValueError("OPSD requires a training-split task")
         validate_origin(task.origin)
@@ -353,7 +388,7 @@ class OPSDRun:
             if latest != self.record:
                 raise ValueError("OPSD progress changed; reopen the run with resume")
             self.monitor = RunMonitor(
-                self.root, self.monitoring, phase="opsd", metadata=metadata
+                self.root, self.monitoring, phase=self.config.group, metadata=metadata
             )
         except BaseException:
             self._release_lock()
@@ -476,7 +511,8 @@ class OPSDRun:
                 "tokens": list(tokens),
                 "target_start": target_start,
             },
-            self.pricing.upper_bound(len(tokens), 0, scoring=True),
+            # SDK 0.2.9 implements scoring with an extra one-token decode.
+            self.pricing.upper_bound(len(tokens), 1, scoring=True),
             partial(self.adapter.score, tokens),
         )
         # Preserve rejected responses locally before any identity/alignment check.
@@ -489,7 +525,7 @@ class OPSDRun:
             or scores.encoding != result.encoding
         ):
             raise ValueError(
-                "Teacher scoring identity or encoding differs from frozen SFT"
+                "Teacher scoring identity or encoding differs from frozen initial model"
             )
         if list(scores.tokens) != list(tokens) or len(scores.logprobs) != len(tokens):
             raise ValueError(
