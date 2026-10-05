@@ -394,6 +394,7 @@ class ExperimentResult(EpisodeResult):
     grade: Grade | None = None
     first_implementation: "FirstImplementation | None" = None
     demonstration: dict[str, JSONValue] | None = None
+    opsd: dict[str, JSONValue] | None = None
 
     @property
     def passed(self) -> bool:

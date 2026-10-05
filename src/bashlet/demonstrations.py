@@ -15,6 +15,7 @@ from . import protocol
 from .config import ExperimentConfig, ProtocolConfig, config_record, load_model
 from .encoding import QwenChatMLEncoding
 from .models import (
+    Encoding,
     ExperimentResult,
     Generation,
     InvalidAction,
@@ -133,7 +134,7 @@ def validate_sft_request(
 def validate_history(
     record: dict[str, Any],
     task: Task,
-    encoding: QwenChatMLEncoding,
+    encoding: Encoding,
     config: ProtocolConfig,
 ) -> None:
     """Reconstruct only framing; sampled generations remain their raw token IDs."""

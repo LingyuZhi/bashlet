@@ -1,0 +1,7 @@
+# Controlled behavior validation for issue 08. These are not live pilot settings.
+# Remote charges, snapshots and monitoring responses remain test-double evidence.
+distillation_coefficient: 0.5
+learning_rate: 0.000005
+timeout_seconds: 30
+max_context_tokens: 32768
+group: opsd-pilot

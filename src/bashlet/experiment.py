@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, fields
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .analysis import analyze_episode
 from .config import DirectCodeConfig, ExperimentConfig, load_config
@@ -35,6 +35,9 @@ from .models import (
 from .sandbox import Sandbox
 from .tasks import validate_origin
 from .workspace import snapshot_workspace, validate_workspace_path
+
+if TYPE_CHECKING:
+    from .distillation import OPSDRun
 
 _GRADING_DRIVER = """
 import contextlib, importlib.util, json, sys
@@ -246,6 +249,7 @@ def run_experiment(
     sft_adapter: SFTAdapter | None = None,
     sft_supervision: Sequence[ActionSupervision] | None = None,
     sft_max_context_tokens: int = 32768,
+    opsd_run: "OPSDRun | None" = None,
 ) -> ExperimentResult:
     """Prepare a Task, run its Episode, and grade only an explicit Submission.
 
@@ -258,6 +262,10 @@ def run_experiment(
     ``sft_adapter`` opts into demonstration validation and export after
     grading. Rejected demonstrations retain their run evidence but never reach
     the Adapter. Export errors propagate after the final run record is saved.
+
+    ``opsd_run`` scores the original sampled tokens with a frozen SFT teacher
+    and requests one guarded update after grading. Its result and failure state
+    are separate from task success. Each subsequent call uses ``opsd_run.student``.
     """
     if isinstance(config, ExperimentConfig):
         if overrides:
@@ -266,6 +274,12 @@ def run_experiment(
     else:
         condition = load_config(config, overrides)
     _validate_task(task, condition.environment.id)
+    if opsd_run is not None:
+        if direct_code is not None or sft_adapter is not None:
+            raise ValueError(
+                "OPSD cannot share a call with SFT export or direct evaluation"
+            )
+        opsd_run.validate_request(task, model)
     if direct_code is not None and (
         sft_adapter is not None or assess_first_implementation
     ):
@@ -313,6 +327,9 @@ def run_experiment(
     }
     if direct_code is not None:
         metadata.update(evaluation_track="coding", direct_code=asdict(direct_code))
+
+    if opsd_run is not None:
+        model = opsd_run.begin(task, model, condition)
 
     def save_progress(episode: EpisodeResult) -> None:
         save_record(episode, condition, metadata | {"episode_status": episode.status})
@@ -390,6 +407,9 @@ def run_experiment(
                 evaluation_track="coding", direct_code=asdict(direct_code)
             )
         try:
+            if opsd_run is not None:
+                save_record(result, condition, final_metadata)
+                opsd_run.finish(result, task, model, condition)
             if sft_adapter is not None:
                 # Seal actual grading and history before any SFT consumer sees it.
                 save_record(result, condition, final_metadata)
