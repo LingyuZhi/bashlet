@@ -55,6 +55,7 @@ class TaskAssignment:
     cohort_sha256: str
     family_id: str
     role: Literal["train_candidate", "dev", "test"]
+    manifest_path: str = ""
 
 
 @dataclass(frozen=True)

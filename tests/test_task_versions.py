@@ -48,6 +48,29 @@ def test_new_source_requires_a_versioned_role_even_as_a_standalone_task(
     assert not (tmp_path / "runs").exists()
 
 
+@pytest.mark.parametrize("change", ["role", "version"])
+def test_standalone_task_cannot_reassign_a_frozen_test_family(
+    tmp_path: Path,
+    prepared_version: Path,
+    change: str,
+) -> None:
+    manifest = json.loads((prepared_version / "manifest.json").read_text())
+    entry = next(
+        e for e in manifest["tasks"] if e["task_id"] == "supplement/circular-windows"
+    )
+    task = json.loads((prepared_version / entry["task_file"]).read_text())
+    task["assignment"]["role"] = "train_candidate"
+    if change == "version":
+        task["assignment"]["version"] = "unregistered-fake-version"
+        task["assignment"]["cohort_sha256"] = "0" * 64
+    path = tmp_path / "forged-task.json"
+    path.write_text(json.dumps(task))
+    model = replay_config(tmp_path, [submit()])
+    process = cli("task", str(path), "-c", str(model), cwd=tmp_path)
+    assert process.returncode == 2, process.stdout + process.stderr
+    assert not (tmp_path / "runs").exists()
+
+
 def versioned_cohort(tmp_path: Path) -> tuple[Path, Path]:
     mbpp, path = small_cohort(tmp_path)
     path.write_text(

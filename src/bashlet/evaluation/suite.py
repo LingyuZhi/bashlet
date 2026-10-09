@@ -3,7 +3,7 @@
 import hashlib
 import json
 from collections import Counter
-from dataclasses import asdict, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -14,6 +14,7 @@ from ..config import (
     _require_positive_numbers,
     config_record,
 )
+from ..experiment import serialize_task
 from ..models import FunctionGrader, InteractionBudget, SamplingParams
 from ..monitoring import MonitorConfig, code_revision
 from ..tasks import task_family
@@ -111,7 +112,7 @@ def read_policy(path: Path) -> tuple[dict[str, Any], dict[str, Path]]:
                 {
                     "task_id": task.task_id,
                     "family_id": task_family(task),
-                    "task_sha256": _digest(asdict(task)),
+                    "task_sha256": _digest(json.loads(serialize_task(task))),
                 }
                 for task in tasks
                 if task.origin

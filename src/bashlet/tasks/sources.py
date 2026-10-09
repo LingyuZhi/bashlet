@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -146,6 +146,34 @@ def validate_registered_task(task: Task) -> None:
     assert task.origin is not None
     lock, family = registered_origin(task.origin)
     if family is None:
+        from ..mbpp import _convert
+        from .versions import source_bytes
+
+        row = next(
+            (
+                row
+                for row in json.loads(source_bytes(task))
+                if str(row["task_id"]) == task.origin.original_task_id
+            ),
+            None,
+        )
+        if row is None:
+            raise ValueError("Task original identity is absent from its native source")
+        native_expected, _ = _convert(row, task.environment_id, task.origin)
+        native = replace(
+            task,
+            assignment=None,
+            task_type=None,
+            feedback_start_id=None,
+            environment_variant_id=None,
+        )
+        if (
+            fingerprint(asdict(native)) != fingerprint(asdict(native_expected))
+            or task.task_type != "short_program"
+        ):
+            raise ValueError(
+                "Task content differs from its registered MBPP source record"
+            )
         return
     variant = next(
         (v for v in family["variants"] if v["task"]["task_id"] == task.task_id), None

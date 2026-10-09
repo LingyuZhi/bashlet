@@ -19,4 +19,6 @@ uv run --locked bashlet prepare-harness \
 
 输出目录必须是新目录。`private/cohort.json`、`private/source-registry.json`、`private/family-guard.json` 和 `private/sources/` 保存冻结字节；manifest 记录对应哈希及逐任务执行证据。`private/tasks/` 含参考实现与隐藏评分，只供宿主加载；Student 仅获得题面和初始工作区。整个候选池都会参与隔离检查，尚未抽中的候选也不能进入独立评估。
 
+`assignment.manifest_path` 绑定本地冻结清单；单独运行 Task 也须能读取该清单和来源副本。角色、版本或任务内容与清单不符时拒绝执行。准备中的任务仅供本次质量校验使用；训练必须读取已完成清单。换到其他存储路径时，用同一 cohort 准备新的数据目录并保留旧证据。
+
 `harness-dev.json` 可交给现有 `evaluate`。`prepare-sft` 与 `train-opsd` 仍用 `train` 选择训练候选；`task --split train_candidate` 也可显式选择新版候选。SFT 导出、训练加载和实验记录保留本轮角色与历史来源。v1 数据及已有实验文件不需要迁移。

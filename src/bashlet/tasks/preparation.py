@@ -10,7 +10,6 @@ from typing import Any, Literal
 
 from ..config import ExperimentConfig, config_record
 from ..experiment import run_experiment, serialize_task, task_from_record
-from ..mbpp import _convert
 from ..models import FunctionGrader, Task, TaskAssignment, TaskOrigin
 from ..protocol import fingerprint
 from ..replay import ReplayModel, Utf8Encoding
@@ -33,6 +32,7 @@ from .sources import (
     catalog_task_record,
     registered_origin,
 )
+from .versions import preparing_cohort
 
 DEFAULT_COHORT = _CONFIGS / "harness-cohort-v1.json"
 _TYPES = ("short_program", "code_edit", "workspace")
@@ -107,9 +107,6 @@ def _mbpp_definition(
         )
         if row is None or fingerprint(row) != source_hash:
             raise ValueError("MBPP original source record identity changed")
-        expected, _ = _convert(row, task.environment_id, task.origin)
-        if task != expected:
-            raise ValueError("Prepared MBPP task differs from the registered source")
     if not isinstance(task.grader, FunctionGrader) or not task.feedback_command:
         raise ValueError("MBPP requires function grading and public feedback")
     if len(task.implementation_paths) != 1:
@@ -146,6 +143,7 @@ def _definitions(
     mbpp_manifest: Path | None,
     config: ExperimentConfig,
     cohort_sha256: str,
+    manifest_path: Path,
 ) -> tuple[list[_Definition], list[dict[str, Any]]]:
     versioned = cohort["version"] == "harness-task-cohort-v2"
     if cohort["version"] not in ("harness-task-cohort-v1", "harness-task-cohort-v2"):
@@ -237,6 +235,7 @@ def _definitions(
                         cohort_sha256,
                         canonical_family(TaskOrigin(**data["origin"])),
                         "train_candidate" if split == "train" else split,
+                        str(manifest_path),
                     )
                 )
             definition = _Definition(
@@ -257,6 +256,7 @@ def _definitions(
                     cohort_sha256,
                     canonical_family(task.origin),
                     "train_candidate" if split == "train" else split,
+                    str(manifest_path),
                 ),
             )
             definition = replace(definition, task=task)
@@ -381,6 +381,27 @@ def prepare_harness(
     config: ExperimentConfig,
     cohort_path: Path = DEFAULT_COHORT,
 ) -> Path:
+    """Admit one cohort, then publish its verified tasks without leaking drafts."""
+    with preparing_cohort(
+        cohort_path,
+        output_dir.resolve() / "manifest.json",
+        mbpp_manifest,
+    ):
+        return _prepare_harness(
+            mbpp_manifest=mbpp_manifest,
+            output_dir=output_dir,
+            config=config,
+            cohort_path=cohort_path,
+        )
+
+
+def _prepare_harness(
+    *,
+    mbpp_manifest: Path | None,
+    output_dir: Path,
+    config: ExperimentConfig,
+    cohort_path: Path,
+) -> Path:
     """Publish a frozen candidate pool and separate development checklists.
 
     Reference and mutation failures abort the build rather than change its fixed
@@ -395,6 +416,7 @@ def prepare_harness(
         mbpp_manifest,
         config,
         hashlib.sha256(cohort_bytes).hexdigest(),
+        output_dir.resolve() / "manifest.json",
     )
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, mode=0o700)

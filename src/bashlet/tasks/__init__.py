@@ -145,6 +145,7 @@ def validate_task(task: Task, *, harness: bool = False) -> None:
             validate_harness_origin(task.origin)
         return
     from .sources import validate_registered_task
+    from .versions import validate_assignment
 
     validate_registered_task(task)
     if (
@@ -155,6 +156,7 @@ def validate_task(task: Task, *, harness: bool = False) -> None:
         or task.task_type not in ("short_program", "code_edit", "workspace")
     ):
         raise ValueError("Invalid versioned task role or conflicting family mapping")
+    validate_assignment(task)
 
 
 def validate_training_task(task: Task) -> None:
@@ -163,6 +165,13 @@ def validate_training_task(task: Task) -> None:
         raise ValueError(
             "Training requires a training-split task or training candidate"
         )
+    if task.assignment is not None:
+        path = Path(task.assignment.manifest_path)
+        if (
+            not path.is_file()
+            or json.loads(path.read_text()).get("status") != "complete"
+        ):
+            raise ValueError("Training requires a complete frozen task manifest")
 
 
 def _verified_task_path(
