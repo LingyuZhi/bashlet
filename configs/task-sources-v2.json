@@ -14,7 +14,26 @@
     {
       "format": "catalog",
       "kind": "model_assisted",
-      "lock_file": "harness-supplement-v2.lock.json"
+      "lock_file": "harness-supplement-v2.lock.json",
+      "generator": {
+        "tool": "Codex",
+        "model": "unknown",
+        "model_revision": null,
+        "identity_status": "unknown",
+        "reason": "The authoring session does not expose a verifiable deployed model ID."
+      }
+    },
+    {
+      "format": "catalog",
+      "kind": "model_assisted",
+      "lock_file": "harness-supplement-v3.lock.json",
+      "generator": {
+        "tool": "Codex",
+        "model": "unknown",
+        "model_revision": null,
+        "identity_status": "unknown",
+        "reason": "The authoring session does not expose a verifiable deployed model ID."
+      }
     }
   ]
 }

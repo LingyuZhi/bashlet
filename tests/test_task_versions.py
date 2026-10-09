@@ -155,7 +155,7 @@ def prepared_version(tmp_path_factory: pytest.TempPathFactory) -> Path:
     process = cli(
         "prepare-harness",
         "--cohort",
-        str(CONFIGS / "harness-cohort-v2.json"),
+        str(CONFIGS / "harness-cohort-v3.json"),
         "--output-dir",
         str(output),
         cwd=tmp_path,
@@ -186,6 +186,11 @@ def test_three_task_types_and_all_roles_have_real_private_quality_evidence(
         ).hexdigest()
         == manifest["source_registry_sha256"]
     )
+    registry = json.loads((output / "private/source-registry.json").read_text())
+    for source in registry["sources"]:
+        if source["kind"] == "model_assisted":
+            assert source["generator"]["model"] == "unknown"
+            assert source["generator"]["model_revision"] is None
     assert manifest["counts"] == {
         "train_candidate": {"short_program": 1, "code_edit": 2, "workspace": 2},
         "dev": {"short_program": 1, "code_edit": 1, "workspace": 1},
@@ -271,6 +276,94 @@ def test_loading_keeps_the_whole_frozen_candidate_pool_reserved(
     )
     assert process.returncode == 2, process.stdout + process.stderr
     assert not (tmp_path / "runs").exists()
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "def read_cache(entries, key, now, default=None):\n"
+        "    item = entries.pop(key, None)\n"
+        "    if item is None: return default\n"
+        "    value, expiry = item\n"
+        "    return value if now < expiry else default\n",
+        "def read_cache(entries, key, now, default=None):\n"
+        "    if key not in entries: return default\n"
+        "    value, expiry = entries[key]\n"
+        "    if isinstance(value, bool): return int(value)\n"
+        "    return value if now < expiry else default\n",
+        "def read_cache(entries, key, now, default=None):\n"
+        "    if key not in entries: return default\n"
+        "    value, expiry = entries[key]\n"
+        "    return value if now <= expiry else default\n",
+    ],
+)
+def test_corrected_cache_grading_rejects_mutation_false_coercion_and_expiry(
+    tmp_path: Path,
+    prepared_version: Path,
+    code: str,
+) -> None:
+    script = (
+        "from pathlib import Path; Path('app/cache.py').write_text(" + repr(code) + ")"
+    )
+    model = replay_config(
+        tmp_path,
+        [
+            bash("python3 -c " + shlex.quote(script)),
+            bash("python3 feedback.py"),
+            submit(),
+        ],
+    )
+    process = cli(
+        "task",
+        str(prepared_version / "manifest.json"),
+        "--task-id",
+        "supplement/cache-expiry/v3",
+        "--split",
+        "dev",
+        "-c",
+        str(model),
+        cwd=tmp_path,
+    )
+    assert process.returncode == 1, process.stdout + process.stderr
+    _, record = saved_run(tmp_path / "runs")
+    assert record["trajectory"][1]["observation"]["status"] == "ok"
+    assert record["grading_protocol"] == "test-command-v1"
+    assert record["grade"]["passed"] is False
+
+
+@pytest.mark.parametrize("same_role", [False, True])
+def test_source_revisions_cannot_add_an_independent_family_or_cross_roles(
+    tmp_path: Path,
+    same_role: bool,
+) -> None:
+    cohort = json.loads((CONFIGS / "harness-cohort-v3.json").read_text())
+    if same_role:
+        cohort["development"]["task_ids"].append("supplement/cache-expiry")
+        cohort["development"]["per_type"] = {
+            "short_program": 1,
+            "code_edit": 2,
+            "workspace": 1,
+        }
+    else:
+        cohort["training_candidates"]["task_ids"].append("supplement/cache-expiry")
+        cohort["training_candidates"]["per_type"]["code_edit"] += 1
+    path = tmp_path / "conflicting-revisions.json"
+    path.write_text(json.dumps(cohort))
+    output = tmp_path / "conflicting"
+    process = cli(
+        "prepare-harness",
+        "--cohort",
+        str(path),
+        "--output-dir",
+        str(output),
+        cwd=tmp_path,
+    )
+    assert process.returncode == 2, process.stdout + process.stderr
+    expected = (
+        "independent base task families" if same_role else "family split conflict"
+    )
+    assert expected in process.stderr
+    assert not output.exists()
 
 
 def test_training_cli_rejects_old_dev_even_when_its_candidate_is_not_sampled(

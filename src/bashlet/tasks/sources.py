@@ -46,6 +46,18 @@ def admitted_sources() -> SourceRegistry:
     for registration in registry["sources"]:
         if registration["kind"] not in ("public", "authored", "model_assisted"):
             raise ValueError("Unknown source provenance kind")
+        if registration["kind"] == "model_assisted":
+            generator = registration.get("generator")
+            if (
+                not isinstance(generator, dict)
+                or not isinstance(generator.get("model"), str)
+                or not generator["model"].strip()
+                or "model_revision" not in generator
+            ):
+                raise ValueError(
+                    "Model-assisted admission requires a generator model "
+                    "or explicit unknown"
+                )
         lock = json.loads(_local_file(registration["lock_file"]).read_text())
         identity = (lock["dataset"], lock["revision"], lock["sha256"])
         if identity in sources:
