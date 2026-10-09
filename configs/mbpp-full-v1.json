@@ -1,0 +1,9 @@
+{
+  "dataset": "google-research/google-research",
+  "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
+  "format": "mbpp",
+  "url": "https://raw.githubusercontent.com/google-research/google-research/e49bbfe381c9c0e564b937f1c4e163a2273c65cc/mbpp/mbpp.jsonl",
+  "file": "mbpp-mbpp.jsonl",
+  "sha256": "ccf64ceae9c5403bf50a044cb6d505bfd2a2963ee58338ba268fd65beab92a9f",
+  "authors": "Austin et al., Google Research"
+}

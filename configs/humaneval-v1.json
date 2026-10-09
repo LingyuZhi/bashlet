@@ -1,0 +1,9 @@
+{
+  "dataset": "openai/human-eval",
+  "revision": "6d43fb980f9fee3c892a914eda09951f772ad10d",
+  "format": "humaneval",
+  "url": "https://raw.githubusercontent.com/openai/human-eval/6d43fb980f9fee3c892a914eda09951f772ad10d/data/HumanEval.jsonl.gz",
+  "file": "humaneval-HumanEval.jsonl.gz",
+  "sha256": "b796127e635a67f93fb35c04f4cb03cf06f38c8072ee7cee8833d7bee06979ef",
+  "authors": "Chen et al., OpenAI"
+}

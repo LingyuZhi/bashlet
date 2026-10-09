@@ -105,7 +105,7 @@ OPSD 可以直接从指令模型开始；SFT 是可选起点。
 | 🎯 用途 | ⌨️ CLI 命令 | 📄 配置或说明 |
 | --- | --- | --- |
 | 准备 MBPP 任务 | `prepare-mbpp` | [数据源配置](configs/mbpp-sanitized-v1.json) |
-| 准备多类型任务 | `prepare-harness` | [v1 配置](configs/harness-tasks-v1.md)、[v2 数据角色与旧 dev 复用](configs/harness-tasks-v2.md) |
+| 准备多类型任务 | `prepare-harness` | [v1 配置](configs/harness-tasks-v1.md)、[v2 数据角色](configs/harness-tasks-v2.md)、[836 家族冻结](configs/opsd-expanded-data-v6.md) |
 | 导出 SFT 数据 | `prepare-sft` | [已执行轨迹的输入格式](configs/executed-trajectories.md) |
 | SFT 训练 | `train-sft` | [SFT 配置](configs/sft-v1.yaml) |
 | OPSD 训练 | `train-opsd` | [OPSD 小试配置](configs/opsd-pilot-v1.yaml) |

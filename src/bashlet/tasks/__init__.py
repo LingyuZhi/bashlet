@@ -57,7 +57,7 @@ def authored_source() -> tuple[dict[str, Any], dict[str, Any]]:
     return lock, families
 
 
-def validate_origin(origin: TaskOrigin) -> None:
+def validate_origin(origin: TaskOrigin, *, artifact_dir: Path | None = None) -> None:
     """Unknown labels are never trusted; variants inherit source-owned splits."""
     if origin.dataset == "google-research/mbpp":
         validate_mbpp_origin(origin)
@@ -65,7 +65,7 @@ def validate_origin(origin: TaskOrigin) -> None:
     if origin.dataset != AUTHORED_DATASET:
         from .sources import registered_origin
 
-        registered_origin(origin)
+        registered_origin(origin, artifact_dir=artifact_dir)
         return
     lock, families = authored_source()
     if origin.revision != lock["revision"] or origin.source_sha256 != lock["sha256"]:
@@ -136,7 +136,12 @@ def validate_task(task: Task, *, harness: bool = False) -> None:
         if task.assignment is not None:
             raise ValueError("A versioned task requires a registered origin")
         return
-    validate_origin(task.origin)
+    artifact_dir = (
+        Path(task.assignment.manifest_path).parent / "private/sources"
+        if task.assignment is not None
+        else None
+    )
+    validate_origin(task.origin, artifact_dir=artifact_dir)
     assignment = task.assignment
     if assignment is None:
         if task.origin.dataset not in ("google-research/mbpp", AUTHORED_DATASET):
@@ -200,7 +205,7 @@ def _verified_task_path(
         raise ValueError("Task identity or origin differs from its family manifest")
     if task.get("assignment") != selected.get("assignment"):
         raise ValueError("Task role differs from its versioned manifest")
-    validate_origin(expected)
+    validate_origin(expected, artifact_dir=root / "private/sources")
     if "task_type" in selected and task.get("task_type") is not None:
         if task["task_type"] != selected["task_type"]:
             raise ValueError("Task type differs from its manifest")
@@ -247,6 +252,17 @@ def _versioned_roles(manifest_path: Path, manifest: dict[str, Any]) -> dict[str,
     ):
         raise ValueError("Frozen cohort or family guard content identity changed")
     roles: dict[str, str] = {}
+    expected_audits = {d["sha256"] for d in cohort.get("audit_documents", [])}
+    artifacts_audits = manifest.get("audit_artifacts", [])
+    if expected_audits != {d["sha256"] for d in artifacts_audits}:
+        raise ValueError("Frozen cohort audit evidence is missing")
+    for document in artifacts_audits:
+        path = (manifest_path.parent / document["file"]).resolve()
+        if (
+            not path.is_relative_to((private / "audits").resolve())
+            or hashlib.sha256(path.read_bytes()).hexdigest() != document["sha256"]
+        ):
+            raise ValueError("Frozen cohort audit evidence changed")
     for group, role in (
         ("training_candidates", "train_candidate"),
         ("development", "dev"),
@@ -265,6 +281,9 @@ def _versioned_roles(manifest_path: Path, manifest: dict[str, Any]) -> dict[str,
             "Task set differs from the whole frozen candidate/dev/test pool"
         )
     family_roles: dict[str, str] = {}
+    from .audit import validate_independence
+
+    validate_independence(cohort, [entries[i]["family_id"] for i in roles])
     for identity, role in roles.items():
         family = entries[identity]["family_id"]
         if family in family_roles:
@@ -275,6 +294,9 @@ def _versioned_roles(manifest_path: Path, manifest: dict[str, Any]) -> dict[str,
         if identity in roles or family not in family_roles:
             raise ValueError("Variant must inherit a frozen base family")
         roles[identity] = family_roles[family]
+    from .freeze import validate_selection
+
+    validate_selection(manifest_path.parent, manifest)
     return roles
 
 
@@ -303,8 +325,11 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     roles = _versioned_roles(manifest_path, manifest) if versioned else {}
     from .sources import admitted_sources, validate_source_entry
 
-    registrations = admitted_sources() if versioned else {}
+    registrations = (
+        admitted_sources(manifest_path.parent / "private/sources") if versioned else {}
+    )
     native_rows: dict[tuple[str, str, str, str], str] = {}
+    native_records: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     if versioned:
         if not sources <= registrations.keys():
             raise ValueError("Manifest contains an unregistered source version")
@@ -312,6 +337,14 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
             if source["dataset"] == "google-research/mbpp":
                 rows = json.loads((manifest_path.parent / source["file"]).read_text())
                 for row in rows:
+                    native_records[
+                        (
+                            source["dataset"],
+                            source["revision"],
+                            source["sha256"],
+                            str(row["task_id"]),
+                        )
+                    ] = row
                     native_rows[
                         (
                             source["dataset"],
@@ -349,7 +382,25 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
                     != entry["source_record_sha256"]
                 ):
                     raise ValueError("MBPP original source record identity changed")
-            validate_source_entry(origin, entry, registrations)
+            record = None
+            if "freeze" in manifest["cohort"]:
+                record = json.loads(
+                    (manifest_path.parent / entry["task_file"]).read_text()
+                )
+            validate_source_entry(
+                origin,
+                entry,
+                registrations,
+                record,
+                native_records.get(
+                    (
+                        origin.dataset,
+                        origin.revision,
+                        origin.source_sha256,
+                        origin.original_task_id,
+                    )
+                ),
+            )
         else:
             validate_harness_origin(origin)
         if (origin.dataset, origin.revision, origin.source_sha256) not in sources:

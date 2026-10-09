@@ -1,0 +1,7 @@
+budget:
+  max_steps: 6
+  max_generated_tokens: 65536
+  max_seconds: 600
+model:
+  sampling:
+    max_tokens: 32768

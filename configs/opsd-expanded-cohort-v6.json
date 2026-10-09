@@ -1,0 +1,2506 @@
+{
+  "version": "harness-task-cohort-v2",
+  "name": "opsd-expanded-836-v6",
+  "training_candidates": {
+    "task_ids": [
+      "harness/ansi-colors",
+      "harness/binary-size",
+      "harness/boolean-setting",
+      "harness/build-flags",
+      "harness/cache-budget",
+      "harness/checksum-selection",
+      "harness/cli-aliases",
+      "harness/column-projection",
+      "harness/csv-field",
+      "harness/currency-rounding",
+      "harness/deduplicated-mail",
+      "harness/dependency-edges",
+      "harness/deployment-targets",
+      "harness/directory-name",
+      "harness/discount-codes",
+      "harness/duration-units",
+      "harness/env-assignment",
+      "harness/escaped-comment",
+      "harness/expired-sessions",
+      "harness/extension-policy",
+      "harness/feature-requirements",
+      "harness/form-value",
+      "harness/header-key",
+      "harness/header-value",
+      "harness/invoice-balance",
+      "harness/job-buckets",
+      "harness/label-column",
+      "harness/label-index",
+      "harness/last-record",
+      "harness/latest-package",
+      "harness/license-audit",
+      "harness/locale-fallback",
+      "harness/log-counts",
+      "harness/log-level",
+      "harness/manifest-size",
+      "harness/message-margin",
+      "harness/missing-defaults",
+      "harness/named-template",
+      "harness/nested-setting",
+      "harness/network-port",
+      "harness/open-jobs",
+      "harness/page-windows",
+      "harness/priority-queue",
+      "harness/query-encoding",
+      "harness/quota-remaining",
+      "harness/release-core",
+      "harness/retry-deadlines",
+      "harness/route-inventory",
+      "harness/schedule-minutes",
+      "harness/secret-fields",
+      "harness/service-owners",
+      "harness/slug-key",
+      "harness/stock-value",
+      "harness/symlink-plan",
+      "harness/tab-stops",
+      "harness/test-matrix",
+      "harness/threshold-alerts",
+      "harness/timezone-offsets",
+      "harness/translation-gaps",
+      "harness/url-boundary",
+      "mbpp/555",
+      "mbpp/556",
+      "mbpp/557",
+      "mbpp/558",
+      "mbpp/559",
+      "mbpp/562",
+      "mbpp/564",
+      "mbpp/565",
+      "mbpp/566",
+      "mbpp/567",
+      "mbpp/568",
+      "mbpp/569",
+      "mbpp/572",
+      "mbpp/573",
+      "mbpp/574",
+      "mbpp/576",
+      "mbpp/577",
+      "mbpp/578",
+      "mbpp/581",
+      "mbpp/583",
+      "mbpp/584",
+      "mbpp/585",
+      "mbpp/586",
+      "mbpp/588",
+      "mbpp/589",
+      "mbpp/591",
+      "mbpp/592",
+      "mbpp/593",
+      "mbpp/595",
+      "mbpp/597",
+      "mbpp/598",
+      "mbpp/600",
+      "mbpp/602",
+      "mbpp/603",
+      "mbpp/604",
+      "mbpp/605",
+      "mbpp/606",
+      "mbpp/607",
+      "mbpp/608",
+      "mbpp/610",
+      "mbpp/611",
+      "mbpp/612",
+      "mbpp/618",
+      "mbpp/619",
+      "mbpp/620",
+      "mbpp/622",
+      "mbpp/623",
+      "mbpp/624",
+      "mbpp/626",
+      "mbpp/627",
+      "mbpp/628",
+      "mbpp/629",
+      "mbpp/633",
+      "mbpp/635",
+      "mbpp/637",
+      "mbpp/638",
+      "mbpp/639",
+      "mbpp/640",
+      "mbpp/641",
+      "mbpp/643",
+      "mbpp/644",
+      "mbpp/721",
+      "mbpp/723",
+      "mbpp/724",
+      "mbpp/725",
+      "mbpp/728",
+      "mbpp/730",
+      "mbpp/731",
+      "mbpp/733",
+      "mbpp/734",
+      "mbpp/735",
+      "mbpp/736",
+      "mbpp/738",
+      "mbpp/739",
+      "mbpp/741",
+      "mbpp/742",
+      "mbpp/743",
+      "mbpp/745",
+      "mbpp/746",
+      "mbpp/747",
+      "mbpp/749",
+      "mbpp/751",
+      "mbpp/752",
+      "mbpp/754",
+      "mbpp/755",
+      "mbpp/756",
+      "mbpp/757",
+      "mbpp/759",
+      "mbpp/760",
+      "mbpp/762",
+      "mbpp/764",
+      "mbpp/765",
+      "mbpp/766",
+      "mbpp/767",
+      "mbpp/769",
+      "mbpp/770",
+      "mbpp/771",
+      "mbpp/772",
+      "mbpp/773",
+      "mbpp/775",
+      "mbpp/776",
+      "mbpp/777",
+      "mbpp/778",
+      "mbpp/782",
+      "mbpp/783",
+      "mbpp/784",
+      "mbpp/785",
+      "mbpp/788",
+      "mbpp/792",
+      "mbpp/796",
+      "mbpp/797",
+      "mbpp/798",
+      "mbpp/799",
+      "mbpp/801",
+      "mbpp/802",
+      "mbpp/805",
+      "mbpp/806",
+      "mbpp/807",
+      "public/humaneval/100/v5",
+      "public/humaneval/101/v5",
+      "public/humaneval/107/v5",
+      "public/humaneval/109/v5",
+      "public/humaneval/11/v5",
+      "public/humaneval/112/v5",
+      "public/humaneval/114/v5",
+      "public/humaneval/115/v5",
+      "public/humaneval/116/v5",
+      "public/humaneval/119/v5",
+      "public/humaneval/121/v5",
+      "public/humaneval/123/v5",
+      "public/humaneval/124/v5",
+      "public/humaneval/125/v5",
+      "public/humaneval/126/v5",
+      "public/humaneval/128/v5",
+      "public/humaneval/129/v5",
+      "public/humaneval/130/v5",
+      "public/humaneval/131/v5",
+      "public/humaneval/134/v5",
+      "public/humaneval/135/v5",
+      "public/humaneval/136/v5",
+      "public/humaneval/137/v5",
+      "public/humaneval/140/v5",
+      "public/humaneval/143/v5",
+      "public/humaneval/145/v5",
+      "public/humaneval/149/v5",
+      "public/humaneval/151/v5",
+      "public/humaneval/152/v5",
+      "public/humaneval/155/v5",
+      "public/humaneval/160/v5",
+      "public/humaneval/17/v5",
+      "public/humaneval/2/v5",
+      "public/humaneval/20/v5",
+      "public/humaneval/21/v5",
+      "public/humaneval/22/v5",
+      "public/humaneval/24/v5",
+      "public/humaneval/25/v5",
+      "public/humaneval/30/v5",
+      "public/humaneval/31/v5",
+      "public/humaneval/34/v5",
+      "public/humaneval/36/v5",
+      "public/humaneval/40/v5",
+      "public/humaneval/41/v5",
+      "public/humaneval/45/v5",
+      "public/humaneval/46/v5",
+      "public/humaneval/47/v5",
+      "public/humaneval/49/v5",
+      "public/humaneval/53/v5",
+      "public/humaneval/54/v5",
+      "public/humaneval/59/v5",
+      "public/humaneval/6/v5",
+      "public/humaneval/60/v5",
+      "public/humaneval/62/v5",
+      "public/humaneval/64/v5",
+      "public/humaneval/65/v5",
+      "public/humaneval/67/v5",
+      "public/humaneval/69/v5",
+      "public/humaneval/70/v5",
+      "public/humaneval/71/v5",
+      "public/humaneval/73/v5",
+      "public/humaneval/74/v5",
+      "public/humaneval/83/v5",
+      "public/humaneval/86/v5",
+      "public/humaneval/9/v5",
+      "public/humaneval/90/v5",
+      "public/humaneval/93/v5",
+      "public/humaneval/97/v5",
+      "public/humaneval/99/v5",
+      "public/mbpp/100/v5",
+      "public/mbpp/105/v5",
+      "public/mbpp/108/v5",
+      "public/mbpp/109/v5",
+      "public/mbpp/111/v5",
+      "public/mbpp/113/v5",
+      "public/mbpp/114/v5",
+      "public/mbpp/115/v5",
+      "public/mbpp/117/v5",
+      "public/mbpp/119/v5",
+      "public/mbpp/125/v5",
+      "public/mbpp/127/v5",
+      "public/mbpp/129/v5",
+      "public/mbpp/13/v5",
+      "public/mbpp/131/v5",
+      "public/mbpp/136/v5",
+      "public/mbpp/142/v5",
+      "public/mbpp/143/v5",
+      "public/mbpp/144/v5",
+      "public/mbpp/145/v5",
+      "public/mbpp/146/v5",
+      "public/mbpp/147/v5",
+      "public/mbpp/148/v5",
+      "public/mbpp/151/v5",
+      "public/mbpp/153/v5",
+      "public/mbpp/162/v5",
+      "public/mbpp/163/v5",
+      "public/mbpp/169/v5",
+      "public/mbpp/171/v5",
+      "public/mbpp/172/v5",
+      "public/mbpp/173/v5",
+      "public/mbpp/175/v5",
+      "public/mbpp/176/v5",
+      "public/mbpp/179/v5",
+      "public/mbpp/18/v5",
+      "public/mbpp/180/v5",
+      "public/mbpp/182/v5",
+      "public/mbpp/185/v5",
+      "public/mbpp/188/v5",
+      "public/mbpp/19/v5",
+      "public/mbpp/190/v5",
+      "public/mbpp/192/v5",
+      "public/mbpp/194/v5",
+      "public/mbpp/199/v5",
+      "public/mbpp/20/v5",
+      "public/mbpp/205/v5",
+      "public/mbpp/209/v5",
+      "public/mbpp/210/v5",
+      "public/mbpp/211/v5",
+      "public/mbpp/219/v5",
+      "public/mbpp/22/v5",
+      "public/mbpp/226/v5",
+      "public/mbpp/228/v5",
+      "public/mbpp/230/v5",
+      "public/mbpp/232/v5",
+      "public/mbpp/234/v5",
+      "public/mbpp/236/v5",
+      "public/mbpp/238/v5",
+      "public/mbpp/240/v5",
+      "public/mbpp/244/v5",
+      "public/mbpp/245/v5",
+      "public/mbpp/246/v5",
+      "public/mbpp/250/v5",
+      "public/mbpp/253/v5",
+      "public/mbpp/255/v5",
+      "public/mbpp/258/v5",
+      "public/mbpp/259/v5",
+      "public/mbpp/260/v5",
+      "public/mbpp/261/v5",
+      "public/mbpp/262/v5",
+      "public/mbpp/263/v5",
+      "public/mbpp/264/v5",
+      "public/mbpp/265/v5",
+      "public/mbpp/270/v5",
+      "public/mbpp/276/v5",
+      "public/mbpp/277/v5",
+      "public/mbpp/278/v5",
+      "public/mbpp/28/v5",
+      "public/mbpp/283/v5",
+      "public/mbpp/286/v5",
+      "public/mbpp/289/v5",
+      "public/mbpp/291/v5",
+      "public/mbpp/292/v5",
+      "public/mbpp/294/v5",
+      "public/mbpp/295/v5",
+      "public/mbpp/297/v5",
+      "public/mbpp/298/v5",
+      "public/mbpp/299/v5",
+      "public/mbpp/300/v5",
+      "public/mbpp/301/v5",
+      "public/mbpp/302/v5",
+      "public/mbpp/303/v5",
+      "public/mbpp/304/v5",
+      "public/mbpp/306/v5",
+      "public/mbpp/314/v5",
+      "public/mbpp/321/v5",
+      "public/mbpp/323/v5",
+      "public/mbpp/324/v5",
+      "public/mbpp/325/v5",
+      "public/mbpp/326/v5",
+      "public/mbpp/327/v5",
+      "public/mbpp/328/v5",
+      "public/mbpp/329/v5",
+      "public/mbpp/335/v5",
+      "public/mbpp/342/v5",
+      "public/mbpp/344/v5",
+      "public/mbpp/345/v5",
+      "public/mbpp/354/v5",
+      "public/mbpp/355/v5",
+      "public/mbpp/356/v5",
+      "public/mbpp/361/v5",
+      "public/mbpp/364/v5",
+      "public/mbpp/366/v5",
+      "public/mbpp/368/v5",
+      "public/mbpp/370/v5",
+      "public/mbpp/376/v5",
+      "public/mbpp/378/v5",
+      "public/mbpp/380/v5",
+      "public/mbpp/382/v5",
+      "public/mbpp/384/v5",
+      "public/mbpp/385/v5",
+      "public/mbpp/387/v5",
+      "public/mbpp/39/v5",
+      "public/mbpp/390/v5",
+      "public/mbpp/392/v5",
+      "public/mbpp/396/v5",
+      "public/mbpp/397/v5",
+      "public/mbpp/398/v5",
+      "public/mbpp/400/v5",
+      "public/mbpp/407/v5",
+      "public/mbpp/408/v5",
+      "public/mbpp/416/v5",
+      "public/mbpp/417/v5",
+      "public/mbpp/419/v5",
+      "public/mbpp/423/v5",
+      "public/mbpp/424/v5",
+      "public/mbpp/432/v5",
+      "public/mbpp/438/v5",
+      "public/mbpp/439/v5",
+      "public/mbpp/444/v5",
+      "public/mbpp/446/v5",
+      "public/mbpp/453/v5",
+      "public/mbpp/456/v5",
+      "public/mbpp/46/v5",
+      "public/mbpp/462/v5",
+      "public/mbpp/463/v5",
+      "public/mbpp/466/v5",
+      "public/mbpp/468/v5",
+      "public/mbpp/469/v5",
+      "public/mbpp/471/v5",
+      "public/mbpp/472/v5",
+      "public/mbpp/473/v5",
+      "public/mbpp/475/v5",
+      "public/mbpp/479/v5",
+      "public/mbpp/480/v5",
+      "public/mbpp/481/v5",
+      "public/mbpp/484/v5",
+      "public/mbpp/485/v5",
+      "public/mbpp/488/v5",
+      "public/mbpp/490/v5",
+      "public/mbpp/491/v5",
+      "public/mbpp/493/v5",
+      "public/mbpp/496/v5",
+      "public/mbpp/497/v5",
+      "public/mbpp/501/v5",
+      "public/mbpp/510/v5",
+      "public/mbpp/512/v5",
+      "public/mbpp/513/v5",
+      "public/mbpp/514/v5",
+      "public/mbpp/515/v5",
+      "public/mbpp/518/v5",
+      "public/mbpp/519/v5",
+      "public/mbpp/522/v5",
+      "public/mbpp/523/v5",
+      "public/mbpp/524/v5",
+      "public/mbpp/525/v5",
+      "public/mbpp/537/v5",
+      "public/mbpp/539/v5",
+      "public/mbpp/540/v5",
+      "public/mbpp/541/v5",
+      "public/mbpp/543/v5",
+      "public/mbpp/544/v5",
+      "public/mbpp/548/v5",
+      "public/mbpp/553/v5",
+      "public/mbpp/56/v5",
+      "public/mbpp/57/v5",
+      "public/mbpp/570/v5",
+      "public/mbpp/571/v5",
+      "public/mbpp/575/v5",
+      "public/mbpp/58/v5",
+      "public/mbpp/582/v5",
+      "public/mbpp/60/v5",
+      "public/mbpp/61/v5",
+      "public/mbpp/615/v5",
+      "public/mbpp/616/v5",
+      "public/mbpp/621/v5",
+      "public/mbpp/63/v5",
+      "public/mbpp/630/v5",
+      "public/mbpp/636/v5",
+      "public/mbpp/642/v5",
+      "public/mbpp/645/v5",
+      "public/mbpp/65/v5",
+      "public/mbpp/654/v5",
+      "public/mbpp/656/v5",
+      "public/mbpp/657/v5",
+      "public/mbpp/659/v5",
+      "public/mbpp/661/v5",
+      "public/mbpp/662/v5",
+      "public/mbpp/663/v5",
+      "public/mbpp/667/v5",
+      "public/mbpp/668/v5",
+      "public/mbpp/675/v5",
+      "public/mbpp/677/v5",
+      "public/mbpp/68/v5",
+      "public/mbpp/683/v5",
+      "public/mbpp/684/v5",
+      "public/mbpp/686/v5",
+      "public/mbpp/689/v5",
+      "public/mbpp/690/v5",
+      "public/mbpp/696/v5",
+      "public/mbpp/700/v5",
+      "public/mbpp/710/v5",
+      "public/mbpp/711/v5",
+      "public/mbpp/714/v5",
+      "public/mbpp/722/v5",
+      "public/mbpp/726/v5",
+      "public/mbpp/73/v5",
+      "public/mbpp/74/v5",
+      "public/mbpp/740/v5",
+      "public/mbpp/744/v5",
+      "public/mbpp/753/v5",
+      "public/mbpp/761/v5",
+      "public/mbpp/779/v5",
+      "public/mbpp/781/v5",
+      "public/mbpp/791/v5",
+      "public/mbpp/819/v5",
+      "public/mbpp/82/v5",
+      "public/mbpp/822/v5",
+      "public/mbpp/823/v5",
+      "public/mbpp/825/v5",
+      "public/mbpp/826/v5",
+      "public/mbpp/827/v5",
+      "public/mbpp/830/v5",
+      "public/mbpp/833/v5",
+      "public/mbpp/835/v5",
+      "public/mbpp/839/v5",
+      "public/mbpp/846/v5",
+      "public/mbpp/851/v5",
+      "public/mbpp/854/v5",
+      "public/mbpp/856/v5",
+      "public/mbpp/857/v5",
+      "public/mbpp/863/v5",
+      "public/mbpp/868/v5",
+      "public/mbpp/869/v5",
+      "public/mbpp/873/v5",
+      "public/mbpp/874/v5",
+      "public/mbpp/878/v5",
+      "public/mbpp/880/v5",
+      "public/mbpp/885/v5",
+      "public/mbpp/887/v5",
+      "public/mbpp/888/v5",
+      "public/mbpp/89/v5",
+      "public/mbpp/891/v5",
+      "public/mbpp/897/v5",
+      "public/mbpp/898/v5",
+      "public/mbpp/899/v5",
+      "public/mbpp/90/v5",
+      "public/mbpp/902/v5",
+      "public/mbpp/903/v5",
+      "public/mbpp/908/v5",
+      "public/mbpp/911/v5",
+      "public/mbpp/915/v5",
+      "public/mbpp/916/v5",
+      "public/mbpp/92/v5",
+      "public/mbpp/923/v5",
+      "public/mbpp/925/v5",
+      "public/mbpp/929/v5",
+      "public/mbpp/937/v5",
+      "public/mbpp/941/v5",
+      "public/mbpp/943/v5",
+      "public/mbpp/944/v5",
+      "public/mbpp/946/v5",
+      "public/mbpp/948/v5",
+      "public/mbpp/951/v5",
+      "public/mbpp/958/v5",
+      "public/mbpp/959/v5",
+      "public/mbpp/963/v5",
+      "public/mbpp/968/v5",
+      "public/mbpp/972/v5"
+    ],
+    "per_type": {
+      "short_program": 214,
+      "code_edit": 161,
+      "workspace": 161
+    }
+  },
+  "development": {
+    "task_ids": [
+      "public/humaneval/0/v5",
+      "public/humaneval/104/v5",
+      "public/humaneval/108/v5",
+      "public/humaneval/111/v5",
+      "public/humaneval/117/v5",
+      "public/humaneval/118/v5",
+      "public/humaneval/127/v5",
+      "public/humaneval/139/v5",
+      "public/humaneval/144/v5",
+      "public/humaneval/146/v5",
+      "public/humaneval/148/v5",
+      "public/humaneval/153/v5",
+      "public/humaneval/156/v5",
+      "public/humaneval/157/v5",
+      "public/humaneval/158/v5",
+      "public/humaneval/163/v5",
+      "public/humaneval/26/v5",
+      "public/humaneval/28/v5",
+      "public/humaneval/39/v5",
+      "public/humaneval/57/v5",
+      "public/humaneval/68/v5",
+      "public/humaneval/78/v5",
+      "public/humaneval/80/v5",
+      "public/humaneval/81/v5",
+      "public/humaneval/82/v5",
+      "public/humaneval/87/v5",
+      "public/humaneval/88/v5",
+      "public/humaneval/89/v5",
+      "public/humaneval/92/v5",
+      "public/humaneval/94/v5",
+      "public/humaneval/95/v5",
+      "public/humaneval/96/v5",
+      "public/humaneval/98/v5",
+      "public/mbpp/103/v5",
+      "public/mbpp/123/v5",
+      "public/mbpp/134/v5",
+      "public/mbpp/137/v5",
+      "public/mbpp/14/v5",
+      "public/mbpp/140/v5",
+      "public/mbpp/150/v5",
+      "public/mbpp/158/v5",
+      "public/mbpp/159/v5",
+      "public/mbpp/160/v5",
+      "public/mbpp/166/v5",
+      "public/mbpp/167/v5",
+      "public/mbpp/183/v5",
+      "public/mbpp/203/v5",
+      "public/mbpp/207/v5",
+      "public/mbpp/222/v5",
+      "public/mbpp/239/v5",
+      "public/mbpp/242/v5",
+      "public/mbpp/249/v5",
+      "public/mbpp/269/v5",
+      "public/mbpp/275/v5",
+      "public/mbpp/293/v5",
+      "public/mbpp/296/v5",
+      "public/mbpp/313/v5",
+      "public/mbpp/320/v5",
+      "public/mbpp/339/v5",
+      "public/mbpp/340/v5",
+      "public/mbpp/349/v5",
+      "public/mbpp/35/v5",
+      "public/mbpp/353/v5",
+      "public/mbpp/36/v5",
+      "public/mbpp/373/v5",
+      "public/mbpp/377/v5",
+      "public/mbpp/391/v5",
+      "public/mbpp/410/v5",
+      "public/mbpp/436/v5",
+      "public/mbpp/476/v5",
+      "public/mbpp/477/v5",
+      "public/mbpp/517/v5",
+      "public/mbpp/53/v5",
+      "public/mbpp/531/v5",
+      "public/mbpp/534/v5",
+      "public/mbpp/561/v5",
+      "public/mbpp/613/v5",
+      "public/mbpp/648/v5",
+      "public/mbpp/701/v5",
+      "public/mbpp/718/v5",
+      "public/mbpp/78/v5",
+      "public/mbpp/810/v5",
+      "public/mbpp/83/v5",
+      "public/mbpp/834/v5",
+      "public/mbpp/843/v5",
+      "public/mbpp/845/v5",
+      "public/mbpp/848/v5",
+      "public/mbpp/861/v5",
+      "public/mbpp/864/v5",
+      "public/mbpp/865/v5",
+      "public/mbpp/867/v5",
+      "public/mbpp/871/v5",
+      "public/mbpp/882/v5",
+      "public/mbpp/890/v5",
+      "public/mbpp/895/v5",
+      "public/mbpp/933/v5",
+      "public/mbpp/935/v5",
+      "public/mbpp/949/v5",
+      "public/mbpp/96/v5",
+      "public/mbpp/969/v5"
+    ],
+    "per_type": {
+      "short_program": 40,
+      "code_edit": 30,
+      "workspace": 30
+    }
+  },
+  "test": {
+    "task_ids": [
+      "public/humaneval/1/v5",
+      "public/humaneval/10/v5",
+      "public/humaneval/102/v5",
+      "public/humaneval/103/v5",
+      "public/humaneval/105/v5",
+      "public/humaneval/106/v5",
+      "public/humaneval/110/v5",
+      "public/humaneval/113/v5",
+      "public/humaneval/12/v5",
+      "public/humaneval/122/v5",
+      "public/humaneval/132/v5",
+      "public/humaneval/133/v5",
+      "public/humaneval/14/v5",
+      "public/humaneval/141/v5",
+      "public/humaneval/142/v5",
+      "public/humaneval/147/v5",
+      "public/humaneval/15/v5",
+      "public/humaneval/150/v5",
+      "public/humaneval/154/v5",
+      "public/humaneval/16/v5",
+      "public/humaneval/161/v5",
+      "public/humaneval/162/v5",
+      "public/humaneval/18/v5",
+      "public/humaneval/19/v5",
+      "public/humaneval/27/v5",
+      "public/humaneval/29/v5",
+      "public/humaneval/3/v5",
+      "public/humaneval/42/v5",
+      "public/humaneval/44/v5",
+      "public/humaneval/48/v5",
+      "public/humaneval/5/v5",
+      "public/humaneval/51/v5",
+      "public/humaneval/66/v5",
+      "public/humaneval/75/v5",
+      "public/humaneval/76/v5",
+      "public/humaneval/77/v5",
+      "public/humaneval/79/v5",
+      "public/humaneval/8/v5",
+      "public/humaneval/84/v5",
+      "public/humaneval/91/v5",
+      "public/mbpp/101/v5",
+      "public/mbpp/107/v5",
+      "public/mbpp/11/v5",
+      "public/mbpp/110/v5",
+      "public/mbpp/112/v5",
+      "public/mbpp/118/v5",
+      "public/mbpp/12/v5",
+      "public/mbpp/121/v5",
+      "public/mbpp/122/v5",
+      "public/mbpp/124/v5",
+      "public/mbpp/126/v5",
+      "public/mbpp/128/v5",
+      "public/mbpp/133/v5",
+      "public/mbpp/139/v5",
+      "public/mbpp/156/v5",
+      "public/mbpp/165/v5",
+      "public/mbpp/168/v5",
+      "public/mbpp/170/v5",
+      "public/mbpp/174/v5",
+      "public/mbpp/177/v5",
+      "public/mbpp/181/v5",
+      "public/mbpp/184/v5",
+      "public/mbpp/187/v5",
+      "public/mbpp/204/v5",
+      "public/mbpp/206/v5",
+      "public/mbpp/21/v5",
+      "public/mbpp/215/v5",
+      "public/mbpp/218/v5",
+      "public/mbpp/221/v5",
+      "public/mbpp/223/v5",
+      "public/mbpp/224/v5",
+      "public/mbpp/229/v5",
+      "public/mbpp/23/v5",
+      "public/mbpp/231/v5",
+      "public/mbpp/237/v5",
+      "public/mbpp/241/v5",
+      "public/mbpp/243/v5",
+      "public/mbpp/247/v5",
+      "public/mbpp/251/v5",
+      "public/mbpp/254/v5",
+      "public/mbpp/256/v5",
+      "public/mbpp/257/v5",
+      "public/mbpp/26/v5",
+      "public/mbpp/272/v5",
+      "public/mbpp/274/v5",
+      "public/mbpp/288/v5",
+      "public/mbpp/29/v5",
+      "public/mbpp/305/v5",
+      "public/mbpp/307/v5",
+      "public/mbpp/308/v5",
+      "public/mbpp/31/v5",
+      "public/mbpp/312/v5",
+      "public/mbpp/315/v5",
+      "public/mbpp/318/v5",
+      "public/mbpp/331/v5",
+      "public/mbpp/333/v5",
+      "public/mbpp/343/v5",
+      "public/mbpp/346/v5",
+      "public/mbpp/348/v5",
+      "public/mbpp/350/v5",
+      "public/mbpp/359/v5",
+      "public/mbpp/360/v5",
+      "public/mbpp/363/v5",
+      "public/mbpp/375/v5",
+      "public/mbpp/381/v5",
+      "public/mbpp/386/v5",
+      "public/mbpp/394/v5",
+      "public/mbpp/406/v5",
+      "public/mbpp/414/v5",
+      "public/mbpp/415/v5",
+      "public/mbpp/421/v5",
+      "public/mbpp/425/v5",
+      "public/mbpp/429/v5",
+      "public/mbpp/430/v5",
+      "public/mbpp/431/v5",
+      "public/mbpp/435/v5",
+      "public/mbpp/440/v5",
+      "public/mbpp/443/v5",
+      "public/mbpp/447/v5",
+      "public/mbpp/448/v5",
+      "public/mbpp/449/v5",
+      "public/mbpp/450/v5",
+      "public/mbpp/465/v5",
+      "public/mbpp/47/v5",
+      "public/mbpp/474/v5",
+      "public/mbpp/483/v5",
+      "public/mbpp/503/v5",
+      "public/mbpp/506/v5",
+      "public/mbpp/511/v5",
+      "public/mbpp/526/v5",
+      "public/mbpp/532/v5",
+      "public/mbpp/536/v5",
+      "public/mbpp/545/v5",
+      "public/mbpp/547/v5",
+      "public/mbpp/55/v5",
+      "public/mbpp/552/v5",
+      "public/mbpp/560/v5",
+      "public/mbpp/579/v5",
+      "public/mbpp/580/v5",
+      "public/mbpp/614/v5",
+      "public/mbpp/646/v5",
+      "public/mbpp/652/v5",
+      "public/mbpp/66/v5",
+      "public/mbpp/660/v5",
+      "public/mbpp/665/v5",
+      "public/mbpp/679/v5",
+      "public/mbpp/681/v5",
+      "public/mbpp/685/v5",
+      "public/mbpp/688/v5",
+      "public/mbpp/691/v5",
+      "public/mbpp/694/v5",
+      "public/mbpp/698/v5",
+      "public/mbpp/70/v5",
+      "public/mbpp/702/v5",
+      "public/mbpp/705/v5",
+      "public/mbpp/709/v5",
+      "public/mbpp/717/v5",
+      "public/mbpp/72/v5",
+      "public/mbpp/75/v5",
+      "public/mbpp/750/v5",
+      "public/mbpp/76/v5",
+      "public/mbpp/77/v5",
+      "public/mbpp/780/v5",
+      "public/mbpp/795/v5",
+      "public/mbpp/803/v5",
+      "public/mbpp/808/v5",
+      "public/mbpp/814/v5",
+      "public/mbpp/821/v5",
+      "public/mbpp/828/v5",
+      "public/mbpp/829/v5",
+      "public/mbpp/831/v5",
+      "public/mbpp/832/v5",
+      "public/mbpp/84/v5",
+      "public/mbpp/840/v5",
+      "public/mbpp/844/v5",
+      "public/mbpp/847/v5",
+      "public/mbpp/85/v5",
+      "public/mbpp/859/v5",
+      "public/mbpp/875/v5",
+      "public/mbpp/886/v5",
+      "public/mbpp/889/v5",
+      "public/mbpp/905/v5",
+      "public/mbpp/907/v5",
+      "public/mbpp/91/v5",
+      "public/mbpp/910/v5",
+      "public/mbpp/918/v5",
+      "public/mbpp/919/v5",
+      "public/mbpp/921/v5",
+      "public/mbpp/926/v5",
+      "public/mbpp/934/v5",
+      "public/mbpp/936/v5",
+      "public/mbpp/938/v5",
+      "public/mbpp/939/v5",
+      "public/mbpp/942/v5",
+      "public/mbpp/950/v5",
+      "public/mbpp/953/v5",
+      "public/mbpp/955/v5",
+      "public/mbpp/957/v5",
+      "public/mbpp/971/v5",
+      "public/mbpp/973/v5"
+    ],
+    "per_type": {
+      "short_program": 80,
+      "code_edit": 60,
+      "workspace": 60
+    }
+  },
+  "environment_variants": [],
+  "independence_guard": [
+    {
+      "members": [
+        "mbpp/217",
+        "mbpp/395",
+        "mbpp/602"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/214",
+        "mbpp/606"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/608",
+        "mbpp/67"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/505",
+        "mbpp/619",
+        "mbpp/632"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/198",
+        "mbpp/626"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/34",
+        "mbpp/371",
+        "mbpp/627"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/628",
+        "mbpp/631"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/202",
+        "mbpp/412",
+        "mbpp/437",
+        "mbpp/554",
+        "mbpp/629",
+        "mbpp/824",
+        "mbpp/852"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/141",
+        "mbpp/152",
+        "mbpp/372",
+        "mbpp/428",
+        "mbpp/516",
+        "mbpp/54",
+        "mbpp/635",
+        "mbpp/71",
+        "mbpp/815",
+        "mbpp/877",
+        "mbpp/940"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/15",
+        "mbpp/319",
+        "mbpp/330",
+        "mbpp/563",
+        "mbpp/647",
+        "mbpp/725",
+        "mbpp/906",
+        "mbpp/956"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "harness/ansi-colors",
+        "mbpp/220",
+        "mbpp/27",
+        "mbpp/427",
+        "mbpp/451",
+        "mbpp/542",
+        "mbpp/678",
+        "mbpp/693",
+        "mbpp/732",
+        "mbpp/748",
+        "mbpp/800",
+        "mbpp/812",
+        "mbpp/892",
+        "mbpp/928"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/195",
+        "mbpp/316",
+        "mbpp/733",
+        "mbpp/793"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/736",
+        "mbpp/786"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/201",
+        "mbpp/281",
+        "mbpp/352",
+        "mbpp/464",
+        "mbpp/741"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/529",
+        "mbpp/752"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/208",
+        "mbpp/759"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/191",
+        "mbpp/336",
+        "mbpp/455",
+        "mbpp/762",
+        "mbpp/820",
+        "mbpp/866"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/365",
+        "mbpp/764",
+        "mbpp/818"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/527",
+        "mbpp/767"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/212",
+        "mbpp/267",
+        "mbpp/271",
+        "mbpp/287",
+        "mbpp/420",
+        "mbpp/422",
+        "mbpp/504",
+        "mbpp/549",
+        "mbpp/599",
+        "mbpp/634",
+        "mbpp/655",
+        "mbpp/770",
+        "mbpp/837"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/196",
+        "mbpp/772",
+        "mbpp/920"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/775",
+        "mbpp/790"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/25",
+        "mbpp/42",
+        "mbpp/777"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/38",
+        "mbpp/594",
+        "mbpp/784",
+        "mbpp/881"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/132",
+        "mbpp/310",
+        "mbpp/538",
+        "mbpp/587",
+        "mbpp/715",
+        "mbpp/785",
+        "mbpp/894"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/23",
+        "mbpp/792",
+        "mbpp/813",
+        "mbpp/858"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/797",
+        "mbpp/962"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/104",
+        "mbpp/569"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/600",
+        "mbpp/79",
+        "mbpp/804",
+        "mbpp/964"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/559",
+        "mbpp/836"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/193",
+        "mbpp/572",
+        "mbpp/674",
+        "mbpp/712",
+        "mbpp/932"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/233",
+        "mbpp/266",
+        "mbpp/369",
+        "mbpp/379",
+        "mbpp/441",
+        "mbpp/535",
+        "mbpp/574"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/576",
+        "mbpp/69"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/577",
+        "mbpp/692"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/591",
+        "mbpp/625"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/593",
+        "mbpp/727"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/595",
+        "mbpp/699",
+        "mbpp/838"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/16",
+        "mbpp/285",
+        "mbpp/43",
+        "mbpp/434",
+        "mbpp/44",
+        "mbpp/454",
+        "mbpp/482",
+        "mbpp/719",
+        "mbpp/787",
+        "mbpp/794",
+        "mbpp/879",
+        "mbpp/917",
+        "mbpp/930"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/17",
+        "mbpp/499",
+        "mbpp/716"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/79",
+        "mbpp/24",
+        "mbpp/33",
+        "mbpp/99"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/29",
+        "mbpp/351",
+        "mbpp/842"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/30",
+        "mbpp/338"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/59",
+        "mbpp/32"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/40",
+        "mbpp/686",
+        "mbpp/88"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/258",
+        "mbpp/41",
+        "mbpp/426",
+        "mbpp/697"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/13",
+        "mbpp/45",
+        "mbpp/498",
+        "mbpp/520",
+        "mbpp/687",
+        "mbpp/876",
+        "mbpp/901"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/155",
+        "mbpp/235",
+        "mbpp/383",
+        "mbpp/48"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/154",
+        "mbpp/413",
+        "mbpp/49"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/290",
+        "mbpp/393",
+        "mbpp/418",
+        "mbpp/457",
+        "mbpp/50",
+        "mbpp/528",
+        "mbpp/95"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/327",
+        "mbpp/51",
+        "mbpp/521"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/458",
+        "mbpp/52"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/279",
+        "mbpp/59"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/333",
+        "mbpp/64"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/347",
+        "mbpp/76"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/696",
+        "mbpp/81"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/135",
+        "mbpp/268",
+        "mbpp/86"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/821",
+        "mbpp/87"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/90",
+        "mbpp/947"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/753",
+        "mbpp/94"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/332",
+        "mbpp/97"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/886",
+        "mbpp/98"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/100",
+        "mbpp/909"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/102",
+        "mbpp/411",
+        "mbpp/933",
+        "mbpp/965"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/106",
+        "mbpp/720",
+        "mbpp/750"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/116",
+        "mbpp/439",
+        "mbpp/673"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/118",
+        "mbpp/708"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/120",
+        "mbpp/409"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/130",
+        "mbpp/362",
+        "mbpp/658"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/133",
+        "mbpp/870"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/138",
+        "mbpp/904"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/145",
+        "mbpp/763"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/147",
+        "mbpp/974"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/157",
+        "mbpp/317"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/161",
+        "mbpp/484"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/163",
+        "mbpp/789"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/170",
+        "mbpp/649"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/173",
+        "mbpp/676"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/174",
+        "mbpp/653"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/178",
+        "mbpp/186"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/194",
+        "mbpp/467"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/197",
+        "mbpp/213"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/199",
+        "mbpp/388"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/200",
+        "mbpp/322"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/204",
+        "mbpp/666"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/206",
+        "mbpp/470"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/216",
+        "mbpp/651",
+        "mbpp/706",
+        "mbpp/872"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/35",
+        "mbpp/225",
+        "mbpp/227",
+        "mbpp/309",
+        "mbpp/357",
+        "mbpp/404",
+        "mbpp/550",
+        "mbpp/672",
+        "mbpp/924",
+        "mbpp/970"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/228",
+        "mbpp/884"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/248",
+        "mbpp/704"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/252",
+        "mbpp/590"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/261",
+        "mbpp/399"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/273",
+        "mbpp/888"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/280",
+        "mbpp/492"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/282",
+        "mbpp/358",
+        "mbpp/682",
+        "mbpp/729"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/292",
+        "mbpp/502"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/295",
+        "mbpp/849"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/296",
+        "mbpp/841"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/311",
+        "mbpp/671"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/334",
+        "mbpp/677"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/341",
+        "mbpp/945"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/353",
+        "mbpp/551"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/361",
+        "mbpp/966"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/384",
+        "mbpp/489"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/55",
+        "mbpp/389",
+        "mbpp/960"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/396",
+        "mbpp/403",
+        "mbpp/669",
+        "mbpp/737",
+        "mbpp/774",
+        "mbpp/860"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/401",
+        "mbpp/445"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/402",
+        "mbpp/952"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/405",
+        "mbpp/703"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/415",
+        "mbpp/922"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/433",
+        "mbpp/695",
+        "mbpp/809"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/442",
+        "mbpp/530"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/452",
+        "mbpp/954"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/459",
+        "mbpp/478",
+        "mbpp/495"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/460",
+        "mbpp/893"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/487",
+        "mbpp/839",
+        "mbpp/896"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/507",
+        "mbpp/570"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/509",
+        "mbpp/664"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/609",
+        "mbpp/968"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/670",
+        "mbpp/680"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/707",
+        "mbpp/903"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/758",
+        "mbpp/779"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/768",
+        "mbpp/855"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/817",
+        "mbpp/883"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/900",
+        "mbpp/913"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/931",
+        "mbpp/935"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "mbpp/958",
+        "mbpp/961"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/29",
+        "humaneval/7"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/34",
+        "humaneval/58"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/40",
+        "humaneval/43"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/46",
+        "humaneval/63"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    },
+    {
+      "members": [
+        "humaneval/121",
+        "humaneval/85"
+      ],
+      "reason": "Reviewed same demands and conservative near/template variants; argument cardinality alone does not create a new family."
+    }
+  ],
+  "split_seed": 31000,
+  "freeze": {
+    "version": "opsd-cohort-freeze-v1",
+    "subset_size": 268,
+    "sampling_seed": 31001,
+    "training_seed": 31002,
+    "epoch_shuffle_seed": 31003,
+    "evaluation_seeds": [
+      4,
+      17,
+      29,
+      41,
+      53
+    ],
+    "epochs": 4,
+    "difficulty_basis": "Static original reference AST: easy <=8 statements/2 branches; medium <=20/5; otherwise hard. Public adapter code excluded. Recorded before subset sampling; no Baseline/Student outcomes.",
+    "difficulty": {
+      "mbpp/602": "easy",
+      "mbpp/603": "medium",
+      "mbpp/604": "easy",
+      "mbpp/605": "medium",
+      "mbpp/606": "easy",
+      "mbpp/607": "easy",
+      "mbpp/608": "medium",
+      "mbpp/610": "easy",
+      "mbpp/611": "easy",
+      "mbpp/612": "easy",
+      "mbpp/618": "easy",
+      "mbpp/619": "medium",
+      "mbpp/620": "medium",
+      "mbpp/622": "hard",
+      "mbpp/623": "easy",
+      "mbpp/624": "easy",
+      "mbpp/626": "easy",
+      "mbpp/627": "medium",
+      "mbpp/628": "easy",
+      "mbpp/629": "easy",
+      "mbpp/633": "easy",
+      "mbpp/635": "easy",
+      "mbpp/637": "easy",
+      "mbpp/638": "easy",
+      "mbpp/639": "easy",
+      "mbpp/640": "easy",
+      "mbpp/641": "easy",
+      "mbpp/643": "easy",
+      "mbpp/644": "easy",
+      "mbpp/721": "hard",
+      "mbpp/723": "easy",
+      "mbpp/724": "easy",
+      "mbpp/725": "easy",
+      "mbpp/728": "easy",
+      "mbpp/730": "easy",
+      "mbpp/731": "easy",
+      "harness/ansi-colors": "easy",
+      "mbpp/733": "medium",
+      "mbpp/734": "medium",
+      "mbpp/735": "medium",
+      "mbpp/736": "easy",
+      "mbpp/738": "easy",
+      "mbpp/739": "easy",
+      "mbpp/741": "easy",
+      "mbpp/742": "easy",
+      "mbpp/743": "easy",
+      "mbpp/745": "easy",
+      "mbpp/746": "easy",
+      "mbpp/747": "hard",
+      "mbpp/749": "easy",
+      "mbpp/751": "easy",
+      "mbpp/752": "easy",
+      "mbpp/754": "easy",
+      "mbpp/755": "easy",
+      "mbpp/756": "easy",
+      "mbpp/757": "easy",
+      "mbpp/759": "easy",
+      "mbpp/760": "easy",
+      "mbpp/762": "easy",
+      "mbpp/764": "easy",
+      "mbpp/765": "easy",
+      "mbpp/766": "easy",
+      "mbpp/767": "medium",
+      "mbpp/769": "easy",
+      "mbpp/770": "easy",
+      "mbpp/771": "hard",
+      "mbpp/772": "easy",
+      "mbpp/773": "easy",
+      "mbpp/775": "easy",
+      "mbpp/776": "medium",
+      "mbpp/777": "easy",
+      "mbpp/778": "easy",
+      "mbpp/782": "easy",
+      "mbpp/783": "medium",
+      "mbpp/784": "easy",
+      "mbpp/785": "easy",
+      "mbpp/788": "easy",
+      "mbpp/792": "easy",
+      "mbpp/796": "easy",
+      "mbpp/797": "easy",
+      "mbpp/798": "easy",
+      "mbpp/799": "easy",
+      "mbpp/801": "easy",
+      "mbpp/802": "easy",
+      "mbpp/805": "easy",
+      "mbpp/806": "medium",
+      "mbpp/807": "easy",
+      "harness/header-key": "easy",
+      "harness/csv-field": "easy",
+      "harness/log-level": "easy",
+      "harness/env-assignment": "easy",
+      "harness/last-record": "easy",
+      "harness/slug-key": "easy",
+      "harness/binary-size": "easy",
+      "harness/escaped-comment": "easy",
+      "harness/url-boundary": "easy",
+      "harness/boolean-setting": "easy",
+      "harness/secret-fields": "easy",
+      "harness/release-core": "easy",
+      "harness/page-windows": "easy",
+      "harness/form-value": "easy",
+      "harness/directory-name": "easy",
+      "harness/label-column": "easy",
+      "harness/message-margin": "easy",
+      "harness/open-jobs": "easy",
+      "harness/locale-fallback": "easy",
+      "harness/missing-defaults": "easy",
+      "harness/stock-value": "easy",
+      "harness/service-owners": "easy",
+      "harness/build-flags": "easy",
+      "harness/log-counts": "easy",
+      "harness/latest-package": "easy",
+      "harness/route-inventory": "easy",
+      "harness/translation-gaps": "easy",
+      "harness/job-buckets": "medium",
+      "harness/invoice-balance": "easy",
+      "harness/schedule-minutes": "easy",
+      "harness/label-index": "medium",
+      "harness/manifest-size": "easy",
+      "harness/threshold-alerts": "easy",
+      "harness/extension-policy": "easy",
+      "harness/deduplicated-mail": "easy",
+      "harness/column-projection": "easy",
+      "harness/expired-sessions": "easy",
+      "harness/dependency-edges": "medium",
+      "harness/feature-requirements": "easy",
+      "harness/cache-budget": "easy",
+      "mbpp/557": "easy",
+      "mbpp/562": "easy",
+      "mbpp/565": "easy",
+      "mbpp/566": "easy",
+      "mbpp/567": "easy",
+      "mbpp/569": "easy",
+      "mbpp/573": "easy",
+      "mbpp/600": "easy",
+      "harness/nested-setting": "easy",
+      "harness/duration-units": "easy",
+      "harness/query-encoding": "easy",
+      "harness/currency-rounding": "easy",
+      "harness/header-value": "easy",
+      "harness/tab-stops": "easy",
+      "harness/named-template": "easy",
+      "harness/network-port": "easy",
+      "harness/priority-queue": "easy",
+      "harness/license-audit": "easy",
+      "harness/deployment-targets": "easy",
+      "harness/test-matrix": "easy",
+      "harness/timezone-offsets": "easy",
+      "harness/discount-codes": "easy",
+      "harness/symlink-plan": "easy",
+      "harness/cli-aliases": "easy",
+      "harness/quota-remaining": "easy",
+      "harness/checksum-selection": "easy",
+      "harness/retry-deadlines": "easy",
+      "mbpp/555": "easy",
+      "mbpp/556": "medium",
+      "mbpp/558": "easy",
+      "mbpp/559": "medium",
+      "mbpp/564": "medium",
+      "mbpp/568": "easy",
+      "mbpp/572": "easy",
+      "mbpp/574": "easy",
+      "mbpp/576": "medium",
+      "mbpp/577": "medium",
+      "mbpp/578": "easy",
+      "mbpp/581": "easy",
+      "mbpp/583": "easy",
+      "mbpp/584": "easy",
+      "mbpp/585": "easy",
+      "mbpp/586": "easy",
+      "mbpp/588": "easy",
+      "mbpp/589": "medium",
+      "mbpp/591": "easy",
+      "mbpp/592": "medium",
+      "mbpp/593": "easy",
+      "mbpp/595": "medium",
+      "mbpp/597": "hard",
+      "mbpp/598": "medium",
+      "public/mbpp/880/v5": "easy",
+      "public/mbpp/512/v5": "medium",
+      "public/mbpp/524/v5": "hard",
+      "public/mbpp/245/v5": "hard",
+      "public/mbpp/230/v5": "easy",
+      "public/mbpp/344/v5": "easy",
+      "public/mbpp/823/v5": "medium",
+      "public/mbpp/188/v5": "medium",
+      "public/mbpp/182/v5": "easy",
+      "public/mbpp/56/v5": "easy",
+      "public/mbpp/661/v5": "medium",
+      "public/humaneval/60/v5": "easy",
+      "public/mbpp/874/v5": "medium",
+      "public/mbpp/497/v5": "easy",
+      "public/mbpp/131/v5": "medium",
+      "public/humaneval/123/v5": "medium",
+      "public/mbpp/398/v5": "easy",
+      "public/mbpp/700/v5": "easy",
+      "public/humaneval/126/v5": "hard",
+      "public/mbpp/446/v5": "easy",
+      "public/mbpp/835/v5": "easy",
+      "public/mbpp/179/v5": "medium",
+      "public/mbpp/356/v5": "easy",
+      "public/mbpp/20/v5": "medium",
+      "public/mbpp/946/v5": "easy",
+      "public/mbpp/416/v5": "easy",
+      "public/mbpp/326/v5": "easy",
+      "public/humaneval/45/v5": "easy",
+      "public/mbpp/302/v5": "medium",
+      "public/humaneval/135/v5": "medium",
+      "public/mbpp/113/v5": "medium",
+      "public/mbpp/491/v5": "easy",
+      "public/mbpp/571/v5": "medium",
+      "public/mbpp/916/v5": "medium",
+      "public/mbpp/636/v5": "easy",
+      "public/mbpp/299/v5": "easy",
+      "public/humaneval/9/v5": "medium",
+      "public/mbpp/68/v5": "easy",
+      "public/humaneval/30/v5": "easy",
+      "public/mbpp/89/v5": "easy",
+      "public/humaneval/93/v5": "easy",
+      "public/mbpp/143/v5": "easy",
+      "public/mbpp/419/v5": "easy",
+      "public/humaneval/99/v5": "medium",
+      "public/humaneval/69/v5": "medium",
+      "public/mbpp/323/v5": "hard",
+      "public/mbpp/74/v5": "hard",
+      "public/mbpp/314/v5": "easy",
+      "public/mbpp/868/v5": "easy",
+      "public/mbpp/260/v5": "easy",
+      "public/mbpp/515/v5": "hard",
+      "public/humaneval/129/v5": "hard",
+      "public/mbpp/518/v5": "easy",
+      "public/mbpp/856/v5": "medium",
+      "public/humaneval/114/v5": "medium",
+      "public/mbpp/925/v5": "easy",
+      "public/mbpp/958/v5": "medium",
+      "public/mbpp/380/v5": "medium",
+      "public/mbpp/194/v5": "medium",
+      "public/mbpp/744/v5": "easy",
+      "public/mbpp/407/v5": "medium",
+      "public/mbpp/488/v5": "easy",
+      "public/humaneval/21/v5": "easy",
+      "public/mbpp/236/v5": "easy",
+      "public/mbpp/125/v5": "medium",
+      "public/mbpp/392/v5": "medium",
+      "public/humaneval/90/v5": "easy",
+      "public/mbpp/485/v5": "medium",
+      "public/mbpp/473/v5": "easy",
+      "public/mbpp/667/v5": "easy",
+      "public/mbpp/65/v5": "easy",
+      "public/mbpp/146/v5": "easy",
+      "public/mbpp/548/v5": "medium",
+      "public/humaneval/36/v5": "medium",
+      "public/mbpp/119/v5": "easy",
+      "public/mbpp/937/v5": "easy",
+      "public/humaneval/54/v5": "easy",
+      "public/mbpp/173/v5": "easy",
+      "public/mbpp/263/v5": "easy",
+      "public/mbpp/368/v5": "easy",
+      "public/mbpp/826/v5": "medium",
+      "public/mbpp/329/v5": "easy",
+      "public/mbpp/185/v5": "easy",
+      "public/humaneval/24/v5": "easy",
+      "public/humaneval/6/v5": "medium",
+      "public/mbpp/176/v5": "easy",
+      "public/mbpp/898/v5": "easy",
+      "public/mbpp/539/v5": "easy",
+      "public/mbpp/616/v5": "easy",
+      "public/mbpp/209/v5": "easy",
+      "public/mbpp/278/v5": "easy",
+      "public/mbpp/335/v5": "easy",
+      "public/mbpp/943/v5": "easy",
+      "public/mbpp/722/v5": "easy",
+      "public/mbpp/479/v5": "easy",
+      "public/mbpp/92/v5": "medium",
+      "public/mbpp/689/v5": "medium",
+      "public/mbpp/662/v5": "easy",
+      "public/mbpp/306/v5": "hard",
+      "public/mbpp/390/v5": "easy",
+      "public/mbpp/929/v5": "easy",
+      "public/mbpp/923/v5": "medium",
+      "public/mbpp/345/v5": "easy",
+      "public/humaneval/73/v5": "easy",
+      "public/mbpp/668/v5": "easy",
+      "public/mbpp/543/v5": "easy",
+      "public/mbpp/219/v5": "medium",
+      "public/mbpp/240/v5": "easy",
+      "public/mbpp/781/v5": "medium",
+      "public/humaneval/70/v5": "easy",
+      "public/mbpp/726/v5": "easy",
+      "public/mbpp/941/v5": "easy",
+      "public/mbpp/423/v5": "hard",
+      "public/mbpp/522/v5": "hard",
+      "public/mbpp/683/v5": "medium",
+      "public/mbpp/144/v5": "easy",
+      "public/mbpp/501/v5": "medium",
+      "public/humaneval/151/v5": "easy",
+      "public/mbpp/342/v5": "hard",
+      "public/mbpp/396/v5": "easy",
+      "public/mbpp/60/v5": "hard",
+      "public/mbpp/408/v5": "medium",
+      "public/mbpp/857/v5": "easy",
+      "public/mbpp/270/v5": "easy",
+      "public/mbpp/432/v5": "easy",
+      "public/mbpp/378/v5": "easy",
+      "public/humaneval/121/v5": "easy",
+      "public/mbpp/582/v5": "easy",
+      "public/mbpp/710/v5": "easy",
+      "public/mbpp/839/v5": "medium",
+      "public/mbpp/480/v5": "medium",
+      "public/mbpp/255/v5": "easy",
+      "public/mbpp/540/v5": "medium",
+      "public/mbpp/171/v5": "easy",
+      "public/mbpp/153/v5": "easy",
+      "public/humaneval/34/v5": "easy",
+      "public/mbpp/944/v5": "easy",
+      "public/mbpp/303/v5": "easy",
+      "public/mbpp/162/v5": "easy",
+      "public/mbpp/108/v5": "easy",
+      "public/mbpp/90/v5": "easy",
+      "public/humaneval/115/v5": "easy",
+      "public/mbpp/444/v5": "easy",
+      "public/mbpp/264/v5": "easy",
+      "public/mbpp/246/v5": "medium",
+      "public/humaneval/40/v5": "medium",
+      "public/mbpp/210/v5": "easy",
+      "public/mbpp/887/v5": "easy",
+      "public/mbpp/456/v5": "easy",
+      "public/mbpp/959/v5": "easy",
+      "public/mbpp/510/v5": "medium",
+      "public/mbpp/291/v5": "medium",
+      "public/mbpp/117/v5": "medium",
+      "public/mbpp/468/v5": "medium",
+      "public/humaneval/112/v5": "easy",
+      "public/humaneval/97/v5": "easy",
+      "public/mbpp/911/v5": "easy",
+      "public/mbpp/869/v5": "easy",
+      "public/mbpp/39/v5": "medium",
+      "public/mbpp/827/v5": "easy",
+      "public/humaneval/109/v5": "medium",
+      "public/humaneval/130/v5": "medium",
+      "public/mbpp/327/v5": "easy",
+      "public/humaneval/49/v5": "easy",
+      "public/mbpp/387/v5": "easy",
+      "public/mbpp/833/v5": "easy",
+      "public/mbpp/147/v5": "medium",
+      "public/mbpp/761/v5": "easy",
+      "public/mbpp/453/v5": "medium",
+      "public/mbpp/105/v5": "easy",
+      "public/mbpp/968/v5": "easy",
+      "public/mbpp/192/v5": "medium",
+      "public/mbpp/791/v5": "easy",
+      "public/mbpp/294/v5": "easy",
+      "public/mbpp/63/v5": "easy",
+      "public/humaneval/136/v5": "easy",
+      "public/humaneval/22/v5": "easy",
+      "public/mbpp/854/v5": "easy",
+      "public/mbpp/525/v5": "easy",
+      "public/mbpp/575/v5": "medium",
+      "public/mbpp/899/v5": "medium",
+      "public/mbpp/462/v5": "easy",
+      "public/mbpp/878/v5": "easy",
+      "public/mbpp/366/v5": "easy",
+      "public/mbpp/276/v5": "easy",
+      "public/mbpp/384/v5": "medium",
+      "public/humaneval/160/v5": "easy",
+      "public/mbpp/537/v5": "easy",
+      "public/mbpp/686/v5": "easy",
+      "public/mbpp/519/v5": "easy",
+      "public/mbpp/630/v5": "medium",
+      "public/mbpp/261/v5": "easy",
+      "public/mbpp/57/v5": "easy",
+      "public/humaneval/64/v5": "easy",
+      "public/mbpp/642/v5": "easy",
+      "public/mbpp/228/v5": "easy",
+      "public/mbpp/677/v5": "easy",
+      "public/mbpp/863/v5": "medium",
+      "public/mbpp/417/v5": "easy",
+      "public/humaneval/25/v5": "medium",
+      "public/mbpp/180/v5": "easy",
+      "public/mbpp/324/v5": "easy",
+      "public/humaneval/31/v5": "medium",
+      "public/mbpp/258/v5": "easy",
+      "public/mbpp/114/v5": "easy",
+      "public/mbpp/659/v5": "medium",
+      "public/mbpp/234/v5": "easy",
+      "public/mbpp/438/v5": "medium",
+      "public/humaneval/100/v5": "easy",
+      "public/humaneval/124/v5": "medium",
+      "public/mbpp/129/v5": "hard",
+      "public/mbpp/111/v5": "easy",
+      "public/mbpp/18/v5": "hard",
+      "public/mbpp/321/v5": "easy",
+      "public/mbpp/300/v5": "easy",
+      "public/mbpp/902/v5": "easy",
+      "public/mbpp/513/v5": "easy",
+      "public/mbpp/908/v5": "easy",
+      "public/mbpp/851/v5": "easy",
+      "public/mbpp/297/v5": "medium",
+      "public/humaneval/67/v5": "easy",
+      "public/mbpp/830/v5": "easy",
+      "public/mbpp/354/v5": "easy",
+      "public/humaneval/46/v5": "medium",
+      "public/mbpp/471/v5": "easy",
+      "public/mbpp/656/v5": "easy",
+      "public/humaneval/145/v5": "medium",
+      "public/mbpp/244/v5": "easy",
+      "public/mbpp/328/v5": "easy",
+      "public/mbpp/714/v5": "medium",
+      "public/mbpp/370/v5": "easy",
+      "public/mbpp/541/v5": "medium",
+      "public/mbpp/109/v5": "easy",
+      "public/humaneval/47/v5": "easy",
+      "public/mbpp/711/v5": "medium",
+      "public/mbpp/250/v5": "easy",
+      "public/mbpp/490/v5": "easy",
+      "public/mbpp/172/v5": "easy",
+      "public/mbpp/873/v5": "easy",
+      "public/mbpp/523/v5": "hard",
+      "public/mbpp/148/v5": "medium",
+      "public/mbpp/400/v5": "easy",
+      "public/mbpp/190/v5": "easy",
+      "public/mbpp/232/v5": "easy",
+      "public/mbpp/675/v5": "easy",
+      "public/mbpp/779/v5": "easy",
+      "public/mbpp/277/v5": "easy",
+      "public/mbpp/262/v5": "easy",
+      "public/mbpp/553/v5": "easy",
+      "public/mbpp/891/v5": "easy",
+      "public/humaneval/11/v5": "easy",
+      "public/humaneval/131/v5": "medium",
+      "public/mbpp/472/v5": "easy",
+      "public/mbpp/283/v5": "medium",
+      "public/mbpp/469/v5": "hard",
+      "public/mbpp/496/v5": "easy",
+      "public/mbpp/753/v5": "easy",
+      "public/mbpp/397/v5": "medium",
+      "public/mbpp/463/v5": "hard",
+      "public/mbpp/142/v5": "easy",
+      "public/humaneval/83/v5": "easy",
+      "public/mbpp/657/v5": "medium",
+      "public/mbpp/951/v5": "easy",
+      "public/mbpp/376/v5": "easy",
+      "public/mbpp/493/v5": "hard",
+      "public/mbpp/385/v5": "medium",
+      "public/mbpp/163/v5": "easy",
+      "public/mbpp/364/v5": "medium",
+      "public/humaneval/41/v5": "easy",
+      "public/mbpp/424/v5": "easy",
+      "public/humaneval/149/v5": "easy",
+      "public/mbpp/61/v5": "medium",
+      "public/mbpp/199/v5": "easy",
+      "public/humaneval/20/v5": "medium",
+      "public/mbpp/19/v5": "easy",
+      "public/mbpp/972/v5": "easy",
+      "public/mbpp/82/v5": "easy",
+      "public/mbpp/289/v5": "medium",
+      "public/humaneval/155/v5": "medium",
+      "public/mbpp/175/v5": "medium",
+      "public/humaneval/125/v5": "medium",
+      "public/mbpp/73/v5": "easy",
+      "public/mbpp/304/v5": "medium",
+      "public/mbpp/514/v5": "easy",
+      "public/mbpp/13/v5": "easy",
+      "public/mbpp/382/v5": "medium",
+      "public/mbpp/226/v5": "easy",
+      "public/mbpp/355/v5": "medium",
+      "public/humaneval/71/v5": "easy",
+      "public/mbpp/151/v5": "easy",
+      "public/humaneval/143/v5": "medium",
+      "public/humaneval/86/v5": "easy",
+      "public/mbpp/439/v5": "easy",
+      "public/mbpp/211/v5": "easy",
+      "public/mbpp/570/v5": "medium",
+      "public/mbpp/903/v5": "medium",
+      "public/mbpp/169/v5": "medium",
+      "public/mbpp/825/v5": "easy",
+      "public/mbpp/740/v5": "easy",
+      "public/humaneval/74/v5": "medium",
+      "public/mbpp/897/v5": "easy",
+      "public/humaneval/62/v5": "easy",
+      "public/mbpp/292/v5": "easy",
+      "public/mbpp/696/v5": "easy",
+      "public/humaneval/152/v5": "easy",
+      "public/mbpp/301/v5": "easy",
+      "public/humaneval/2/v5": "easy",
+      "public/mbpp/136/v5": "medium",
+      "public/mbpp/645/v5": "easy",
+      "public/humaneval/119/v5": "medium",
+      "public/humaneval/116/v5": "easy",
+      "public/humaneval/134/v5": "easy",
+      "public/humaneval/140/v5": "hard",
+      "public/mbpp/265/v5": "easy",
+      "public/mbpp/663/v5": "easy",
+      "public/mbpp/822/v5": "hard",
+      "public/mbpp/46/v5": "easy",
+      "public/mbpp/846/v5": "medium",
+      "public/mbpp/544/v5": "easy",
+      "public/mbpp/286/v5": "medium",
+      "public/mbpp/100/v5": "easy",
+      "public/mbpp/819/v5": "medium",
+      "public/mbpp/915/v5": "easy",
+      "public/humaneval/101/v5": "medium",
+      "public/mbpp/58/v5": "easy",
+      "public/mbpp/615/v5": "easy",
+      "public/humaneval/137/v5": "medium",
+      "public/mbpp/948/v5": "easy",
+      "public/mbpp/684/v5": "medium",
+      "public/mbpp/28/v5": "easy",
+      "public/mbpp/127/v5": "medium",
+      "public/humaneval/65/v5": "easy",
+      "public/mbpp/475/v5": "easy",
+      "public/mbpp/466/v5": "medium",
+      "public/humaneval/53/v5": "easy",
+      "public/humaneval/59/v5": "medium",
+      "public/mbpp/253/v5": "easy",
+      "public/mbpp/484/v5": "easy",
+      "public/mbpp/115/v5": "easy",
+      "public/mbpp/963/v5": "medium",
+      "public/mbpp/888/v5": "easy",
+      "public/humaneval/107/v5": "medium",
+      "public/mbpp/145/v5": "easy",
+      "public/mbpp/205/v5": "easy",
+      "public/mbpp/259/v5": "easy",
+      "public/humaneval/17/v5": "easy",
+      "public/mbpp/654/v5": "easy",
+      "public/mbpp/22/v5": "easy",
+      "public/mbpp/238/v5": "easy",
+      "public/mbpp/690/v5": "easy",
+      "public/mbpp/885/v5": "medium",
+      "public/mbpp/481/v5": "medium",
+      "public/mbpp/295/v5": "easy",
+      "public/mbpp/621/v5": "easy",
+      "public/mbpp/298/v5": "easy",
+      "public/mbpp/325/v5": "medium",
+      "public/mbpp/361/v5": "easy",
+      "public/humaneval/128/v5": "easy"
+    }
+  },
+  "rules": {
+    "selection": "One verified representative per reviewed component; historical families reserved to candidates; split quotas fixed before execution.",
+    "remainder": "Largest remainder; workspace wins the 30% tie.",
+    "test": "Reference/mutation quality checks only; no Baseline/Student performance filtering.",
+    "seeds": "Routine execution configuration, not user-specified seed values."
+  },
+  "audit_documents": [
+    {
+      "file": "../runs/issue31-source-discovery-20261009/family-candidates-v3.json",
+      "sha256": "d62f4e65f9e658b4b86cf906c982d1dfaceed63697fab62c762f395233a29f8b"
+    },
+    {
+      "file": "../runs/issue31-source-discovery-20261009/family-review-v3.json",
+      "sha256": "67b34b93f3b533742f7f5659ba2406e9f0b446a43006159541bb355ccfc86661"
+    },
+    {
+      "file": "../runs/issue31-source-discovery-20261009/selection-audit-v6.json",
+      "sha256": "f34752dd812bae28018c9bafba74fe711fea701a96524918be038679df4b1aef"
+    },
+    {
+      "file": "../runs/issue31-public-catalog-v5-20261009/private/usage.json",
+      "sha256": "25975a16ccc7b0b6f6c1fff77c20fddad68031a1cae03e1d9b642499359fc3ee"
+    },
+    {
+      "file": "../runs/issue31-source-reproduction-v5-20261009/report.json",
+      "sha256": "0b89c2e29d6814372439a45c78f02312f2cc9f2ff320c1358846454d2baae76f"
+    }
+  ]
+}

@@ -4,6 +4,8 @@ import ast
 import hashlib
 import json
 import shlex
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -30,7 +32,9 @@ from .sources import (
     SOURCE_REGISTRY,
     admitted_sources,
     catalog_task_record,
+    preparing_sources,
     registered_origin,
+    source_file,
 )
 from .versions import preparing_cohort
 
@@ -291,6 +295,11 @@ def _definitions(
 
 
 def _validate_cohorts(cohort: dict[str, Any], tasks: list[Task]) -> None:
+    from .audit import validate_independence
+
+    validate_independence(
+        cohort, [task_family(t) for t in tasks if t.variant_id == "base"]
+    )
     versioned = cohort["version"] == "harness-task-cohort-v2"
     by_id = {t.task_id: t for t in tasks}
     splits: dict[str, str] = {}
@@ -374,24 +383,120 @@ def _replay(task: Task, files: dict[str, str], config: ExperimentConfig) -> Repl
     )
 
 
+def _verify_definition(
+    definition: _Definition, output_dir: Path, config: ExperimentConfig
+) -> dict[str, Any]:
+    private = output_dir / "private"
+    task = definition.task
+    assert task.origin is not None
+    entry: dict[str, Any] = {
+        "task_id": task.task_id,
+        "origin": asdict(task.origin),
+        "family_id": task_family(task),
+        "split": task_split(task),
+        "task_type": task.task_type,
+        "variant_id": task.variant_id,
+        "feedback_start_id": task.feedback_start_id,
+        "environment_variant_id": task.environment_variant_id,
+        "source_record_sha256": definition.source_record_sha256,
+        "wrong_reason": definition.wrong_reason,
+        "status": "validating",
+    }
+    if task.assignment is not None:
+        entry["assignment"] = asdict(task.assignment)
+    failure = None
+    for name, files in (
+        (
+            "reference",
+            {task.implementation_paths[0]: task.reference_implementation},
+        ),
+        ("wrong", definition.wrong_files),
+    ):
+        result = run_experiment(
+            task=task,
+            model=_replay(task, files, config),
+            config=config,
+            output_dir=private / "validation",
+        )
+        entry[name + "_run"] = str(result.run_dir.relative_to(output_dir))
+        entry[name + "_run_sha256"] = hashlib.sha256(
+            (result.run_dir / "run.json").read_bytes()
+        ).hexdigest()
+        if result.status != "completed" or result.grade is None:
+            raise ValueError(
+                f"{task.task_id}: {name} execution incomplete: "
+                f"{result.status}; {result.reason}"
+            )
+        submission = result.submission
+        if name == "wrong" and (
+            len(result.trajectory) != 3
+            or result.trajectory[0].observation is None
+            or result.trajectory[0].observation.status != "ok"
+            or submission is None
+            or any(
+                path not in submission.manifest
+                or submission.manifest[path].sha256
+                != hashlib.sha256(content.encode()).hexdigest()
+                for path, content in files.items()
+            )
+        ):
+            raise ValueError(f"{task.task_id}: mutation was not executed")
+        if name == "reference" and (
+            not result.passed
+            or len(result.trajectory) != 3
+            or any(
+                s.observation is None or s.observation.status != "ok"
+                for s in result.trajectory
+            )
+        ):
+            failure = f"{task.task_id}: reference feedback or grading failed"
+        if name == "wrong" and result.passed:
+            failure = f"{task.task_id}: targeted wrong implementation passed grading"
+    if failure is not None:
+        return entry | {"status": "rejected", "reason": failure}
+    task_file = (
+        private
+        / "tasks"
+        / str(task_split(task))
+        / (fingerprint(task.task_id) + ".json")
+    )
+    task_file.parent.mkdir(parents=True, exist_ok=True)
+    task_file.write_text(serialize_task(task))
+    entry.update(
+        status="verified",
+        task_file=str(task_file.relative_to(output_dir)),
+        task_sha256=hashlib.sha256(task_file.read_bytes()).hexdigest(),
+    )
+    return entry
+
+
 def prepare_harness(
     *,
     mbpp_manifest: Path | None,
     output_dir: Path,
     config: ExperimentConfig,
     cohort_path: Path = DEFAULT_COHORT,
+    workers: int = 1,
+    collect_quality: bool = False,
 ) -> Path:
     """Admit one cohort, then publish its verified tasks without leaking drafts."""
-    with preparing_cohort(
-        cohort_path,
-        output_dir.resolve() / "manifest.json",
-        mbpp_manifest,
+    if type(workers) is not int or not 1 <= workers <= 16:
+        raise ValueError("Preparation workers must be between 1 and 16")
+    with (
+        preparing_sources(),
+        preparing_cohort(
+            cohort_path,
+            output_dir.resolve() / "manifest.json",
+            mbpp_manifest,
+        ),
     ):
         return _prepare_harness(
             mbpp_manifest=mbpp_manifest,
             output_dir=output_dir,
             config=config,
             cohort_path=cohort_path,
+            workers=workers,
+            collect_quality=collect_quality,
         )
 
 
@@ -401,6 +506,8 @@ def _prepare_harness(
     output_dir: Path,
     config: ExperimentConfig,
     cohort_path: Path,
+    workers: int,
+    collect_quality: bool,
 ) -> Path:
     """Publish a frozen candidate pool and separate development checklists.
 
@@ -410,6 +517,9 @@ def _prepare_harness(
     """
     cohort_bytes = cohort_path.read_bytes()
     cohort = json.loads(cohort_bytes)
+    from .freeze import validate_plan
+
+    validate_plan(cohort)
     versioned = cohort["version"] == "harness-task-cohort-v2"
     definitions, sources = _definitions(
         cohort,
@@ -428,6 +538,18 @@ def _prepare_harness(
     )
     (private / "cohort.json").write_bytes(cohort_bytes)
     (private / "family-guard.json").write_bytes(FAMILY_GUARD.read_bytes())
+    audit_artifacts = []
+    for document in cohort.get("audit_documents", []):
+        content = source_file(document).read_bytes()
+        digest = hashlib.sha256(content).hexdigest()
+        if digest != document["sha256"]:
+            raise ValueError("Cohort audit document content changed")
+        path = private / "audits" / (digest + ".json")
+        path.parent.mkdir(exist_ok=True, mode=0o700)
+        path.write_bytes(content)
+        audit_artifacts.append(
+            {"file": str(path.relative_to(output_dir)), "sha256": digest}
+        )
     by_id = {d.task.task_id: d.task for d in definitions}
     harness_ids = cohort["development" if versioned else "harness_development"][
         "task_ids"
@@ -465,6 +587,12 @@ def _prepare_harness(
             "environment_variants": cohort["environment_variants"],
         },
         "tasks": [],
+        "preparation": {
+            "workers": workers,
+            "collect_quality": collect_quality,
+            "paid_model_calls": 0,
+        },
+        "audit_artifacts": audit_artifacts,
     }
     if versioned:
         registry_bytes = SOURCE_REGISTRY.read_bytes()
@@ -478,7 +606,7 @@ def _prepare_harness(
                 assert mbpp_manifest is not None
                 content = (mbpp_manifest.parent / "private/source.json").read_bytes()
             else:
-                content = (_CONFIGS / source["file"]).read_bytes()
+                content = source_file(source).read_bytes()
             if hashlib.sha256(content).hexdigest() != source["sha256"]:
                 raise ValueError("Source changed before its frozen copy was written")
             path = source_dir / (source["sha256"] + ".json")
@@ -497,91 +625,31 @@ def _prepare_harness(
     destination = output_dir / "manifest.json"
     _write(destination, manifest)
     try:
-        for definition in definitions:
-            task = definition.task
-            assert task.origin is not None
-            entry: dict[str, Any] = {
-                "task_id": task.task_id,
-                "origin": asdict(task.origin),
-                "family_id": task_family(task),
-                "split": task_split(task),
-                "task_type": task.task_type,
-                "variant_id": task.variant_id,
-                "feedback_start_id": task.feedback_start_id,
-                "environment_variant_id": task.environment_variant_id,
-                "source_record_sha256": definition.source_record_sha256,
-                "wrong_reason": definition.wrong_reason,
-                "status": "validating",
-            }
-            if task.assignment is not None:
-                entry["assignment"] = asdict(task.assignment)
-            manifest["tasks"].append(entry)
-            for name, files in (
-                (
-                    "reference",
-                    {task.implementation_paths[0]: task.reference_implementation},
-                ),
-                ("wrong", definition.wrong_files),
-            ):
-                result = run_experiment(
-                    task=task,
-                    model=_replay(task, files, config),
-                    config=config,
-                    output_dir=private / "validation",
+        rejected = []
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [
+                executor.submit(
+                    copy_context().run,
+                    _verify_definition,
+                    definition,
+                    output_dir,
+                    config,
                 )
-                entry[name + "_run"] = str(result.run_dir.relative_to(output_dir))
-                entry[name + "_run_sha256"] = hashlib.sha256(
-                    (result.run_dir / "run.json").read_bytes()
-                ).hexdigest()
+                for definition in definitions
+            ]
+            for future in futures:
+                entry = future.result()
+                manifest["tasks"].append(entry)
                 _write(destination, manifest)
-                if result.status != "completed" or result.grade is None:
-                    raise ValueError(
-                        f"{task.task_id}: {name} execution incomplete: "
-                        f"{result.status}; {result.reason}"
-                    )
-                submission = result.submission
-                if name == "wrong" and (
-                    len(result.trajectory) != 3
-                    or result.trajectory[0].observation is None
-                    or result.trajectory[0].observation.status != "ok"
-                    or submission is None
-                    or any(
-                        path not in submission.manifest
-                        or submission.manifest[path].sha256
-                        != hashlib.sha256(content.encode()).hexdigest()
-                        for path, content in files.items()
-                    )
-                ):
-                    raise ValueError(f"{task.task_id}: mutation was not executed")
-                if name == "reference" and (
-                    not result.passed
-                    or len(result.trajectory) != 3
-                    or any(
-                        s.observation is None or s.observation.status != "ok"
-                        for s in result.trajectory
-                    )
-                ):
-                    raise ValueError(
-                        f"{task.task_id}: reference feedback or grading failed"
-                    )
-                if name == "wrong" and result.passed:
-                    raise ValueError(
-                        f"{task.task_id}: targeted wrong implementation passed grading"
-                    )
-            task_file = (
-                private
-                / "tasks"
-                / str(task_split(task))
-                / (fingerprint(task.task_id) + ".json")
+                if entry["status"] == "rejected":
+                    rejected.append(entry["task_id"])
+                    if not collect_quality:
+                        raise ValueError(entry["reason"])
+        if rejected:
+            raise ValueError(
+                f"Quality collection rejected {len(rejected)} families; "
+                "no freeze published"
             )
-            task_file.parent.mkdir(parents=True, exist_ok=True)
-            task_file.write_text(serialize_task(task))
-            entry.update(
-                status="verified",
-                task_file=str(task_file.relative_to(output_dir)),
-                task_sha256=hashlib.sha256(task_file.read_bytes()).hexdigest(),
-            )
-            _write(destination, manifest)
         manifest["counts"] = {
             split: {
                 kind: sum(
@@ -622,6 +690,10 @@ def _prepare_harness(
                     "task_ids": ids,
                 },
             )
+        if versioned:
+            from .freeze import publish_selection
+
+            publish_selection(output_dir, manifest)
         manifest["status"] = "complete"
     except (Exception, KeyboardInterrupt) as error:
         manifest["status"], manifest["reason"] = "incomplete", str(error)

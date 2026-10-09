@@ -34,6 +34,36 @@
         "identity_status": "unknown",
         "reason": "The authoring session does not expose a verifiable deployed model ID."
       }
+    },
+    {
+      "format": "catalog",
+      "kind": "public",
+      "lock_file": "public-python-v1.lock.json",
+      "optional_artifact": true
+    },
+    {
+      "format": "catalog",
+      "kind": "public",
+      "lock_file": "public-python-v2.lock.json",
+      "optional_artifact": true
+    },
+    {
+      "format": "catalog",
+      "kind": "public",
+      "lock_file": "public-python-v3.lock.json",
+      "optional_artifact": true
+    },
+    {
+      "format": "catalog",
+      "kind": "public",
+      "lock_file": "public-python-v4.lock.json",
+      "optional_artifact": true
+    },
+    {
+      "format": "catalog",
+      "kind": "public",
+      "lock_file": "public-python-v5.lock.json",
+      "optional_artifact": true
     }
   ]
 }

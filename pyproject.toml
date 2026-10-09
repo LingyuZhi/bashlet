@@ -35,6 +35,16 @@ dependencies = [
 "configs/harness-supplement-v3.json" = "bashlet/configs/harness-supplement-v3.json"
 "configs/harness-supplement-v3.lock.json" = "bashlet/configs/harness-supplement-v3.lock.json"
 "configs/mbpp-sanitized-v1.json" = "bashlet/configs/mbpp-sanitized-v1.json"
+"configs/public-python-v1.lock.json" = "bashlet/configs/public-python-v1.lock.json"
+"configs/public-python-v2.lock.json" = "bashlet/configs/public-python-v2.lock.json"
+"configs/public-python-v3.lock.json" = "bashlet/configs/public-python-v3.lock.json"
+"configs/public-python-v4.lock.json" = "bashlet/configs/public-python-v4.lock.json"
+"configs/public-python-v5.lock.json" = "bashlet/configs/public-python-v5.lock.json"
+"configs/opsd-public-import-v5.json" = "bashlet/configs/opsd-public-import-v5.json"
+"configs/opsd-expanded-cohort-v6.json" = "bashlet/configs/opsd-expanded-cohort-v6.json"
+"configs/mbpp-full-v1.json" = "bashlet/configs/mbpp-full-v1.json"
+"configs/humaneval-v1.json" = "bashlet/configs/humaneval-v1.json"
+"configs/cohort-quality-v1.yaml" = "bashlet/configs/cohort-quality-v1.yaml"
 
 [build-system]
 requires = ["hatchling>=1.27"]

@@ -229,7 +229,16 @@ def main() -> None:
     )
     harness_tasks.add_argument("--mbpp-manifest", type=Path)
     harness_tasks.add_argument("--cohort", type=Path, default=DEFAULT_COHORT)
+    harness_tasks.add_argument("--workers", type=int, default=1)
+    harness_tasks.add_argument("--collect-quality", action="store_true")
     _execution_options(harness_tasks)
+    public_tasks = commands.add_parser(
+        "import-public-tasks",
+        help="Convert pinned public Python tasks to a private catalog",
+    )
+    public_tasks.add_argument("plan", type=Path)
+    public_tasks.add_argument("--source-dir", type=Path)
+    public_tasks.add_argument("--output-dir", type=Path, required=True)
     demonstrations = commands.add_parser(
         "prepare-sft",
         help="Export reviewed trajectories or executed training references",
@@ -539,10 +548,23 @@ def main() -> None:
             manifest = prepare_harness(
                 mbpp_manifest=options.mbpp_manifest,
                 cohort_path=options.cohort,
+                workers=options.workers,
+                collect_quality=options.collect_quality,
                 output_dir=options.output_dir,
                 config=load_config(options.config, options.overrides),
             )
             print(manifest)
+            return
+        if options.command == "import-public-tasks":
+            from .tasks.public import prepare_public_catalog
+
+            print(
+                prepare_public_catalog(
+                    plan_path=options.plan,
+                    source_dir=options.source_dir,
+                    output_dir=options.output_dir,
+                )
+            )
             return
         if options.command == "prepare-mbpp":
             manifest = prepare_mbpp(
