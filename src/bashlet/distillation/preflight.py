@@ -194,7 +194,7 @@ def verify_native_preflight(
 
 
 def _run_with_preflight(
-    config_path: Path, preflight_config: Path, output_dir: Path, *, resume: bool = False
+    config_path: Path, preflight_config: Path, output_dir: Path
 ) -> Path:
     """Gate the existing training workflow; never mix preflight parameters."""
     from .pilot import run_opsd_pilot, verify_opsd_checkpoints
@@ -241,9 +241,14 @@ def _run_with_preflight(
     digest = hashlib.sha256(proof.read_bytes()).hexdigest()
     if record.get("preflight_sha256", digest) != digest:
         raise ValueError("Workflow preflight evidence changed")
-    record.update(status="formal", preflight_sha256=digest, preflight=str(proof))
+    record.update(
+        status="formal", stage="formal", preflight_sha256=digest, preflight=str(proof)
+    )
     write_document(path, record)
-    formal = run_opsd_pilot(config_path, root / "formal", resume=resume)
+    formal_root = root / "formal"
+    formal = run_opsd_pilot(
+        config_path, formal_root, resume=(formal_root / "pilot.json").exists()
+    )
     record.update(status=json.loads(formal.read_text())["status"], formal=str(formal))
     write_document(path, record)
     return formal
@@ -265,4 +270,17 @@ def run_with_preflight(
             raise ValueError("OPSD workflow is already active") from None
         if (root / "workflow.json").exists() and not resume:
             raise ValueError("OPSD workflow exists; use --resume")
-        return _run_with_preflight(config_path, preflight_config, root, resume=resume)
+        try:
+            return _run_with_preflight(config_path, preflight_config, root)
+        except BaseException as error:
+            path = root / "workflow.json"
+            if path.exists():
+                record = json.loads(path.read_text())
+                record.update(
+                    status="interrupted"
+                    if isinstance(error, KeyboardInterrupt)
+                    else "failed",
+                    error_type=type(error).__name__,
+                )
+                write_document(path, record)
+            raise

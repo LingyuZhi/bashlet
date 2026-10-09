@@ -389,7 +389,7 @@ def test_monitor_start_failure_before_sampling_can_resume_the_same_visit(
 
 
 def test_native_preflight_gates_an_independent_formal_run_and_reuses_its_receipts(
-    epoch_pilot: tuple[Path, Path], tmp_path: Path
+    epoch_pilot: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, root = epoch_pilot
     configuration = yaml.safe_load(config.read_text())
@@ -414,7 +414,12 @@ def test_native_preflight_gates_an_independent_formal_run_and_reuses_its_receipt
         "--output-dir",
         str(root),
     )
-    result = cli(*arguments, cwd=tmp_path, timeout=180)
+    monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL", "1")
+    interrupted = cli(*arguments, cwd=tmp_path, timeout=90)
+    assert interrupted.returncode == 2, interrupted.stdout + interrupted.stderr
+    assert not (root / "formal/pilot.json").exists()
+    monkeypatch.delenv("FAKE_OPSD_INTERRUPT_EVAL")
+    result = cli(*arguments, "--resume", cwd=tmp_path, timeout=180)
     assert result.returncode == 0, result.stdout + result.stderr
     workflow = json.loads((root / "workflow.json").read_text())
     assert workflow["status"] == "complete"
