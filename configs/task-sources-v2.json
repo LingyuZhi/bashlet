@@ -64,6 +64,12 @@
       "kind": "public",
       "lock_file": "public-python-v5.lock.json",
       "optional_artifact": true
+    },
+    {
+      "kind": "public",
+      "format": "catalog",
+      "lock_file": "p3-curated-v1.lock.json",
+      "optional_artifact": true
     }
   ]
 }

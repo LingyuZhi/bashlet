@@ -1,0 +1,54 @@
+{
+  "version": "opsd-expanded-plan-v1",
+  "name": "opsd-expanded-836-v8",
+  "split_seed": 31000,
+  "quotas": {
+    "training_candidates": {
+      "short_program": 214,
+      "code_edit": 161,
+      "workspace": 161
+    },
+    "development": {
+      "short_program": 40,
+      "code_edit": 30,
+      "workspace": 30
+    },
+    "test": {
+      "short_program": 80,
+      "code_edit": 60,
+      "workspace": 60
+    }
+  },
+  "difficulty_thresholds": {
+    "easy": {
+      "statements": 8,
+      "branches": 2
+    },
+    "medium": {
+      "statements": 20,
+      "branches": 5
+    }
+  },
+  "freeze": {
+    "version": "opsd-cohort-freeze-v1",
+    "subset_size": 268,
+    "sampling_seed": 31001,
+    "training_seed": 31002,
+    "epoch_shuffle_seed": 31003,
+    "evaluation_seeds": [
+      4,
+      17,
+      29,
+      41,
+      53
+    ],
+    "epochs": 4,
+    "difficulty_basis": "Static original reference AST: easy <=8 statements/2 branches; medium <=20/5; otherwise hard. Public adapter code excluded. Recorded before subset sampling; no Baseline/Student outcomes."
+  },
+  "rules": {
+    "selection": "One verified representative per reviewed component; all components containing historical families reserved to candidates, including replacements for failed historical references; split quotas fixed before execution.",
+    "remainder": "Largest remainder; workspace wins the 30% tie.",
+    "test": "Reference/mutation quality checks only; no Baseline/Student performance filtering.",
+    "seeds": "Routine execution configuration, not user-specified seed values."
+  }
+}

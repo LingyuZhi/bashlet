@@ -1,6 +1,10 @@
-# OPSD 扩展数据 v6
+# OPSD 扩展数据 v8
 
-权威 cohort 为 `opsd-expanded-cohort-v6.json`。三个角色分别包含 536、100、200 个独立家族；短程序／代码修改／工作区配额分别为 214/161/161、40/30/30、80/60/60。历史来源和历史文件保留。旧来源中确认的近重复在此版本只保留一个代表，具体取舍见冻结目录中的审计材料。
+权威 cohort 为 `opsd-expanded-cohort-v8.json`。三个角色分别包含 536、100、200 个独立家族；短程序／代码修改／工作区配额分别为 214/161/161、40/30/30、80/60/60。历史来源和历史文件保留。旧来源中确认的近重复在此版本只保留一个代表，具体取舍见冻结目录中的审计材料。
+
+`opsd-expanded-plan-v1.json` 保存生成 cohort 使用的角色配额、难度阈值、抽样与训练种子和访问轮数。`expanded_cohort` 显式读取该计划，再结合质量清单、历史清单和家族审阅结果生成冻结配置；调整实验参数时修改计划，不修改源码。已冻结的数据身份及顺序继续以权威 cohort 为准。
+
+本版复核 191 个历史家族，保留 174 个；15 个因同题或模板近重复不再独立计数，另两个旧任务存在参考错误或题面／接口不一致。新增 662 个家族补齐总数。25 项公开来源的确定质量或题面／接口问题均有执行反例，已剔除。即使历史参考被剔除，它所在语义组的正确替代代表也只进入候选池。冻结目录的审计副本记录这些取舍与证据身份。
 
 `mbpp-full-v1.json` 和 `humaneval-v1.json` 固定公开来源的提交、原始文件哈希及作者。`opsd-public-import-v5.json` 固定转换类型。转换不会增加原题家族数。短程序保留原始需求；代码修改提供实际错误实现；工作区任务必须读取本地需求和输入，并生成结果文件。工作区评分会换用独立输入，拒绝只记住可见输出的实现。
 
@@ -8,10 +12,13 @@
 uv run --locked bashlet import-public-tasks configs/opsd-public-import-v5.json \
   --output-dir runs/issue31-public-catalog-v5-20261009
 
+uv run --locked bashlet import-public-tasks configs/opsd-p3-import-v1.json \
+  --output-dir runs/issue31-p3-catalog-v1-reviewed-20261009
+
 uv run --locked bashlet prepare-harness \
-  --cohort configs/opsd-expanded-cohort-v6.json \
+  --cohort configs/opsd-expanded-cohort-v8.json \
   --mbpp-manifest runs/mbpp-sanitized-v1-verified/manifest.json \
-  --workers 16 --output-dir runs/issue31-expanded-freeze-v6-20261009 \
+  --workers 16 --output-dir runs/issue31-expanded-freeze-v8-20261009 \
   -c configs/bash-block-v6.yaml -c configs/cohort-quality-v1.yaml
 ```
 
@@ -34,3 +41,5 @@ uv run --locked bashlet prepare-harness \
 近重复检查同时比较去名后的参考 AST、常量模板和需求词汇，再记录语义审阅决定。该审计不能数学上证明不存在任何语义等价。静态难度以参考程序语句和分支数分层，不含公开来源的通用适配代码；它不代表模型实测难度。执行验收和人工可复核的原始记录是数据质量证据，不是模型能力基线。
 
 公开来源的评分随机种子固定为 0，并与训练和模型采样种子分开。函数在子进程内执行，可信评分进程检查实际返回值；成功退出但没有结果不能通过。字典、列表、元组和集合按值传递，`Counter` 等字典子类保留其键值。
+
+P3 补入 Hanoi 和 Sudoku 两个原生家族。每题的五个参数实例只计一个家族；HumanEval 派生题不会重复导入。公开的 `sat` 谓词属于题目规范，参考 `sol` 和其余参数实例由可信流程持有。Hanoi 额外检查 peg 索引范围，Sudoku 检查恰好 81 个字符。原生约束会拒绝固定求解首例的实现。

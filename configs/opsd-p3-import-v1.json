@@ -1,0 +1,23 @@
+{
+  "version": "public-python-plan-v1",
+  "dataset": "bashlet/public-puzzles",
+  "revision": "p3-curated-v1-20261009",
+  "task_id_suffix": "/v1",
+  "sources": [
+    {
+      "lock": "p3-native-v1.json",
+      "task_types": {
+        "TowersOfHanoiArbitrary": "short_program",
+        "Sudoku": "short_program"
+      },
+      "requirements": {
+        "TowersOfHanoiArbitrary": "Given source and target partitions of the same integer disk labels into three pegs, return legal moves [from_peg, to_peg] that transform source to target. Peg indices are 0, 1, 2. Each peg stores increasing labels; append moves must preserve that order. Use the supplied labels; the disk count is not fixed.",
+        "Sudoku": "Given an 81-character Sudoku puzzle (digits 1-9 and _ for blanks), return exactly 81 digits preserving all givens. Each row, column and 3x3 square must contain all digits 1-9."
+      },
+      "contracts": {
+        "TowersOfHanoiArbitrary": "def _grading_contract(answer, args):\n    assert isinstance(answer, list)\n    assert all(isinstance(move, list) and len(move) == 2 and all(type(peg) is int and 0 <= peg < 3 for peg in move) for move in answer)\n",
+        "Sudoku": "def _grading_contract(answer, args):\n    assert isinstance(answer, str) and len(answer) == 81\n"
+      }
+    }
+  ]
+}

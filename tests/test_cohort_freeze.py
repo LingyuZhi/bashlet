@@ -12,6 +12,118 @@ CONFIGS = Path(__file__).parents[1] / "configs"
 
 
 @pytest.fixture(scope="module")
+def imported_p3_task(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("p3-grading")
+    rows = [
+        {
+            "name": f"RangeConstruction:{index}",
+            "module": "synthetic-fixture.py",
+            "sat": (
+                f"def sat(answer: List[int], n={n}):\n"
+                "    return answer[:n] == list(range(n))\n"
+            ),
+            "sol_header": f"def sol(n={n}):",
+            "sol_bodies": ["    return list(range(n))"],
+        }
+        for index, n in enumerate((2, 3, 4))
+    ]
+    raw = json.dumps(rows).encode()
+    (root / "puzzles.json").write_bytes(raw)
+    (root / "lock.json").write_text(
+        json.dumps(
+            {
+                "dataset": "synthetic/p3-fixture",
+                "revision": "fixture-v1",
+                "format": "p3",
+                "file": "puzzles.json",
+                "sha256": hashlib.sha256(raw).hexdigest(),
+            }
+        )
+    )
+    plan = root / "plan.json"
+    plan.write_text(
+        json.dumps(
+            {
+                "version": "public-python-plan-v1",
+                "dataset": "synthetic/p3-fixture",
+                "revision": "fixture-v1",
+                "sources": [
+                    {
+                        "lock": "lock.json",
+                        "task_types": {"RangeConstruction": "short_program"},
+                        "requirements": {
+                            "RangeConstruction": "Return exactly n integers 0..n-1."
+                        },
+                        "contracts": {
+                            "RangeConstruction": (
+                                "def _grading_contract(answer, args):\n"
+                                "    assert isinstance(answer, list)\n"
+                                "    assert len(answer) == args[0]\n"
+                            )
+                        },
+                    }
+                ],
+            }
+        )
+    )
+    output = root / "imported"
+    process = cli(
+        "import-public-tasks",
+        str(plan),
+        "--source-dir",
+        str(root),
+        "--output-dir",
+        str(output),
+        cwd=root,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    return output / "private/catalog.json"
+
+
+def test_p3_parameter_instances_and_solutions_count_as_one_family(
+    imported_p3_task: Path,
+) -> None:
+    catalog = json.loads(imported_p3_task.read_text())
+    assert len(catalog["families"]) == 1
+    family = catalog["families"][0]
+    assert family["family_id"] == "p3/rangeconstruction"
+    assert len(family["variants"]) == 1
+    assert len(family["provenance"]["upstream_instances"]) == 3
+    assert family["split"] == "unsplit"
+    usage = json.loads((imported_p3_task.parent / "usage.json").read_text())
+    assert usage["conversion_attempts"] == usage["converted_families"] == 1
+
+
+@pytest.mark.parametrize(
+    "implementation", ["reference", "memorizes_first", "invalid_length", "sys_exit"]
+)
+def test_p3_checks_native_parameters_and_strict_output_contracts(
+    tmp_path: Path,
+    imported_p3_task: Path,
+    implementation: str,
+) -> None:
+    family = json.loads(imported_p3_task.read_text())["families"][0]
+    variant = family["variants"][0]
+    task = variant["task"]
+    source = {
+        "reference": task["reference_implementation"],
+        "memorizes_first": variant["wrong_files"]["solution.py"],
+        "invalid_length": "def solve(n):\n    return list(range(n)) + [99]\n",
+        "sys_exit": "import sys\nsys.exit(0)\n",
+    }[implementation]
+    task["initial_files"]["solution.py"] = source
+    path = tmp_path / "task.json"
+    path.write_text(json.dumps(task))
+    model = replay_config(tmp_path, [submit()])
+    process = cli("task", str(path), "-c", str(model), cwd=tmp_path)
+    assert process.returncode == (0 if implementation == "reference" else 1), (
+        process.stdout + process.stderr
+    )
+    _, run = saved_run(tmp_path / "runs")
+    assert run["grade"]["passed"] is (implementation == "reference")
+
+
+@pytest.fixture(scope="module")
 def imported_public_tasks(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("public-grading")
     rows = [

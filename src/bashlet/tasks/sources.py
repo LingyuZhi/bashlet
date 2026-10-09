@@ -5,7 +5,7 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import asdict, replace
+from dataclasses import asdict
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -215,6 +215,25 @@ def catalog_task_record(
     return data
 
 
+def _validate_native_task(
+    record: dict[str, Any], row: dict[str, Any], origin: TaskOrigin
+) -> None:
+    from ..mbpp import _convert
+
+    expected, _ = _convert(row, record["environment_id"], origin)
+    native = record | {
+        "assignment": None,
+        "task_type": None,
+        "feedback_start_id": None,
+        "environment_variant_id": None,
+    }
+    if (
+        fingerprint(native) != fingerprint(asdict(expected))
+        or record["task_type"] != "short_program"
+    ):
+        raise ValueError("Task content differs from its registered MBPP source record")
+
+
 def validate_registered_task(task: Task) -> None:
     """Bind catalog tasks to reviewed content, including references and graders."""
     assert task.origin is not None
@@ -225,7 +244,6 @@ def validate_registered_task(task: Task) -> None:
     )
     lock, family = registered_origin(task.origin, artifact_dir=artifact_dir)
     if family is None:
-        from ..mbpp import _convert
         from .versions import source_bytes
 
         row = next(
@@ -238,21 +256,7 @@ def validate_registered_task(task: Task) -> None:
         )
         if row is None:
             raise ValueError("Task original identity is absent from its native source")
-        native_expected, _ = _convert(row, task.environment_id, task.origin)
-        native = replace(
-            task,
-            assignment=None,
-            task_type=None,
-            feedback_start_id=None,
-            environment_variant_id=None,
-        )
-        if (
-            fingerprint(asdict(native)) != fingerprint(asdict(native_expected))
-            or task.task_type != "short_program"
-        ):
-            raise ValueError(
-                "Task content differs from its registered MBPP source record"
-            )
+        _validate_native_task(asdict(task), row, task.origin)
         return
     variant = next(
         (v for v in family["variants"] if v["task"]["task_id"] == task.task_id), None
@@ -281,19 +285,9 @@ def validate_source_entry(
     lock, family = registered_origin(origin, registrations)
     if family is None:
         if task_record is not None:
-            from ..mbpp import _convert
-
             if native_record is None:
                 raise ValueError("Frozen native task source record is missing")
-            expected, _ = _convert(native_record, task_record["environment_id"], origin)
-            native = task_record | {
-                "assignment": None,
-                "task_type": None,
-                "feedback_start_id": None,
-                "environment_variant_id": None,
-            }
-            if fingerprint(native) != fingerprint(asdict(expected)):
-                raise ValueError("Frozen pool task content changed")
+            _validate_native_task(task_record, native_record, origin)
         return
     variant = next(
         (v for v in family["variants"] if v["task"]["task_id"] == entry["task_id"]),

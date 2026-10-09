@@ -319,13 +319,26 @@ def expanded_cohort(
     inventory_path: Path,
     historical_path: Path,
     review_path: Path,
-    sampling_seed: int = 31001,
-    split_seed: int = 31000,
+    plan_path: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Plan the specified 836 families from actual quality receipts and review."""
+    """Apply a configured freeze plan to actual quality receipts and review."""
     inventory = json.loads(inventory_path.read_text())
     historical = json.loads(historical_path.read_text())
     review = json.loads(review_path.read_text())
+    plan = json.loads(plan_path.read_text())
+    if plan["version"] != "opsd-expanded-plan-v1":
+        raise ValueError("Unsupported expanded cohort plan")
+    quotas = plan["quotas"]
+    candidate_quotas = quotas["training_candidates"]
+    dev_quotas = quotas["development"]
+    test_quotas = quotas["test"]
+    if any(
+        set(role) != set(TASK_TYPES)
+        or any(type(value) is not int or value < 0 for value in role.values())
+        for role in (candidate_quotas, dev_quotas, test_quotas)
+    ):
+        raise ValueError("Expanded cohort quotas require nonnegative type counts")
+    split_seed = plan["split_seed"]
     if (
         inventory.get("model_baseline") is not False
         or inventory.get("evidence_kind") != "reference-and-mutation-replay"
@@ -337,30 +350,47 @@ def expanded_cohort(
         for group in review["independence_guard"]
         for member in group["members"]
     }
+    quality_exclusions = {
+        row["family_id"]: row["reason"]
+        for row in review.get("quality_exclusions", [])
+    }
     groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for entry in inventory["tasks"]:
-        if entry["status"] == "verified" and entry["variant_id"] == "base":
+        if (
+            entry["status"] == "verified"
+            and entry["variant_id"] == "base"
+            and entry["family_id"] not in quality_exclusions
+        ):
             key = component.get(entry["family_id"], (entry["family_id"],))
             groups.setdefault(key, []).append(entry)
     retained = []
+    reserved = []
     novel = {}
     for key, entries in groups.items():
         old = [e for e in entries if e["family_id"] in old_order]
-        if old:
-            retained.append(
-                min(
-                    old,
-                    key=lambda e: (
-                        e["task_type"] == "short_program",
-                        old_order[e["family_id"]],
-                    ),
-                )
+        if any(member in old_order for member in key):
+            representative = min(
+                old or entries,
+                key=lambda e: (
+                    e["task_type"] == "short_program",
+                    old_order.get(e["family_id"], len(old_order)),
+                    e["task_id"],
+                ),
             )
+            reserved.append(representative)
+            if old:
+                retained.append(representative)
         else:
             novel[key] = entries
     old_counts = Counter(e["task_type"] for e in retained)
-    total_quotas = {"short_program": 334, "code_edit": 251, "workspace": 251}
-    needed = {kind: total_quotas[kind] - old_counts[kind] for kind in TASK_TYPES}
+    reserved_counts = Counter(e["task_type"] for e in reserved)
+    total_quotas = {
+        kind: candidate_quotas[kind] + dev_quotas[kind] + test_quotas[kind]
+        for kind in TASK_TYPES
+    }
+    if any(reserved_counts[kind] > candidate_quotas[kind] for kind in TASK_TYPES):
+        raise ValueError("Historical candidates exceed the configured quotas")
+    needed = {kind: total_quotas[kind] - reserved_counts[kind] for kind in TASK_TYPES}
     available = {
         kind: sum(
             any(e["task_type"] == kind for e in entries) for entries in novel.values()
@@ -388,14 +418,11 @@ def expanded_cohort(
                 key=lambda e: e["task_id"],
             )
             assignments[kind].append(entry)
-    candidate_quotas = {"short_program": 214, "code_edit": 161, "workspace": 161}
-    dev_quotas = {"short_program": 40, "code_edit": 30, "workspace": 30}
-    test_quotas = {"short_program": 80, "code_edit": 60, "workspace": 60}
-    roles = {"training_candidates": list(retained), "development": [], "test": []}
+    roles = {"training_candidates": list(reserved), "development": [], "test": []}
     for kind in TASK_TYPES:
         pool = assignments[kind]
         rng.shuffle(pool)
-        train = candidate_quotas[kind] - old_counts[kind]
+        train = candidate_quotas[kind] - reserved_counts[kind]
         dev = dev_quotas[kind]
         roles["training_candidates"].extend(pool[:train])
         roles["development"].extend(pool[train : train + dev])
@@ -425,16 +452,18 @@ def expanded_cohort(
             isinstance(n, (ast.If, ast.For, ast.While, ast.comprehension))
             for n in ast.walk(tree)
         )
-        difficulty[entry["task_id"]] = (
-            "easy"
-            if statements <= 8 and branches <= 2
-            else "medium"
-            if statements <= 20 and branches <= 5
-            else "hard"
+        difficulty[entry["task_id"]] = next(
+            (
+                level
+                for level in ("easy", "medium")
+                if statements <= plan["difficulty_thresholds"][level]["statements"]
+                and branches <= plan["difficulty_thresholds"][level]["branches"]
+            ),
+            "hard",
         )
     cohort = {
         "version": "harness-task-cohort-v2",
-        "name": "opsd-expanded-836-v1",
+        "name": plan["name"],
         **{
             group: {
                 "task_ids": sorted(e["task_id"] for e in entries),
@@ -447,39 +476,18 @@ def expanded_cohort(
         "environment_variants": [],
         "independence_guard": review["independence_guard"],
         "split_seed": split_seed,
-        "freeze": {
-            "version": "opsd-cohort-freeze-v1",
-            "subset_size": 268,
-            "sampling_seed": sampling_seed,
-            "training_seed": 31002,
-            "epoch_shuffle_seed": 31003,
-            "evaluation_seeds": [4, 17, 29, 41, 53],
-            "epochs": 4,
-            "difficulty_basis": (
-                "Static original reference AST: easy <=8 statements/2 branches; "
-                "medium <=20/5; otherwise hard. Public adapter code excluded. "
-                "Recorded before subset sampling; no Baseline/Student outcomes."
-            ),
-            "difficulty": difficulty,
-        },
-        "rules": {
-            "selection": (
-                "One verified representative per reviewed component; historical "
-                "families reserved to candidates; split quotas fixed before execution."
-            ),
-            "remainder": "Largest remainder; workspace wins the 30% tie.",
-            "test": (
-                "Reference/mutation quality checks only; "
-                "no Baseline/Student performance filtering."
-            ),
-            "seeds": "Routine execution configuration, not user-specified seed values.",
-        },
+        "freeze": plan["freeze"] | {"difficulty": difficulty},
+        "rules": plan["rules"],
     }
+    validate_plan(cohort)
     kept = {e["family_id"] for e in retained}
     exclusions = [
         {
             "family_id": e["family_id"],
-            "reason": "Reviewed duplicate/template variant; historical bytes retained.",
+            "reason": quality_exclusions.get(
+                e["family_id"],
+                "Reviewed duplicate/template variant; historical bytes retained.",
+            ),
             "component": list(component.get(e["family_id"], (e["family_id"],))),
         }
         for e in historical["tasks"]
@@ -493,15 +501,18 @@ def expanded_cohort(
             inventory_path.read_bytes()
         ).hexdigest(),
         "family_review_sha256": hashlib.sha256(review_path.read_bytes()).hexdigest(),
+        "generation_plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
         "historical_entries": len(historical["tasks"]),
         "historical_retained": len(retained),
         "historical_exclusions": exclusions,
         "historical_per_type": dict(old_counts),
-        "new_families": 836 - len(retained),
+        "historical_components_reserved_to_candidates": len(reserved),
+        "new_families": sum(total_quotas.values()) - len(retained),
         "roles": {k: len(v) for k, v in roles.items()},
         "source_quality_rejections": [
             e for e in inventory["tasks"] if e["status"] != "verified"
         ],
+        "review_quality_exclusions": review.get("quality_exclusions", []),
         "model_baseline": False,
     }
     return cohort, report

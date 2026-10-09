@@ -148,6 +148,128 @@ def _problem(
     )
 
 
+def _function_proxy(name: str) -> str:
+    renderer = ast.unparse(ast.parse(inspect.getsource(_literal))) + "\n"
+    runner = "from typing import Any\n" + renderer + FUNCTION_RUNNER
+    return (
+        "import ast as _grading_ast, subprocess as _grading_subprocess\n"
+        "import sys as _grading_sys, random as _grading_random\n"
+        "_grading_random.seed(0)\n"
+        "def _grading_candidate(*args, **kwargs):\n"
+        "    result = _grading_subprocess.run([_grading_sys.executable, '-I', '-B', "
+        f"'-c', {runner!r}, 'solution.py', {name!r}], "
+        "input=repr((args, kwargs)), text=True, capture_output=True, "
+        "timeout=20, check=True)\n"
+        "    return _grading_ast.literal_eval(result.stdout)\n"
+        f"{name} = candidate = _grading_candidate\n"
+    )
+
+
+def _puzzle(
+    instances: list[dict[str, Any]],
+    source: dict[str, Any],
+    kind: str,
+    requirement: str,
+    contract: str,
+) -> dict[str, Any]:
+    """Group native P3 parameter instances into one construction family."""
+    if kind != "short_program" or len(instances) < 3:
+        raise ValueError("P3 requires a short program and three native instances")
+    original = instances[0]["name"].split(":")[0]
+    if any(
+        row["name"].split(":")[0] != original or row["module"] == "human_eval.py"
+        for row in instances
+    ):
+        raise ValueError("P3 families cannot mix identities or duplicate HumanEval")
+    cases = []
+    parameter_names = None
+    for row in instances:
+        function = ast.parse(row["sol_header"] + "\n    pass\n").body[0]
+        assert isinstance(function, ast.FunctionDef)
+        names = [arg.arg for arg in function.args.args]
+        if len(names) != len(function.args.defaults) or (
+            parameter_names is not None and names != parameter_names
+        ):
+            raise ValueError("P3 instances require a consistent literal interface")
+        parameter_names = names
+        cases.append(tuple(ast.literal_eval(n) for n in function.args.defaults))
+    if len({_literal(args) for args in cases}) < 3:
+        raise ValueError("P3 quality checks require distinct parameter instances")
+    first = instances[0]
+    reference = (
+        HEADER
+        + first["sol_header"].replace("def sol(", "def solve(", 1)
+        + "\n"
+        + first["sol_bodies"][0]
+        + "\n"
+    )
+    feedback = (
+        HEADER
+        + first["sat"]
+        + "\n"
+        + contract
+        + "\nfrom solution import solve\n"
+        + f"args = {_literal(cases[0])}\nanswer = solve(*args)\n"
+        + "_grading_contract(answer, args)\nassert sat(answer, *args) is True\n"
+    )
+    hidden = HEADER + _function_proxy("solve") + contract + "\n"
+    for row, args in zip(instances, cases, strict=True):
+        hidden += (
+            row["sat"]
+            + "\n"
+            + f"args = {_literal(args)}\n"
+            + "answer = candidate(*args)\n_grading_contract(answer, args)\n"
+            + "assert sat(answer, *args) is True\n"
+        )
+    family = "p3/" + original.lower()
+    return {
+        "original_task_id": original,
+        "family_id": family,
+        "split": "unsplit",
+        "task_type": kind,
+        "provenance": {
+            "source": source,
+            "upstream_instances": instances,
+            "upstream_instances_sha256": fingerprint(instances),
+            "conversion": "p3-construction-v1",
+            "grading_seed": 0,
+            "author": "P3 upstream authors; interface conversion by Codex",
+            "generator": {"model": "gpt-6", "model_revision": None},
+        },
+        "variants": [
+            {
+                "variant_id": "base",
+                "task": {
+                    "task_id": "public/" + family,
+                    "prompt": requirement
+                    + "\n\nImplement solve("
+                    + ", ".join(parameter_names or [])
+                    + ") in solution.py. "
+                    "The public predicate and contract in feedback_tests.py define "
+                    "valid outputs for the supplied parameters. "
+                    "Run python3 feedback_tests.py.",
+                    "initial_files": {"feedback_tests.py": feedback},
+                    "grader": {
+                        "command": "python3 _grading/check.py",
+                        "hidden_files": {"_grading/check.py": hidden},
+                    },
+                    "reference_implementation": reference,
+                    "implementation_paths": ["solution.py"],
+                    "feedback_command": "python3 feedback_tests.py",
+                },
+                "wrong_files": {
+                    "solution.py": reference + "\n_original_solve = solve\n"
+                    "def solve(*args):\n    return _original_solve()\n"
+                },
+                "wrong_reason": (
+                    "Always solves the first public instance; "
+                    "independent native parameter instances reject it."
+                ),
+            }
+        ],
+    }
+
+
 def convert_problem(
     row: dict[str, Any], source: dict[str, Any], kind: str
 ) -> dict[str, Any]:
@@ -156,7 +278,6 @@ def convert_problem(
         raise ValueError("Unknown public task type")
     name, description, reference, hidden, args, expected = _problem(row, source)
     renderer = ast.unparse(ast.parse(inspect.getsource(_literal))) + "\n"
-    function_runner = "from typing import Any\n" + renderer + FUNCTION_RUNNER
     arguments, answer = _literal(args), _literal(expected)
     original = str(row["task_id"])
     family = f"mbpp/{original}" if source["format"] == "mbpp" else original.lower()
@@ -174,18 +295,7 @@ def convert_problem(
             f"from solution import {name}\nassert {name}(*{arguments}) == {answer}\n"
         )
     }
-    grader = (
-        "import ast as _grading_ast, subprocess as _grading_subprocess\n"
-        "import sys as _grading_sys, random as _grading_random\n"
-        "_grading_random.seed(0)\n"
-        "def _grading_candidate(*args, **kwargs):\n"
-        "    result = _grading_subprocess.run([_grading_sys.executable, '-I', '-B', "
-        f"'-c', {function_runner!r}, 'solution.py', {name!r}], "
-        "input=repr((args, kwargs)), text=True, capture_output=True, "
-        "timeout=20, check=True)\n"
-        "    return _grading_ast.literal_eval(result.stdout)\n"
-        f"{name} = candidate = _grading_candidate\n" + hidden
-    )
+    grader = _function_proxy(name) + hidden
     wrong = (
         f"def {name}(*args, **kwargs):\n"
         f"    return {answer} if args == {arguments} else None\n"
@@ -335,15 +445,30 @@ def prepare_public_catalog(
             raise ValueError("Public source content SHA-256 mismatch")
         (upstream / source["file"]).write_bytes(raw)
         content = gzip.decompress(raw) if source["file"].endswith(".gz") else raw
-        rows = {
-            str(row["task_id"]): row
-            for line in content.decode().splitlines()
-            if (row := json.loads(line))
-        }
+        rows: dict[str, Any] = {}
+        if source["format"] == "p3":
+            for row in json.loads(content):
+                rows.setdefault(row["name"].split(":")[0], []).append(row)
+        else:
+            rows = {
+                str(row["task_id"]): row
+                for line in content.decode().splitlines()
+                if (row := json.loads(line))
+            }
         sources.append(source)
         for original, kind in item["task_types"].items():
             try:
-                family = convert_problem(rows[original], source, kind)
+                family = (
+                    _puzzle(
+                        rows[original],
+                        source,
+                        kind,
+                        item["requirements"][original],
+                        item["contracts"][original],
+                    )
+                    if source["format"] == "p3"
+                    else convert_problem(rows[original], source, kind)
+                )
                 family["variants"][0]["task"]["task_id"] += plan.get(
                     "task_id_suffix", ""
                 )
