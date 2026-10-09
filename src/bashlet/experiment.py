@@ -31,10 +31,11 @@ from .models import (
     GradingCase,
     Model,
     Task,
+    TaskAssignment,
     TaskOrigin,
 )
 from .sandbox import Sandbox
-from .tasks import validate_origin
+from .tasks import validate_task
 from .workspace import capture_workspace, snapshot_workspace, validate_workspace_path
 
 if TYPE_CHECKING:
@@ -73,20 +74,25 @@ def task_from_record(data: dict[str, Any]) -> Task:
         task_data["implementation_paths"] = tuple(task_data["implementation_paths"])
     if task_data.get("origin") is not None:
         task_data["origin"] = TaskOrigin(**task_data["origin"])
-        validate_origin(task_data["origin"])
-    return Task(**task_data, grader=grader)
+    if task_data.get("assignment") is not None:
+        task_data["assignment"] = TaskAssignment(**task_data["assignment"])
+    task = Task(**task_data, grader=grader)
+    validate_task(task)
+    return task
 
 
 def serialize_task(task: Task) -> str:
     """Canonical private Task document used for both storage and identity hashes."""
-    return json.dumps(asdict(task), ensure_ascii=True, allow_nan=False, indent=2)
+    record = asdict(task)
+    if task.assignment is None:
+        record.pop("assignment")
+    return json.dumps(record, ensure_ascii=True, allow_nan=False, indent=2)
 
 
 def _validate_task(task: Task, environment_id: str) -> None:
     if not task.task_id:
         raise ValueError("A task identity is required")
-    if task.origin is not None:
-        validate_origin(task.origin)
+    validate_task(task)
     if task.environment_id != environment_id:
         raise ValueError(
             f"Task environment {task.environment_id!r} "
@@ -332,6 +338,7 @@ def run_experiment(
         "feedback_start_id": task.feedback_start_id,
         "environment_variant_id": task.environment_variant_id,
         "task_origin": asdict(task.origin) if task.origin else None,
+        "task_assignment": asdict(task.assignment) if task.assignment else None,
         "task_sha256": hashlib.sha256(task_json.encode()).hexdigest(),
         "environment_id": task.environment_id,
         "grading_protocol": grading_protocol,
@@ -460,6 +467,7 @@ def run_experiment(
         final_metadata: dict[str, object] = {
             "grading_protocol": grading_protocol,
             "task_origin": asdict(task.origin) if task.origin else None,
+            "task_assignment": asdict(task.assignment) if task.assignment else None,
             "task_type": task.task_type,
             "variant_id": task.variant_id,
             "feedback_start_id": task.feedback_start_id,

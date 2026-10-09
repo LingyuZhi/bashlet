@@ -16,6 +16,7 @@ from ..config import (
 )
 from ..models import FunctionGrader, InteractionBudget, SamplingParams
 from ..monitoring import MonitorConfig, code_revision
+from ..tasks import task_family
 from ..vllm import configured_request_policy
 from .harness import _digest, _tasks, _write, evaluate
 
@@ -79,7 +80,7 @@ def read_policy(path: Path) -> tuple[dict[str, Any], dict[str, Path]]:
             continue
         plan_path = (path.parent / policy[key]).resolve()
         plan, tasks = _tasks(plan_path)
-        family_sets[track] = {task.origin.family_id for task in tasks if task.origin}
+        family_sets[track] = {task_family(task) for task in tasks if task.origin}
         if len(family_sets[track]) != len(tasks):
             raise ValueError("Acceptance requires one independent family per track row")
         if (
@@ -109,7 +110,7 @@ def read_policy(path: Path) -> tuple[dict[str, Any], dict[str, Path]]:
             "tasks": [
                 {
                     "task_id": task.task_id,
-                    "family_id": task.origin.family_id,
+                    "family_id": task_family(task),
                     "task_sha256": _digest(asdict(task)),
                 }
                 for task in tasks

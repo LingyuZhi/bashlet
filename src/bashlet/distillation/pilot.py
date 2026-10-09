@@ -20,7 +20,7 @@ from ..evaluation.harness import evaluate
 from ..experiment import run_experiment, task_from_record
 from ..monitoring import MonitorConfig, RunMonitor, spend_metrics, write_document
 from ..spend import SpendLedger, SpendPolicy, summarize_cost
-from ..tasks import task_path, validate_harness_origin
+from ..tasks import VERSIONED_CONVERSION, task_family, task_path, validate_task
 from . import OPSDConfig, OPSDRun
 from .pytrio import PyTRIOOPSD, PyTRIOOPSDConfig
 
@@ -426,13 +426,23 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
     from ..evaluation.harness import _tasks
 
     _, dev_tasks = _tasks(Path(config.dev_plan))
-    families = {t.origin.family_id for t in tasks if t.origin is not None}
+    families = {task_family(t) for t in tasks}
     if len(families) != len(tasks):
         raise ValueError("Pilot training requires independent task families")
     for task in tasks:
         assert task.origin is not None
-        validate_harness_origin(task.origin)
-    if any(t.origin is None or t.origin.family_id in families for t in dev_tasks):
+        validate_task(task, harness=True)
+    manifest = json.loads(Path(config.train_manifest).read_text())
+    reserved = (
+        {
+            entry["family_id"]
+            for entry in manifest["tasks"]
+            if entry["assignment"]["role"] == "train_candidate"
+        }
+        if manifest["conversion"] == VERSIONED_CONVERSION
+        else families
+    )
+    if any(t.origin is None or task_family(t) in reserved for t in dev_tasks):
         raise ValueError("Pilot training and development families must be disjoint")
     monitoring = MonitorConfig(**config.monitoring)
     monitoring.credential()
@@ -505,7 +515,9 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
     for row in record["training_tasks"]:
         task = tasks_by_id[row["task_id"]]
         assert task.origin is not None
-        row.setdefault("family_id", task.origin.family_id)
+        row.setdefault("family_id", task_family(task))
+        if task.assignment is not None:
+            row.setdefault("task_assignment", asdict(task.assignment))
         row.setdefault("task_type", task.task_type or "short_program")
     write_document(path, record)
     monitor = RunMonitor(
@@ -628,7 +640,7 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
                     batch_index=len(run.record["batches"]),
                     student_policy=run.student.identity,
                     request_count_before_attempt=len(ledger.snapshot()["entries"]),
-                    family_id=task.origin.family_id if task.origin else None,
+                    family_id=task_family(task),
                     task_type=task.task_type or "short_program",
                 )
                 record["status"] = "training"

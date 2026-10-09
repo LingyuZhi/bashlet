@@ -1,0 +1,20 @@
+{
+  "version": "task-source-registry-v2",
+  "sources": [
+    {
+      "format": "mbpp",
+      "kind": "public",
+      "lock_file": "mbpp-sanitized-v1.json"
+    },
+    {
+      "format": "catalog",
+      "kind": "authored",
+      "lock_file": "harness-authored-v1.lock.json"
+    },
+    {
+      "format": "catalog",
+      "kind": "model_assisted",
+      "lock_file": "harness-supplement-v2.lock.json"
+    }
+  ]
+}

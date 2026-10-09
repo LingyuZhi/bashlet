@@ -46,7 +46,7 @@ from ..spend import (
     TokenPricing,
     summarize_cost,
 )
-from ..tasks import validate_origin
+from ..tasks import validate_training_task
 
 if TYPE_CHECKING:
     import pytrio as trio
@@ -354,9 +354,7 @@ class OPSDRun:
             raise ValueError("Rollout must use the current student policy")
         if model.encoding.describe() != self.record["encoding_details"]:
             raise ValueError("Rollout encoding differs from the initial snapshot")
-        if task.origin is None or task.origin.split != "train":
-            raise ValueError("OPSD requires a training-split task")
-        validate_origin(task.origin)
+        validate_training_task(task)
         if not task.reference_implementation.strip():
             raise ValueError("OPSD teacher requires a reference implementation")
 
@@ -383,6 +381,12 @@ class OPSDRun:
                 for key in ("dataset", "revision", "source_sha256", "split")
             },
         }
+        if task.assignment is not None:
+            metadata["data_source"].update(
+                data_version=task.assignment.version,
+                cohort_sha256=task.assignment.cohort_sha256,
+                role=task.assignment.role,
+            )
         try:
             latest = json.loads(self.path.read_text())
             if latest != self.record:
@@ -620,6 +624,8 @@ class OPSDRun:
             "rollout_seconds": result.usage.elapsed_seconds,
             "interaction_steps": result.usage.steps,
         }
+        if task.assignment is not None:
+            batch["task_assignment"] = asdict(task.assignment)
         result.opsd = batch
         self.record["batches"].append(batch)
         try:

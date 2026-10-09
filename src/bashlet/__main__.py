@@ -185,7 +185,7 @@ def main() -> None:
         "task", type=Path, help="Task JSON or a legacy task/replies request"
     )
     task.add_argument("--task-id", help="Select a task from a prepared task manifest")
-    task.add_argument("--split", choices=("train", "dev", "test"))
+    task.add_argument("--split", choices=("train", "train_candidate", "dev", "test"))
     _execution_options(task)
     evaluation = commands.add_parser(
         "evaluate", help="Evaluate a fixed development task list"
@@ -227,7 +227,7 @@ def main() -> None:
     harness_tasks = commands.add_parser(
         "prepare-harness", help="Freeze mixed-source tasks with real grading validation"
     )
-    harness_tasks.add_argument("--mbpp-manifest", type=Path, required=True)
+    harness_tasks.add_argument("--mbpp-manifest", type=Path)
     harness_tasks.add_argument("--cohort", type=Path, default=DEFAULT_COHORT)
     _execution_options(harness_tasks)
     demonstrations = commands.add_parser(

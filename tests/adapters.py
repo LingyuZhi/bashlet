@@ -355,7 +355,8 @@ class ControlledOPSD:
     teacher_identity = "test/sft@selected"
     teacher_encoding = ByteEncoding()
 
-    def __init__(self) -> None:
+    def __init__(self, reference_marker: str = "TEACHER_ONLY_REFERENCE") -> None:
+        self.reference_marker = reference_marker
         self.student = ScriptedModel(self.respond, identity=self.teacher_identity)
         self.scoring: list[tuple[int, ...]] = []
         self.updates: list[dict[str, Any]] = []
@@ -387,7 +388,7 @@ class ControlledOPSD:
 
     def score(self, tokens: Sequence[int]) -> Future[TeacherScores]:
         self.scoring.append(tuple(tokens))
-        assert "TEACHER_ONLY_REFERENCE" in self.teacher_encoding.render(tokens)
+        assert self.reference_marker in self.teacher_encoding.render(tokens)
         values: list[float | None] = [-0.25] * len(tokens)
         values[0], values[-1] = None, -1.75
         return Future(

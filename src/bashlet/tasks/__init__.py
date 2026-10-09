@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from dataclasses import asdict
 from functools import lru_cache
 from pathlib import Path
@@ -9,10 +10,12 @@ from typing import Any
 
 from ..mbpp import mbpp_task_path
 from ..mbpp import validate_origin as validate_mbpp_origin
-from ..models import TaskOrigin
+from ..models import Task, TaskAssignment, TaskOrigin
+from ..protocol import fingerprint
 
 AUTHORED_DATASET = "bashlet/harness-authored"
 CONVERSION = "harness-task-families-v1"
+VERSIONED_CONVERSION = "harness-task-families-v2"
 _CONFIGS = Path(__file__).resolve().parents[3] / "configs"
 if not _CONFIGS.is_dir():
     _CONFIGS = Path(__file__).resolve().parents[1] / "configs"
@@ -60,7 +63,10 @@ def validate_origin(origin: TaskOrigin) -> None:
         validate_mbpp_origin(origin)
         return
     if origin.dataset != AUTHORED_DATASET:
-        raise ValueError(f"Unsupported task-origin dataset: {origin.dataset}")
+        from .sources import registered_origin
+
+        registered_origin(origin)
+        return
     lock, families = authored_source()
     if origin.revision != lock["revision"] or origin.source_sha256 != lock["sha256"]:
         raise ValueError("Unregistered authored source version or content identity")
@@ -102,6 +108,63 @@ def validate_harness_origin(origin: TaskOrigin) -> None:
         )
 
 
+def canonical_family(origin: TaskOrigin) -> str:
+    """Known equivalents keep native origins but share one counting identity."""
+    reservation = _family_reservations().get((origin.dataset, origin.family_id))
+    return reservation[1] if reservation is not None else origin.family_id
+
+
+def task_family(task: Task) -> str:
+    if task.origin is None:
+        raise ValueError("Task family requires an origin")
+    return task.assignment.family_id if task.assignment else task.origin.family_id
+
+
+def task_split(task: Task) -> str | None:
+    if task.assignment is not None:
+        return (
+            "train"
+            if task.assignment.role == "train_candidate"
+            else task.assignment.role
+        )
+    return task.origin.split if task.origin else None
+
+
+def validate_task(task: Task, *, harness: bool = False) -> None:
+    """Validate original lineage and the separately declared current role."""
+    if task.origin is None:
+        if task.assignment is not None:
+            raise ValueError("A versioned task requires a registered origin")
+        return
+    validate_origin(task.origin)
+    assignment = task.assignment
+    if assignment is None:
+        if task.origin.dataset not in ("google-research/mbpp", AUTHORED_DATASET):
+            raise ValueError("New task sources require a versioned role assignment")
+        if harness:
+            validate_harness_origin(task.origin)
+        return
+    from .sources import validate_registered_task
+
+    validate_registered_task(task)
+    if (
+        not assignment.version.strip()
+        or re.fullmatch(r"[0-9a-f]{64}", assignment.cohort_sha256) is None
+        or assignment.role not in ("train_candidate", "dev", "test")
+        or assignment.family_id != canonical_family(task.origin)
+        or task.task_type not in ("short_program", "code_edit", "workspace")
+    ):
+        raise ValueError("Invalid versioned task role or conflicting family mapping")
+
+
+def validate_training_task(task: Task) -> None:
+    validate_task(task)
+    if task.origin is None or task_split(task) != "train":
+        raise ValueError(
+            "Training requires a training-split task or training candidate"
+        )
+
+
 def _verified_task_path(
     manifest_path: Path,
     selected: dict[str, Any],
@@ -126,6 +189,8 @@ def _verified_task_path(
     task = json.loads(path.read_text())
     if task["task_id"] != task_id or task["origin"] != asdict(expected):
         raise ValueError("Task identity or origin differs from its family manifest")
+    if task.get("assignment") != selected.get("assignment"):
+        raise ValueError("Task role differs from its versioned manifest")
     validate_origin(expected)
     if "task_type" in selected and task.get("task_type") is not None:
         if task["task_type"] != selected["task_type"]:
@@ -138,6 +203,72 @@ def _verified_task_path(
     return path
 
 
+def _versioned_roles(manifest_path: Path, manifest: dict[str, Any]) -> dict[str, str]:
+    """Every frozen candidate remains reserved, including unselected tasks."""
+    private = manifest_path.parent / "private"
+    cohort_bytes = (private / "cohort.json").read_bytes()
+    cohort = json.loads(cohort_bytes)
+    registry_bytes = (private / "source-registry.json").read_bytes()
+    if hashlib.sha256(registry_bytes).hexdigest() != manifest["source_registry_sha256"]:
+        raise ValueError("Frozen source registration content identity changed")
+    identities = {
+        (source["dataset"], source["revision"], source["sha256"])
+        for source in manifest["sources"]
+    }
+    artifacts = manifest["source_artifacts"]
+    if identities != {
+        (source["dataset"], source["revision"], source["sha256"])
+        for source in artifacts
+    }:
+        raise ValueError("Frozen source content is missing")
+    for source in artifacts:
+        path = (manifest_path.parent / source["file"]).resolve()
+        if (
+            not path.is_relative_to((private / "sources").resolve())
+            or hashlib.sha256(path.read_bytes()).hexdigest() != source["sha256"]
+        ):
+            raise ValueError("Frozen source content identity changed")
+    if (
+        hashlib.sha256(cohort_bytes).hexdigest() != manifest["source"]["sha256"]
+        or cohort != manifest["cohort"]
+        or cohort["version"] != "harness-task-cohort-v2"
+        or cohort["name"] != manifest["source"]["revision"]
+        or hashlib.sha256((private / "family-guard.json").read_bytes()).hexdigest()
+        != manifest["family_guard_sha256"]
+    ):
+        raise ValueError("Frozen cohort or family guard content identity changed")
+    roles: dict[str, str] = {}
+    for group, role in (
+        ("training_candidates", "train_candidate"),
+        ("development", "dev"),
+        ("test", "test"),
+    ):
+        ids = cohort[group]["task_ids"]
+        if len(ids) != len(set(ids)) or any(identity in roles for identity in ids):
+            raise ValueError("Conflicting frozen family roles")
+        roles.update(dict.fromkeys(ids, role))
+    variants = cohort["environment_variants"]
+    entries = {entry["task_id"]: entry for entry in manifest["tasks"]}
+    if set(entries) != set(roles) | set(variants) or len(entries) != len(
+        manifest["tasks"]
+    ):
+        raise ValueError(
+            "Task set differs from the whole frozen candidate/dev/test pool"
+        )
+    family_roles: dict[str, str] = {}
+    for identity, role in roles.items():
+        family = entries[identity]["family_id"]
+        if family in family_roles:
+            raise ValueError("Frozen lists require independent task families")
+        family_roles[family] = role
+    for identity in variants:
+        family = entries[identity]["family_id"]
+        if identity in roles or family not in family_roles:
+            raise ValueError("Variant must inherit a frozen base family")
+        roles[identity] = family_roles[family]
+    return roles
+
+
 def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     """Select a verified task after checking every family's source and split.
 
@@ -148,7 +279,11 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     manifest = json.loads(manifest_path.read_text())
     if manifest.get("conversion") == "mbpp-json-functions-v1":
         return mbpp_task_path(manifest_path, task_id, split)
-    if manifest.get("status") != "complete" or manifest.get("conversion") != CONVERSION:
+    versioned = manifest.get("conversion") == VERSIONED_CONVERSION
+    if manifest.get("status") != "complete" or manifest.get("conversion") not in (
+        CONVERSION,
+        VERSIONED_CONVERSION,
+    ):
         raise ValueError("Task set is incomplete or has an unsupported conversion")
     sources = {
         (source["dataset"], source["revision"], source["sha256"])
@@ -156,16 +291,71 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     }
     tasks: dict[str, dict[str, Any]] = {}
     families: dict[str, str] = {}
+    roles = _versioned_roles(manifest_path, manifest) if versioned else {}
+    from .sources import admitted_sources, validate_source_entry
+
+    registrations = admitted_sources() if versioned else {}
+    native_rows: dict[tuple[str, str, str, str], str] = {}
+    if versioned:
+        if not sources <= registrations.keys():
+            raise ValueError("Manifest contains an unregistered source version")
+        for source in manifest["source_artifacts"]:
+            if source["dataset"] == "google-research/mbpp":
+                rows = json.loads((manifest_path.parent / source["file"]).read_text())
+                for row in rows:
+                    native_rows[
+                        (
+                            source["dataset"],
+                            source["revision"],
+                            source["sha256"],
+                            str(row["task_id"]),
+                        )
+                    ] = fingerprint(row)
     for entry in manifest["tasks"]:
         origin = TaskOrigin(**entry["origin"])
-        validate_harness_origin(origin)
+        assignment = TaskAssignment(**entry["assignment"]) if versioned else None
+        if versioned:
+            assert assignment is not None
+            if (
+                assignment.version != manifest["source"]["revision"]
+                or assignment.cohort_sha256 != manifest["source"]["sha256"]
+                or assignment.family_id != canonical_family(origin)
+                or assignment.role not in ("train_candidate", "dev", "test")
+                or assignment.role != roles[entry["task_id"]]
+            ):
+                raise ValueError(
+                    "Conflicting versioned family mapping or data identity"
+                )
+            if origin.dataset == "google-research/mbpp":
+                validate_mbpp_origin(origin)
+                if (
+                    native_rows.get(
+                        (
+                            origin.dataset,
+                            origin.revision,
+                            origin.source_sha256,
+                            origin.original_task_id,
+                        )
+                    )
+                    != entry["source_record_sha256"]
+                ):
+                    raise ValueError("MBPP original source record identity changed")
+            validate_source_entry(origin, entry, registrations)
+        else:
+            validate_harness_origin(origin)
         if (origin.dataset, origin.revision, origin.source_sha256) not in sources:
             raise ValueError("Task origin is absent from the admitted manifest sources")
-        if entry["family_id"] != origin.family_id or entry["split"] != origin.split:
+        family = assignment.family_id if assignment else origin.family_id
+        role_split = (
+            ("train" if assignment.role == "train_candidate" else assignment.role)
+            if assignment
+            else origin.split
+        )
+        if entry["family_id"] != family or entry["split"] != role_split:
             raise ValueError(f"Task family split mismatch: {origin.family_id}")
-        if origin.family_id in families and families[origin.family_id] != origin.split:
+        if family in families and families[family] != role_split:
             raise ValueError(f"Task family split conflict: {origin.family_id}")
-        families[origin.family_id] = origin.split
+        families[family] = role_split
         if entry["task_id"] in tasks:
             raise ValueError(f"Duplicate task ID: {entry['task_id']}")
         if entry["task_type"] not in ("short_program", "code_edit", "workspace"):
@@ -179,5 +369,5 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
         selected,
         TaskOrigin(**selected["origin"]),
         task_id,
-        split,
+        "train" if split == "train_candidate" else split,
     )

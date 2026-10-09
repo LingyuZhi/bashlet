@@ -1,0 +1,40 @@
+{
+  "version": "harness-task-cohort-v2",
+  "name": "harness-role-quality-v2",
+  "training_candidates": {
+    "task_ids": [
+      "supplement/sign-runs",
+      "harness/header-key",
+      "harness/nested-setting",
+      "harness/stock-value",
+      "harness/license-audit"
+    ],
+    "per_type": {
+      "short_program": 1,
+      "code_edit": 2,
+      "workspace": 2
+    }
+  },
+  "development": {
+    "task_ids": [
+      "supplement/interval-union",
+      "supplement/cache-expiry",
+      "supplement/release-order"
+    ],
+    "per_type": 1
+  },
+  "test": {
+    "task_ids": [
+      "supplement/circular-windows",
+      "supplement/bounded-drain",
+      "supplement/checksum-audit"
+    ],
+    "per_type": 1
+  },
+  "environment_variants": [
+    "harness/license-audit/policy-green"
+  ],
+  "rules": {
+    "purpose": "Small reference/mutation quality slice, not the full 836-family freeze or a model baseline."
+  }
+}

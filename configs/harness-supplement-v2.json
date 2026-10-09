@@ -1,0 +1,409 @@
+{
+  "dataset": "bashlet/harness-supplement",
+  "revision": "harness-supplement-v2",
+  "provenance": {
+    "kind": "model_assisted",
+    "author": "codex",
+    "description": "Small independently executed task catalog for versioned role admission; no model capability claims."
+  },
+  "families": [
+    {
+      "original_task_id": "sign-runs",
+      "family_id": "supplement/sign-runs",
+      "split": "unsplit",
+      "task_type": "short_program",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "supplement/sign-runs",
+            "prompt": "Count maximal runs of equal sign after dropping all zero integers. The empty sequence has zero runs. Implement solution.py. Run python3 feedback.py for feedback, then submit. Keep feedback files unchanged.",
+            "initial_files": {
+              "feedback.py": "from solution import sign_runs\nassert sign_runs([1, 2]) == 1\n"
+            },
+            "grader": {
+              "module_path": "solution.py",
+              "function_name": "sign_runs",
+              "cases": [
+                {
+                  "args": [
+                    [
+                      1,
+                      0,
+                      2,
+                      -3,
+                      0,
+                      -1,
+                      4
+                    ]
+                  ],
+                  "expected": 3
+                },
+                {
+                  "args": [
+                    [
+                      0,
+                      0
+                    ]
+                  ],
+                  "expected": 0
+                },
+                {
+                  "args": [
+                    [
+                      -1,
+                      0,
+                      -2
+                    ]
+                  ],
+                  "expected": 1
+                }
+              ]
+            },
+            "reference_implementation": "def sign_runs(values):\n    signs = [value > 0 for value in values if value != 0]\n    return sum(i == 0 or sign != signs[i - 1] for i, sign in enumerate(signs))\n",
+            "implementation_paths": [
+              "solution.py"
+            ],
+            "feedback_command": "python3 feedback.py"
+          },
+          "wrong_files": {
+            "solution.py": "def sign_runs(values):\n    signs = [value > 0 for value in values]\n    return sum(i == 0 or sign != signs[i - 1] for i, sign in enumerate(signs))\n"
+          },
+          "wrong_reason": "Treats zeros as negative values instead of dropping them."
+        }
+      ]
+    },
+    {
+      "original_task_id": "interval-union",
+      "family_id": "supplement/interval-union",
+      "split": "unsplit",
+      "task_type": "short_program",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "supplement/interval-union",
+            "prompt": "Return the total length covered by half-open integer intervals. Intervals may overlap, touch or be empty and arrive in any order. Implement solution.py. Run python3 feedback.py for feedback, then submit. Keep feedback files unchanged.",
+            "initial_files": {
+              "feedback.py": "from solution import covered_length\nassert covered_length([[0, 2], [4, 7]]) == 5\n"
+            },
+            "grader": {
+              "module_path": "solution.py",
+              "function_name": "covered_length",
+              "cases": [
+                {
+                  "args": [
+                    [
+                      [
+                        1,
+                        4
+                      ],
+                      [
+                        2,
+                        6
+                      ],
+                      [
+                        8,
+                        9
+                      ]
+                    ]
+                  ],
+                  "expected": 6
+                },
+                {
+                  "args": [
+                    []
+                  ],
+                  "expected": 0
+                },
+                {
+                  "args": [
+                    [
+                      [
+                        0,
+                        5
+                      ],
+                      [
+                        1,
+                        2
+                      ],
+                      [
+                        5,
+                        7
+                      ]
+                    ]
+                  ],
+                  "expected": 7
+                }
+              ]
+            },
+            "reference_implementation": "def covered_length(intervals):\n    total = 0\n    end = None\n    for left, right in sorted(intervals):\n        start = left if end is None else max(left, end)\n        total += max(0, right - start)\n        end = right if end is None else max(end, right)\n    return total\n",
+            "implementation_paths": [
+              "solution.py"
+            ],
+            "feedback_command": "python3 feedback.py"
+          },
+          "wrong_files": {
+            "solution.py": "def covered_length(intervals):\n    return sum(right - left for left, right in intervals)\n"
+          },
+          "wrong_reason": "Counts overlapping lengths more than once."
+        }
+      ]
+    },
+    {
+      "original_task_id": "circular-windows",
+      "family_id": "supplement/circular-windows",
+      "split": "unsplit",
+      "task_type": "short_program",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "supplement/circular-windows",
+            "prompt": "For each starting position, sum width consecutive entries of a circular list. Width is nonnegative and may exceed the list length. An empty list returns []. Implement solution.py. Run python3 feedback.py for feedback, then submit. Keep feedback files unchanged.",
+            "initial_files": {
+              "feedback.py": "from solution import window_sums\nassert window_sums([2, 5], 1) == [2, 5]\n"
+            },
+            "grader": {
+              "module_path": "solution.py",
+              "function_name": "window_sums",
+              "cases": [
+                {
+                  "args": [
+                    [
+                      1,
+                      2,
+                      3
+                    ],
+                    2
+                  ],
+                  "expected": [
+                    3,
+                    5,
+                    4
+                  ]
+                },
+                {
+                  "args": [
+                    [
+                      2,
+                      5
+                    ],
+                    3
+                  ],
+                  "expected": [
+                    9,
+                    12
+                  ]
+                },
+                {
+                  "args": [
+                    [],
+                    4
+                  ],
+                  "expected": []
+                },
+                {
+                  "args": [
+                    [
+                      7
+                    ],
+                    0
+                  ],
+                  "expected": [
+                    0
+                  ]
+                }
+              ]
+            },
+            "reference_implementation": "def window_sums(values, width):\n    return [sum(values[(start + j) % len(values)] for j in range(width)) for start in range(len(values))]\n",
+            "implementation_paths": [
+              "solution.py"
+            ],
+            "feedback_command": "python3 feedback.py"
+          },
+          "wrong_files": {
+            "solution.py": "def window_sums(values, width):\n    return [sum(values[start:start + width]) for start in range(len(values))]\n"
+          },
+          "wrong_reason": "Slices the list without wrapping or repeating it."
+        }
+      ]
+    },
+    {
+      "original_task_id": "cache-expiry",
+      "family_id": "supplement/cache-expiry",
+      "split": "unsplit",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "supplement/cache-expiry",
+            "prompt": "Repair the cache reader. Each entry is [value, expiry]. Return default for absent keys or now >= expiry; preserve valid false and zero values. Do not mutate entries. Implement app/cache.py. Run python3 feedback.py for feedback, then submit. Keep feedback files unchanged.",
+            "initial_files": {
+              "feedback.py": "from app.cache import read_cache\nassert read_cache({'a': [3, 10]}, 'a', 9, -1) == 3\n",
+              "app/cache.py": "def read_cache(entries, key, now, default=None):\n    if key not in entries: return default\n    value, expiry = entries[key]\n    return value or default if now <= expiry else default\n"
+            },
+            "grader": {
+              "module_path": "app/cache.py",
+              "function_name": "read_cache",
+              "cases": [
+                {
+                  "args": [
+                    {
+                      "a": [
+                        0,
+                        10
+                      ]
+                    },
+                    "a",
+                    9,
+                    -1
+                  ],
+                  "expected": 0
+                },
+                {
+                  "args": [
+                    {
+                      "a": [
+                        3,
+                        10
+                      ]
+                    },
+                    "a",
+                    10,
+                    -1
+                  ],
+                  "expected": -1
+                },
+                {
+                  "args": [
+                    {},
+                    "missing",
+                    0,
+                    4
+                  ],
+                  "expected": 4
+                }
+              ]
+            },
+            "reference_implementation": "def read_cache(entries, key, now, default=None):\n    if key not in entries: return default\n    value, expiry = entries[key]\n    return value if now < expiry else default\n",
+            "implementation_paths": [
+              "app/cache.py"
+            ],
+            "feedback_command": "python3 feedback.py"
+          },
+          "wrong_files": {
+            "app/cache.py": "def read_cache(entries, key, now, default=None):\n    if key not in entries: return default\n    value, expiry = entries[key]\n    return (value or default) if now < expiry else default\n"
+          },
+          "wrong_reason": "Fixes expiry but still discards valid zero and false cache values."
+        }
+      ]
+    },
+    {
+      "original_task_id": "bounded-drain",
+      "family_id": "supplement/bounded-drain",
+      "split": "unsplit",
+      "task_type": "code_edit",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "supplement/bounded-drain",
+            "prompt": "Repair app/queue.py. drain(items, limit) removes and returns at most limit leading items, preserving the remainder in the same list. A negative limit raises ValueError without modifying items. Run python3 feedback.py and submit.",
+            "initial_files": {
+              "app/queue.py": "def drain(items, limit):\n    result = items[:limit]\n    items.clear()\n    return result\n",
+              "feedback.py": "from app.queue import drain\nitems = [1]\nassert drain(items, 1) == [1]\n"
+            },
+            "grader": {
+              "command": "python3 -c \"exec(open('_grading/cases.py').read())\"",
+              "hidden_files": {
+                "_grading/cases.py": "from app.queue import drain\nitems = [1, 2, 3]\nassert drain(items, 1) == [1]\nassert items == [2, 3]\nassert drain(items, 0) == [] and items == [2, 3]\ntry:\n    drain(items, -1)\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError(\"negative limit accepted\")\nassert items == [2, 3]\nassert drain(items, 9) == [2, 3] and items == []\n"
+              }
+            },
+            "reference_implementation": "def drain(items, limit):\n    if limit < 0: raise ValueError(\"negative limit\")\n    result = items[:limit]\n    del items[:limit]\n    return result\n",
+            "implementation_paths": [
+              "app/queue.py"
+            ],
+            "feedback_command": "python3 feedback.py"
+          },
+          "wrong_files": {
+            "app/queue.py": "def drain(items, limit):\n    result = items[:limit]\n    items.clear()\n    return result\n"
+          },
+          "wrong_reason": "Returns the requested prefix but discards unconsumed items."
+        }
+      ]
+    },
+    {
+      "original_task_id": "release-order",
+      "family_id": "supplement/release-order",
+      "split": "unsplit",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "supplement/release-order",
+            "prompt": "Read docs/release.md and packages.json. Implement tools/release.py to write reports/order.json. Run python3 feedback.py, then submit. Keep input, instructions and feedback unchanged.",
+            "initial_files": {
+              "docs/release.md": "packages.json maps each package to its dependencies. Emit the lexicographically smallest valid topological order as a JSON list. Dependencies must precede dependants. Inputs are acyclic and include every dependency as a key.\n",
+              "packages.json": "{\"api\": [\"core\"], \"core\": [], \"web\": [\"api\"]}\n",
+              "feedback.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, \"tools/release.py\"], check=True)\nassert sorted(json.loads(Path(\"reports/order.json\").read_text())) == [\"api\", \"core\", \"web\"]\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "_grading/cases.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, \"tools/release.py\"], check=True)\nassert json.loads(Path(\"reports/order.json\").read_text()) == [\"core\", \"api\", \"web\"]\nPath(\"packages.json\").write_text(json.dumps({\"c\": [\"b\"], \"b\": [], \"a\": []}))\nsubprocess.run([sys.executable, \"tools/release.py\"], check=True)\nassert json.loads(Path(\"reports/order.json\").read_text()) == [\"a\", \"b\", \"c\"]\n"
+              }
+            },
+            "reference_implementation": "import json\nfrom pathlib import Path\ngraph = json.loads(Path(\"packages.json\").read_text())\norder = []\nwhile graph:\n    node = min(name for name, deps in graph.items() if all(dep in order for dep in deps))\n    order.append(node)\n    del graph[node]\nPath(\"reports\").mkdir(exist_ok=True)\nPath(\"reports/order.json\").write_text(json.dumps(order))\n",
+            "implementation_paths": [
+              "tools/release.py"
+            ],
+            "feedback_command": "python3 feedback.py"
+          },
+          "wrong_files": {
+            "tools/release.py": "import json\nfrom pathlib import Path\nPath(\"reports\").mkdir(exist_ok=True)\nPath(\"reports/order.json\").write_text(json.dumps(sorted(json.loads(Path(\"packages.json\").read_text()))))\n"
+          },
+          "wrong_reason": "Sorts package names while ignoring actual dependency edges."
+        }
+      ]
+    },
+    {
+      "original_task_id": "checksum-audit",
+      "family_id": "supplement/checksum-audit",
+      "split": "unsplit",
+      "task_type": "workspace",
+      "variants": [
+        {
+          "variant_id": "base",
+          "task": {
+            "task_id": "supplement/checksum-audit",
+            "prompt": "Read docs/audit.md and index.json. Implement tools/audit.py to write reports/corrupt.json. Run python3 feedback.py and submit. Keep input and feedback files unchanged.",
+            "initial_files": {
+              "docs/audit.md": "index.json maps relative file paths to lowercase SHA-256 checksums of their bytes. Report all missing or mismatching files as a sorted JSON list. Unindexed files are ignored.\n",
+              "index.json": "{\"assets/data.txt\": \"1ea7a9b77da8c725742658e48d686d50bdaaf7f8b0289b1061adec3d249e5071\"}\n",
+              "assets/data.txt": "damaged\n",
+              "feedback.py": "import json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, \"tools/audit.py\"], check=True)\nassert isinstance(json.loads(Path(\"reports/corrupt.json\").read_text()), list)\n"
+            },
+            "grader": {
+              "command": "python3 _grading/check.py",
+              "hidden_files": {
+                "_grading/cases.py": "import hashlib, json, subprocess, sys\nfrom pathlib import Path\nsubprocess.run([sys.executable, \"tools/audit.py\"], check=True)\nassert json.loads(Path(\"reports/corrupt.json\").read_text()) == [\"assets/data.txt\"]\nPath(\"index.json\").write_text(json.dumps({\"assets/data.txt\": hashlib.sha256(Path(\"assets/data.txt\").read_bytes()).hexdigest(), \"assets/missing.txt\": \"0\" * 64}))\nsubprocess.run([sys.executable, \"tools/audit.py\"], check=True)\nassert json.loads(Path(\"reports/corrupt.json\").read_text()) == [\"assets/missing.txt\"]\n"
+              }
+            },
+            "reference_implementation": "import hashlib, json\nfrom pathlib import Path\nindex = json.loads(Path(\"index.json\").read_text())\ncorrupt = sorted(name for name, digest in index.items() if not Path(name).is_file() or hashlib.sha256(Path(name).read_bytes()).hexdigest() != digest)\nPath(\"reports\").mkdir(exist_ok=True)\nPath(\"reports/corrupt.json\").write_text(json.dumps(corrupt))\n",
+            "implementation_paths": [
+              "tools/audit.py"
+            ],
+            "feedback_command": "python3 feedback.py"
+          },
+          "wrong_files": {
+            "tools/audit.py": "import json\nfrom pathlib import Path\nindex = json.loads(Path(\"index.json\").read_text())\nPath(\"reports\").mkdir(exist_ok=True)\nPath(\"reports/corrupt.json\").write_text(json.dumps(sorted(name for name in index if not Path(name).exists())))\n"
+          },
+          "wrong_reason": "Checks file presence but ignores mismatching content."
+        }
+      ]
+    }
+  ]
+}

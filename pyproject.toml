@@ -27,6 +27,11 @@ dependencies = [
 "configs/harness-authored-v1.lock.json" = "bashlet/configs/harness-authored-v1.lock.json"
 "configs/harness-cohort-v1.json" = "bashlet/configs/harness-cohort-v1.json"
 "configs/harness-family-guard-v1.json" = "bashlet/configs/harness-family-guard-v1.json"
+"configs/task-sources-v2.json" = "bashlet/configs/task-sources-v2.json"
+"configs/harness-supplement-v2.json" = "bashlet/configs/harness-supplement-v2.json"
+"configs/harness-supplement-v2.lock.json" = "bashlet/configs/harness-supplement-v2.lock.json"
+"configs/harness-cohort-v2.json" = "bashlet/configs/harness-cohort-v2.json"
+"configs/mbpp-sanitized-v1.json" = "bashlet/configs/mbpp-sanitized-v1.json"
 
 [build-system]
 requires = ["hatchling>=1.27"]

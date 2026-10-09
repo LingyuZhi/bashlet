@@ -6,11 +6,12 @@ import json
 import shlex
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from ..config import ExperimentConfig, config_record
 from ..experiment import run_experiment, serialize_task, task_from_record
-from ..models import FunctionGrader, Task, TaskOrigin
+from ..mbpp import _convert
+from ..models import FunctionGrader, Task, TaskAssignment, TaskOrigin
 from ..protocol import fingerprint
 from ..replay import ReplayModel, Utf8Encoding
 from . import (
@@ -18,29 +19,27 @@ from . import (
     AUTHORED_LOCK,
     CONVERSION,
     FAMILY_GUARD,
+    VERSIONED_CONVERSION,
     authored_source,
+    canonical_family,
+    task_family,
     task_path,
-    validate_harness_origin,
+    task_split,
+    validate_task,
+)
+from .sources import (
+    SOURCE_REGISTRY,
+    admitted_sources,
+    catalog_task_record,
+    registered_origin,
 )
 
 DEFAULT_COHORT = _CONFIGS / "harness-cohort-v1.json"
 _TYPES = ("short_program", "code_edit", "workspace")
 
-_WORKSPACE_GRADING_DRIVER = """import os, shutil, tempfile
-from pathlib import Path
-with tempfile.TemporaryDirectory() as directory:
-    shutil.copytree('/workspace', directory + '/task')
-    os.chdir(directory + '/task')
-    for path in Path('.').rglob('*'):
-        if path.is_file(): path.chmod(0o600)
-    source = Path('_grading/cases.py').read_text()
-    exec(compile(source, '_grading/cases.py', 'exec'))
-"""
-
 
 def _family(task: Task) -> str:
-    assert task.origin is not None
-    return task.origin.family_id
+    return task_family(task)
 
 
 @dataclass(frozen=True)
@@ -80,8 +79,37 @@ def _identities(task: Task) -> Task:
     )
 
 
-def _mbpp_definition(manifest: Path, task_id: str, split: str) -> _Definition:
+def _mbpp_definition(
+    manifest: Path,
+    task_id: str,
+    split: str,
+    *,
+    versioned: bool = False,
+) -> _Definition:
     task = task_from_record(json.loads(task_path(manifest, task_id, split).read_text()))
+    entries = json.loads(manifest.read_text())["tasks"]
+    source_hash = next(
+        e["source_record_sha256"] for e in entries if e["task_id"] == task_id
+    )
+    if versioned:
+        assert task.origin is not None
+        registered_origin(task.origin)
+        raw = (manifest.parent / "private/source.json").read_bytes()
+        if hashlib.sha256(raw).hexdigest() != task.origin.source_sha256:
+            raise ValueError("MBPP original source content identity changed")
+        row = next(
+            (
+                row
+                for row in json.loads(raw)
+                if str(row["task_id"]) == task.origin.original_task_id
+            ),
+            None,
+        )
+        if row is None or fingerprint(row) != source_hash:
+            raise ValueError("MBPP original source record identity changed")
+        expected, _ = _convert(row, task.environment_id, task.origin)
+        if task != expected:
+            raise ValueError("Prepared MBPP task differs from the registered source")
     if not isinstance(task.grader, FunctionGrader) or not task.feedback_command:
         raise ValueError("MBPP requires function grading and public feedback")
     if len(task.implementation_paths) != 1:
@@ -105,10 +133,6 @@ def _mbpp_definition(manifest: Path, task_id: str, split: str) -> _Definition:
         f"def {task.grader.function_name}(*args):\n"
         f"    return {expected!r} if args == {args!r} else None\n"
     )
-    entries = json.loads(manifest.read_text())["tasks"]
-    source_hash = next(
-        e["source_record_sha256"] for e in entries if e["task_id"] == task_id
-    )
     return _Definition(
         _identities(replace(task, task_type="short_program")),
         {task.implementation_paths[0]: wrong},
@@ -118,65 +142,103 @@ def _mbpp_definition(manifest: Path, task_id: str, split: str) -> _Definition:
 
 
 def _definitions(
-    cohort: dict[str, Any], mbpp_manifest: Path, config: ExperimentConfig
+    cohort: dict[str, Any],
+    mbpp_manifest: Path | None,
+    config: ExperimentConfig,
+    cohort_sha256: str,
 ) -> tuple[list[_Definition], list[dict[str, Any]]]:
-    if cohort["version"] != "harness-task-cohort-v1":
+    versioned = cohort["version"] == "harness-task-cohort-v2"
+    if cohort["version"] not in ("harness-task-cohort-v1", "harness-task-cohort-v2"):
         raise ValueError("Unsupported Harness cohort version")
-    requested: dict[str, str] = {}
-    for name, split in (
-        ("training_candidates", "train"),
-        ("harness_development", "dev"),
-        ("coding_development", "dev"),
-    ):
+    requested: dict[str, Literal["train", "dev", "test"]] = {}
+    groups: tuple[tuple[str, Literal["train", "dev", "test"]], ...] = (
+        (
+            ("training_candidates", "train"),
+            ("development", "dev"),
+            ("test", "test"),
+        )
+        if versioned
+        else (
+            ("training_candidates", "train"),
+            ("harness_development", "dev"),
+            ("coding_development", "dev"),
+        )
+    )
+    for name, split in groups:
         ids = cohort[name]["task_ids"]
-        if not ids or len(ids) != len(set(ids)):
+        if (not ids and not versioned) or len(ids) != len(set(ids)):
             raise ValueError("Cohort requires nonempty unique task IDs")
         for task_id in ids:
             if task_id in requested and requested[task_id] != split:
                 raise ValueError(f"Task family split conflict: {task_id}")
             requested[task_id] = split
-    for task_id in cohort["environment_variants"]:
-        if task_id in requested:
-            raise ValueError("Environment variants cannot enlarge a checklist")
-        requested[task_id] = "dev"
     lock, families = authored_source()
+    catalogs = (
+        [
+            (source_lock, source_families)
+            for source_lock, source_families in admitted_sources().values()
+            if source_families is not None
+        ]
+        if versioned
+        else [(lock, families)]
+    )
     authored = {
-        v["task"]["task_id"]: (family, v)
-        for family in families.values()
+        v["task"]["task_id"]: (source_lock, family, v)
+        for source_lock, source_families in catalogs
+        for family in source_families.values()
         for v in family["variants"]
     }
+    for task_id in cohort["environment_variants"]:
+        if task_id in requested or task_id not in authored:
+            raise ValueError("Environment variants need a registered family")
+        role: Literal["train", "dev", "test"] = "dev"
+        if versioned:
+            family_id = authored[task_id][1]["family_id"]
+            parent_roles = {
+                split
+                for identity, split in requested.items()
+                if identity in authored
+                and authored[identity][1]["family_id"] == family_id
+            }
+            if len(parent_roles) != 1:
+                raise ValueError("Variant must inherit one frozen base family role")
+            role = parent_roles.pop()
+        requested[task_id] = role
     definitions = []
     for task_id, split in requested.items():
         if task_id.startswith("mbpp/"):
-            definition = _mbpp_definition(mbpp_manifest, task_id, split)
+            if mbpp_manifest is None:
+                raise ValueError("MBPP tasks require --mbpp-manifest")
+            source_split: str = split
+            if versioned:
+                entries = json.loads(mbpp_manifest.read_text())["tasks"]
+                source_split = next(
+                    e["split"] for e in entries if e["task_id"] == task_id
+                )
+            definition = _mbpp_definition(
+                mbpp_manifest,
+                task_id,
+                source_split,
+                versioned=versioned,
+            )
         elif task_id in authored:
-            family, variant = authored[task_id]
-            if family["split"] != split:
+            source_lock, family, variant = authored[task_id]
+            if not versioned and family["split"] != split:
                 raise ValueError(
                     f"Authored family split mismatch: {family['family_id']}"
                 )
-            data = variant["task"] | {
-                "origin": asdict(
-                    TaskOrigin(
-                        lock["dataset"],
-                        lock["revision"],
-                        lock["sha256"],
-                        family["original_task_id"],
-                        family["family_id"],
-                        family["split"],
+            data = catalog_task_record(
+                source_lock, family, variant, config.environment.id
+            )
+            if versioned:
+                data["assignment"] = asdict(
+                    TaskAssignment(
+                        cohort["name"],
+                        cohort_sha256,
+                        canonical_family(TaskOrigin(**data["origin"])),
+                        "train_candidate" if split == "train" else split,
                     )
-                ),
-                "task_type": family["task_type"],
-                "variant_id": variant["variant_id"],
-                "environment_id": config.environment.id,
-            }
-            if family["task_type"] == "workspace":
-                data["grader"] = data["grader"] | {
-                    "hidden_files": (
-                        data["grader"]["hidden_files"]
-                        | {"_grading/check.py": _WORKSPACE_GRADING_DRIVER}
-                    )
-                }
+                )
             definition = _Definition(
                 _identities(task_from_record(data)),
                 variant["wrong_files"],
@@ -187,7 +249,18 @@ def _definitions(
             raise ValueError(f"Unregistered task: {task_id}")
         task = definition.task
         assert task.origin is not None
-        validate_harness_origin(task.origin)
+        if versioned and task.assignment is None:
+            task = replace(
+                task,
+                assignment=TaskAssignment(
+                    cohort["name"],
+                    cohort_sha256,
+                    canonical_family(task.origin),
+                    "train_candidate" if split == "train" else split,
+                ),
+            )
+            definition = replace(definition, task=task)
+        validate_task(task, harness=True)
         if task.environment_id != config.environment.id:
             raise ValueError("Prepared task environment differs from validation config")
         if not task.reference_implementation or not task.feedback_command:
@@ -200,22 +273,45 @@ def _definitions(
             raise ValueError("Mutation must cover the declared implementation")
         definitions.append(definition)
     _validate_cohorts(cohort, [d.task for d in definitions])
-    mbpp = json.loads(mbpp_manifest.read_text())
-    return definitions, [mbpp["source"], lock]
+    sources = [source_lock for source_lock, _ in catalogs]
+    if mbpp_manifest is not None:
+        sources.insert(0, json.loads(mbpp_manifest.read_text())["source"])
+    if versioned:
+        needed = {
+            (d.task.origin.dataset, d.task.origin.revision, d.task.origin.source_sha256)
+            for d in definitions
+            if d.task.origin is not None
+        }
+        sources = [
+            source
+            for source in sources
+            if (source["dataset"], source["revision"], source["sha256"]) in needed
+        ]
+    return definitions, sources
 
 
 def _validate_cohorts(cohort: dict[str, Any], tasks: list[Task]) -> None:
+    versioned = cohort["version"] == "harness-task-cohort-v2"
     by_id = {t.task_id: t for t in tasks}
     splits: dict[str, str] = {}
     for task in tasks:
         assert task.origin is not None
-        origin = task.origin
-        if origin.family_id in splits and splits[origin.family_id] != origin.split:
-            raise ValueError(f"Task family split conflict: {origin.family_id}")
-        splits[origin.family_id] = origin.split
-    for name in ("harness_development", "training_candidates", "coding_development"):
+        family, split = task_family(task), str(task_split(task))
+        if family in splits and splits[family] != split:
+            raise ValueError(f"Task family split conflict: {family}")
+        splits[family] = split
+    groups = (
+        ("training_candidates", "development", "test")
+        if versioned
+        else (
+            "harness_development",
+            "training_candidates",
+            "coding_development",
+        )
+    )
+    for name in groups:
         selected = [by_id[task_id] for task_id in cohort[name]["task_ids"]]
-        family_ids = [t.origin.family_id for t in selected if t.origin is not None]
+        family_ids = [task_family(t) for t in selected]
         if len(family_ids) != len(set(family_ids)) or any(
             t.variant_id != "base" for t in selected
         ):
@@ -234,24 +330,29 @@ def _validate_cohorts(cohort: dict[str, Any], tasks: list[Task]) -> None:
             if (
                 not isinstance(counts, dict)
                 or set(counts) != set(_TYPES)
-                or any(type(value) is not int or value < 1 for value in counts.values())
+                or any(
+                    type(value) is not int or value < (0 if versioned else 1)
+                    for value in counts.values()
+                )
                 or any(
                     sum(t.task_type == kind for t in selected) != counts[kind]
                     for kind in _TYPES
                 )
             ):
                 raise ValueError(f"Incorrect task-type counts in {name}")
-    development = {_family(by_id[i]) for i in cohort["harness_development"]["task_ids"]}
+    base_families = {
+        _family(by_id[i])
+        for name in (groups if versioned else ("harness_development",))
+        for i in cohort[name]["task_ids"]
+    }
     for task_id in cohort["environment_variants"]:
         task = by_id[task_id]
         if (
             task.variant_id == "base"
             or task.origin is None
-            or task.origin.family_id not in development
+            or task_family(task) not in base_families
         ):
-            raise ValueError(
-                "Environment variant must retain a Harness development family"
-            )
+            raise ValueError("Environment variant must retain a frozen base family")
 
 
 def _replay(task: Task, files: dict[str, str], config: ExperimentConfig) -> ReplayModel:
@@ -275,7 +376,7 @@ def _replay(task: Task, files: dict[str, str], config: ExperimentConfig) -> Repl
 
 def prepare_harness(
     *,
-    mbpp_manifest: Path,
+    mbpp_manifest: Path | None,
     output_dir: Path,
     config: ExperimentConfig,
     cohort_path: Path = DEFAULT_COHORT,
@@ -288,7 +389,13 @@ def prepare_harness(
     """
     cohort_bytes = cohort_path.read_bytes()
     cohort = json.loads(cohort_bytes)
-    definitions, sources = _definitions(cohort, mbpp_manifest, config)
+    versioned = cohort["version"] == "harness-task-cohort-v2"
+    definitions, sources = _definitions(
+        cohort,
+        mbpp_manifest,
+        config,
+        hashlib.sha256(cohort_bytes).hexdigest(),
+    )
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, mode=0o700)
     private = output_dir / "private"
@@ -300,16 +407,18 @@ def prepare_harness(
     (private / "cohort.json").write_bytes(cohort_bytes)
     (private / "family-guard.json").write_bytes(FAMILY_GUARD.read_bytes())
     by_id = {d.task.task_id: d.task for d in definitions}
-    harness_ids = cohort["harness_development"]["task_ids"]
-    coding_ids = cohort["coding_development"]["task_ids"]
+    harness_ids = cohort["development" if versioned else "harness_development"][
+        "task_ids"
+    ]
+    coding_ids = [] if versioned else cohort["coding_development"]["task_ids"]
     overlap = sorted(
         {_family(by_id[i]) for i in harness_ids}
         & {_family(by_id[i]) for i in coding_ids}
     )
     manifest: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2 if versioned else 1,
         "status": "preparing",
-        "conversion": CONVERSION,
+        "conversion": VERSIONED_CONVERSION if versioned else CONVERSION,
         "source": {
             "dataset": "bashlet/harness-cohort",
             "revision": cohort["name"],
@@ -318,9 +427,11 @@ def prepare_harness(
         "sources": sources,
         "cohort": cohort,
         "family_guard_sha256": hashlib.sha256(FAMILY_GUARD.read_bytes()).hexdigest(),
-        "upstream_manifest_sha256": hashlib.sha256(
-            mbpp_manifest.read_bytes()
-        ).hexdigest(),
+        "upstream_manifest_sha256": (
+            hashlib.sha256(mbpp_manifest.read_bytes()).hexdigest()
+            if mbpp_manifest
+            else None
+        ),
         "evidence_kind": "reference-and-mutation-replay",
         "model_baseline": False,
         "validation_config": config_record(config),
@@ -333,6 +444,34 @@ def prepare_harness(
         },
         "tasks": [],
     }
+    if versioned:
+        registry_bytes = SOURCE_REGISTRY.read_bytes()
+        (private / "source-registry.json").write_bytes(registry_bytes)
+        manifest["source_registry_sha256"] = hashlib.sha256(registry_bytes).hexdigest()
+        artifacts = []
+        source_dir = private / "sources"
+        source_dir.mkdir(mode=0o700)
+        for source in sources:
+            if source["dataset"] == "google-research/mbpp":
+                assert mbpp_manifest is not None
+                content = (mbpp_manifest.parent / "private/source.json").read_bytes()
+            else:
+                content = (_CONFIGS / source["file"]).read_bytes()
+            if hashlib.sha256(content).hexdigest() != source["sha256"]:
+                raise ValueError("Source changed before its frozen copy was written")
+            path = source_dir / (source["sha256"] + ".json")
+            path.write_bytes(content)
+            artifacts.append(
+                {key: source[key] for key in ("dataset", "revision", "sha256")}
+                | {"file": str(path.relative_to(output_dir))}
+            )
+        manifest["source_artifacts"] = artifacts
+        manifest["checklists"] = {
+            "training_candidates": cohort["training_candidates"]["task_ids"],
+            "development": harness_ids,
+            "test": cohort["test"]["task_ids"],
+            "environment_variants": cohort["environment_variants"],
+        }
     destination = output_dir / "manifest.json"
     _write(destination, manifest)
     try:
@@ -342,8 +481,8 @@ def prepare_harness(
             entry: dict[str, Any] = {
                 "task_id": task.task_id,
                 "origin": asdict(task.origin),
-                "family_id": task.origin.family_id,
-                "split": task.origin.split,
+                "family_id": task_family(task),
+                "split": task_split(task),
                 "task_type": task.task_type,
                 "variant_id": task.variant_id,
                 "feedback_start_id": task.feedback_start_id,
@@ -352,6 +491,8 @@ def prepare_harness(
                 "wrong_reason": definition.wrong_reason,
                 "status": "validating",
             }
+            if task.assignment is not None:
+                entry["assignment"] = asdict(task.assignment)
             manifest["tasks"].append(entry)
             for name, files in (
                 (
@@ -408,7 +549,7 @@ def prepare_harness(
             task_file = (
                 private
                 / "tasks"
-                / task.origin.split
+                / str(task_split(task))
                 / (fingerprint(task.task_id) + ".json")
             )
             task_file.parent.mkdir(parents=True, exist_ok=True)
@@ -428,11 +569,27 @@ def prepare_harness(
                 for kind in _TYPES
             }
             for split, name in (
-                ("train", "training_candidates"),
-                ("dev", "harness_development"),
+                (
+                    ("train_candidate", "training_candidates"),
+                    ("dev", "development"),
+                    ("test", "test"),
+                )
+                if versioned
+                else (
+                    ("train", "training_candidates"),
+                    ("dev", "harness_development"),
+                )
             )
         }
-        for name, ids in (("harness-dev", harness_ids), ("coding-dev", coding_ids)):
+        plans = (
+            (("harness-dev", harness_ids),)
+            if versioned
+            else (
+                ("harness-dev", harness_ids),
+                ("coding-dev", coding_ids),
+            )
+        )
+        for name, ids in plans:
             _write(
                 output_dir / (name + ".json"),
                 {

@@ -14,7 +14,7 @@ from typing import Any
 from ..config import ExperimentConfig, config_record, load_model
 from ..demonstrations import ActionSupervision, prepare_sft
 from ..experiment import run_experiment, task_from_record
-from ..tasks import task_path, validate_harness_origin
+from ..tasks import task_family, task_path, validate_task
 from ..vllm import VLLMModel
 
 
@@ -58,10 +58,10 @@ def _plan(path: Path) -> dict[str, Any]:
         path = task_path(manifest, item["task_id"], "train")
         task = task_from_record(json.loads(path.read_text()))
         assert task.origin is not None
-        validate_harness_origin(task.origin)
+        validate_task(task, harness=True)
         if (
             _sha(path) != item["task_sha256"]
-            or task.origin.family_id != item["family_id"]
+            or task_family(task) != item["family_id"]
             or task.task_type != item["task_type"]
         ):
             raise ValueError("Selected task differs from the frozen training family")

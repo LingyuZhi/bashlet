@@ -15,7 +15,7 @@ from ..models import EpisodeResult, Model, ModelBackend, Task
 from ..monitoring import MonitorConfig, RunMonitor, code_revision, evaluation_metrics
 from ..protocol import fingerprints
 from ..spend import summarize_cost
-from ..tasks import task_path
+from ..tasks import task_family, task_path
 from ..vllm import VLLMModel, configured_request_policy
 
 VERSION = "development-evaluation-v1"
@@ -98,7 +98,7 @@ def _tasks(plan_path: Path) -> tuple[dict[str, Any], list[Task]]:
         )
         for task_id in task_ids
     ]
-    families = [task.origin.family_id for task in tasks if task.origin is not None]
+    families = [task_family(task) for task in tasks if task.origin is not None]
     if len(families) != len(set(families)):
         raise ValueError(
             "Evaluation requires independent task families; a family variant "
@@ -312,6 +312,7 @@ def evaluate(
             "task_id": task.task_id,
             "task_sha256": hashlib.sha256(serialize_task(task).encode()).hexdigest(),
             "task_origin": asdict(task.origin) if task.origin else None,
+            "task_assignment": asdict(task.assignment) if task.assignment else None,
             "task_type": task.task_type or "short_program",
             "variant_id": task.variant_id,
             "feedback_start_id": task.feedback_start_id,

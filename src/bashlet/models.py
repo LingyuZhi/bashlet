@@ -44,7 +44,17 @@ class TaskOrigin:
     source_sha256: str
     original_task_id: str
     family_id: str
-    split: Literal["train", "dev", "test"]
+    split: Literal["train", "dev", "test", "unsplit"]
+
+
+@dataclass(frozen=True)
+class TaskAssignment:
+    """A family's role in one data version, separate from upstream provenance."""
+
+    version: str
+    cohort_sha256: str
+    family_id: str
+    role: Literal["train_candidate", "dev", "test"]
 
 
 @dataclass(frozen=True)
@@ -62,6 +72,7 @@ class Task:
     variant_id: str = "base"
     feedback_start_id: str | None = None
     environment_variant_id: str | None = None
+    assignment: TaskAssignment | None = None
 
 
 @dataclass(frozen=True)

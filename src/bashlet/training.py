@@ -40,7 +40,7 @@ from .spend import (
     TokenPricing,
     summarize_cost,
 )
-from .tasks import validate_origin
+from .tasks import task_family, validate_training_task
 
 if TYPE_CHECKING:
     import pytrio as trio
@@ -105,6 +105,8 @@ class SFTConfig:
 def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
     import pytrio as trio
 
+    from .experiment import task_from_record
+
     manifest = json.loads(path.read_text())
     data = (path.parent / manifest["examples"]).read_bytes()
     if (
@@ -133,9 +135,19 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
     for row in rows:
         meta = row["metadata"]
         origin = TaskOrigin(**meta["origin"])
-        validate_origin(origin)
+        entry = accepted.get(meta[identity_field])
+        if entry is None:
+            raise ValueError("SFT example has no accepted demonstration identity")
+        run_dir = path.parent / entry["run_dir"]
+        task_bytes = (run_dir / "private/task.json").read_bytes()
+        task = task_from_record(json.loads(task_bytes))
+        validate_training_task(task)
+        family = task_family(task)
         if (
-            origin.split != "train"
+            task.origin != origin
+            or meta.get("assignment")
+            != (asdict(task.assignment) if task.assignment else None)
+            or hashlib.sha256(task_bytes).hexdigest() != meta["task_sha256"]
             or meta["source"] not in (SOURCE, EXECUTED_SOURCE)
             or meta["source"] != manifest["source"]
             or meta["on_policy_eligible"] is not False
@@ -158,15 +170,14 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
                 or entry["task_id"] != meta["task_id"]
                 or entry["task_sha256"] != meta["task_sha256"]
                 or entry["origin"] != meta["origin"]
-                or family_counts.get(origin.family_id, 0) >= 2
+                or family_counts.get(family, 0) >= 2
                 or (
-                    family_counts.get(origin.family_id, 0)
+                    family_counts.get(family, 0)
                     and not meta.get("complementary_reason", "").strip()
                 )
             ):
                 raise ValueError("Invalid demonstration identity or family admission")
-            family_counts[origin.family_id] = family_counts.get(origin.family_id, 0) + 1
-        run_dir = path.parent / entry["run_dir"]
+            family_counts[family] = family_counts.get(family, 0) + 1
         if (
             hashlib.sha256((run_dir / "run.json").read_bytes()).hexdigest()
             != entry["run_sha256"]
@@ -213,7 +224,7 @@ def load_demonstrations(path: Path) -> tuple[dict[str, Any], list[trio.Datum]]:
         verified_examples.append(
             {
                 "demonstration_id": meta[identity_field],
-                "family_id": origin.family_id,
+                "family_id": family,
                 "task_type": meta.get("task_type") or "short_program",
                 "source": meta.get("provenance", {}).get("generation_method")
                 or meta["source"],

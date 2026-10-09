@@ -29,7 +29,7 @@ from .models import (
 )
 from .protocol import fingerprints
 from .replay import RecordedTrajectoryModel, ReplayModel
-from .tasks import task_path, validate_harness_origin, validate_origin
+from .tasks import task_family, task_path, validate_task, validate_training_task
 from .workspace import validate_workspace_path, verify_submission
 
 if TYPE_CHECKING:
@@ -71,9 +71,7 @@ class SFTAdapter(Protocol):
 
 
 def _validate_reference(task: Task) -> None:
-    if task.origin is None or task.origin.split != "train":
-        raise ValueError("SFT demonstrations require a training-split origin")
-    validate_origin(task.origin)
+    validate_training_task(task)
     if not task.reference_implementation.strip():
         raise ValueError("A reference implementation is required")
     if len(task.implementation_paths) != 1:
@@ -118,11 +116,8 @@ def validate_sft_request(
 ) -> None:
     """Reject invalid provenance or encoding before executing any task code."""
     if executed:
-        if task.origin is None or task.origin.split != "train":
-            raise ValueError(
-                "Executed SFT trajectories require a training-split origin"
-            )
-        validate_harness_origin(task.origin)
+        validate_training_task(task)
+        validate_task(task, harness=True)
     else:
         _validate_reference(task)
     if not isinstance(model.encoding, QwenChatMLEncoding):
@@ -462,6 +457,7 @@ def export_demonstration(
         "task_id": task.task_id,
         "task_sha256": result.task_sha256,
         "origin": asdict(task.origin) if task.origin else None,
+        "assignment": asdict(task.assignment) if task.assignment else None,
         "task_type": task.task_type,
         "variant_id": task.variant_id,
         "feedback_start_id": task.feedback_start_id,
@@ -538,14 +534,15 @@ def validate_executed_example(
     task = task_from_record(json.loads(task_bytes))
     if task.origin is None:
         raise ValueError("Executed trajectory has no task origin")
-    validate_harness_origin(task.origin)
+    validate_training_task(task)
+    validate_task(task, harness=True)
     if (
         metadata["schema_version"] != 2
-        or task.origin.split != "train"
         or hashlib.sha256(task_bytes).hexdigest() != metadata["task_sha256"]
         or record["task_sha256"] != metadata["task_sha256"]
         or metadata["origin"] != asdict(task.origin)
         or record["task_origin"] != asdict(task.origin)
+        or metadata.get("assignment") != record.get("task_assignment")
         or record["status"] != "completed"
         or record["episode_status"] != "submitted"
         or record["isolation"]["passed"] is not True
@@ -734,6 +731,7 @@ def prepare_sft(
                     "task_id": task.task_id,
                     "task_sha256": result.task_sha256,
                     "origin": asdict(task.origin) if task.origin else None,
+                    "assignment": asdict(task.assignment) if task.assignment else None,
                     "run_dir": str(result.run_dir.relative_to(output_dir)),
                     "run_sha256": hashlib.sha256(
                         (result.run_dir / "run.json").read_bytes()
@@ -846,9 +844,9 @@ def _prepare_trajectories(
                         "Source trajectory differs from the frozen training task"
                     )
                 task = task_from_record(json.loads(task_data))
-                if task.origin is None or task.origin.split != "train":
-                    raise ValueError("Source must identify a training task")
-                family = task.origin.family_id
+                validate_training_task(task)
+                assert task.origin is not None
+                family = task_family(task)
                 if identified:
                     if family_counts.get(family, 0) >= 2:
                         raise ValueError(
@@ -950,6 +948,7 @@ def _prepare_trajectories(
                     result.demonstration,
                     task_sha256=result.task_sha256,
                     origin=asdict(task.origin),
+                    assignment=asdict(task.assignment) if task.assignment else None,
                     run_dir=str(result.run_dir.relative_to(output_dir)),
                     run_sha256=hashlib.sha256(
                         (result.run_dir / "run.json").read_bytes()
