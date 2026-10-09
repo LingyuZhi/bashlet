@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 from adapters import submit
 from test_cli import cli, replay_config, saved_run
 
@@ -528,6 +529,35 @@ def test_preparation_freezes_one_stratified_subset_and_four_visit_orders(
     assert process.returncode == 1, process.stdout + process.stderr
     _, run = saved_run(tmp_path / "runs")
     assert run["task_assignment"]["role"] == "train_candidate"
+
+
+def test_training_cli_rejects_order_seed_drift_before_remote_work(
+    tmp_path: Path, frozen_cohort: Path
+) -> None:
+    selection = json.loads((frozen_cohort / "training-selection.json").read_text())
+    configuration = {
+        "train_manifest": str(frozen_cohort / "manifest.json"),
+        "training_selection": str(frozen_cohort / "training-selection.json"),
+        "train_task_ids": selection["task_ids"],
+        "dev_plan": str(frozen_cohort / "harness-dev.json"),
+        "condition": [],
+        "epochs": 4,
+        "shuffle_seed": 999,
+        "evaluation_seeds": [4, 17, 29, 41, 53],
+        "evaluate_each_epoch": True,
+        "require_complete_training": True,
+        "ledger_path": str(tmp_path / "spend.sqlite3"),
+        "backend": {"spend_config": str(CONFIGS / "spend.yaml")},
+        "training": {"spend_config": str(CONFIGS / "spend.yaml")},
+    }
+    config = tmp_path / "pilot.yaml"
+    config.write_text(yaml.safe_dump(configuration))
+    process = cli(
+        "train-opsd", str(config), "--output-dir", str(tmp_path / "run"), cwd=tmp_path
+    )
+    assert process.returncode == 2
+    assert "Frozen training" in process.stderr
+    assert not (tmp_path / "spend.sqlite3").exists()
 
 
 def test_subset_and_epoch_orders_repeat_when_pool_order_and_workers_change(

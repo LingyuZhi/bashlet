@@ -8,21 +8,21 @@ import json
 import random
 import time
 import uuid
-from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from ..config import ExperimentConfig, config_record, load_config
-from ..evaluation.harness import evaluate
+from ..config import config_record
 from ..experiment import run_experiment, task_from_record
 from ..monitoring import MonitorConfig, RunMonitor, spend_metrics, write_document
 from ..spend import SpendLedger, SpendPolicy, summarize_cost
 from ..tasks import VERSIONED_CONVERSION, task_family, task_path, validate_task
 from . import OPSDConfig, OPSDRun
-from .pytrio import PyTRIOOPSD, PyTRIOOPSDConfig
+from .conditions import resolve_condition, validate_training_selection
+from .development import _decision, _evaluate_checkpoint
+from .pytrio import PyTRIOOPSD
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,9 @@ class PilotConfig:
     evaluation_seeds: list[int] = field(default_factory=list)
     evaluate_each_epoch: bool = False
     evaluation_groups: dict[str, str] = field(default_factory=dict)
+    require_complete_training: bool = False
+    training_selection: str | None = None
+    preflight_evidence: str | None = None
 
     @classmethod
     def read(cls, path: Path) -> PilotConfig:
@@ -65,6 +68,8 @@ class PilotConfig:
             )
         if type(value.evaluate_each_epoch) is not bool:
             raise ValueError("Pilot epoch evaluation must be a boolean")
+        if type(value.require_complete_training) is not bool:
+            raise ValueError("Complete training requirement must be a boolean")
         if value.evaluation_groups and (
             set(value.evaluation_groups) != {"baseline", "intermediate", "final"}
             or any(
@@ -149,6 +154,11 @@ def _training_progress(
         "episodes": len(run.record["batches"]),
         "trajectories": len(sampled),
         "optimizer_steps": run.record["optimizer_step"],
+        "planned_updates": len(rows),
+        "planned_visits": len(rows),
+        "completed_visits": sum(row["status"] == "completed" for row in rows),
+        "rejected_visits": sum(row["status"] == "rejected" for row in rows),
+        "missing_visits": sum(row["status"] == "not_started" for row in rows),
         "supervised_tokens": sum(b["supervised_tokens"] for b in run.record["batches"]),
         "nonzero_signal_tokens": sum(
             b.get("nonzero_signal_tokens", 0) for b in run.record["batches"]
@@ -191,221 +201,9 @@ def _training_budget_stop(
     )
 
 
-def _evaluate_checkpoint(
-    *,
-    config: PilotConfig,
-    root: Path,
-    path: Path,
-    record: dict[str, Any],
-    run: OPSDRun,
-    adapter: PyTRIOOPSD,
-    condition: ExperimentConfig,
-    monitoring: MonitorConfig,
-    phase: str,
-    snapshot: str,
-    optimizer_step: int,
-) -> dict[str, Any]:
-    from ..evaluation.harness import _digest, _tasks
-
-    allocation = (
-        "baseline"
-        if phase == "baseline"
-        else "final"
-        if phase == "final"
-        else "intermediate"
-    )
-    group = config.evaluation_groups.get(
-        allocation, config.evaluation_group or run.config.group
-    )
-    seeds: Sequence[int | None] = config.evaluation_seeds or [
-        condition.model.sampling.seed
-    ]
-    expected = {"snapshot": snapshot, "optimizer_step": optimizer_step, "group": group}
-    stages: dict[str, dict[str, Any]] = record.setdefault("evaluations", {})
-    stage = stages.setdefault(phase, expected | {"status": "running", "runs": {}})
-    if any(stage[key] != value for key, value in expected.items()):
-        raise ValueError(
-            "Checkpoint evaluation must retain its snapshot, step and allocation"
-        )
-    # A cash stop can leave the student at an already evaluated checkpoint.
-    # Identical checkpoint/seed evidence supplies the final report once.
-    if phase == "final" and config.evaluation_seeds and not stage["runs"]:
-        for previous_phase, previous in stages.items():
-            if (
-                previous_phase != phase
-                and previous["status"] == "complete"
-                and previous["snapshot"] == snapshot
-                and previous["optimizer_step"] == optimizer_step
-                and set(previous["runs"]) == {str(seed) for seed in seeds}
-            ):
-                stage.update(
-                    runs={seed: dict(ref) for seed, ref in previous["runs"].items()},
-                    reused_from=previous_phase,
-                )
-                break
-    write_document(path, record)
-    plan, _ = _tasks(Path(config.dev_plan))
-    for seed in seeds:
-        resolved = replace(
-            condition,
-            model=replace(
-                condition.model,
-                sampling=replace(condition.model.sampling, seed=seed),
-            ),
-        )
-        legacy = not config.evaluation_seeds and config.epochs == 1
-        directory = (
-            (root / ("baseline" if phase == "baseline" else "updated"))
-            if legacy
-            else root / "evaluation" / phase / f"seed-{seed}"
-        )
-        destination = directory / "evaluation.json"
-        reference = stage["runs"].get(str(seed))
-        if reference:
-            destination = Path(reference["path"])
-            directory = destination.parent
-        if (
-            reference
-            and hashlib.sha256(destination.read_bytes()).hexdigest()
-            != reference["sha256"]
-        ):
-            raise ValueError("Checkpoint evaluation evidence was changed")
-        prior = json.loads(destination.read_text()) if destination.exists() else None
-        if prior and (
-            prior["snapshot"] != snapshot
-            or prior["config"] != json.loads(json.dumps(config_record(resolved)))
-            or prior["plan"] != plan
-            or prior["comparison_sha256"] != _digest(prior["comparison"])
-        ):
-            raise ValueError(
-                "Checkpoint evaluation resume must retain tasks and conditions"
-            )
-        if prior is None or prior["status"] != "complete":
-            if run.student.identity != snapshot:
-                raise ValueError(
-                    "Incomplete checkpoint evaluation cannot use a later student"
-                )
-            evaluate(
-                plan_path=Path(config.dev_plan),
-                snapshot=snapshot,
-                evidence_kind="experimental",
-                condition=resolved,
-                output_dir=root,
-                run_dir=directory,
-                model=adapter.evaluation_model(group=group),
-                monitoring=monitoring,
-                training_run=run.path,
-                phase=phase + "-eval",
-                resume=directory.exists(),
-            )
-            prior = json.loads(destination.read_text())
-        stage["runs"][str(seed)] = {
-            "path": str(destination),
-            "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
-            "status": prior["status"],
-        }
-        write_document(path, record)
-        if prior["status"] != "complete":
-            stage["status"] = "incomplete"
-            write_document(path, record)
-            return stage
-    stage["status"] = "complete"
-    write_document(path, record)
-    return stage
-
-
-def _decision(record: dict[str, Any]) -> None:
-    before_path, after_path = record.get("baseline"), record.get("evaluation")
-    before = json.loads(Path(before_path).read_text()) if before_path else None
-    after = json.loads(Path(after_path).read_text()) if after_path else None
-    comparable = bool(
-        before
-        and after
-        and before["status"] == after["status"] == "complete"
-        and before["comparison_sha256"] == after["comparison_sha256"]
-    )
-    progressed = bool(record.get("optimizer_step", 0))
-    difference = None
-    if comparable:
-        assert before is not None and after is not None
-        difference = (
-            after["summary"]["passed_tasks"] - before["summary"]["passed_tasks"]
-        )
-    seed_comparisons = {}
-    stages = record.get("evaluations", {})
-    if "baseline" in stages and "final" in stages:
-        baseline, final = stages["baseline"], stages["final"]
-        comparable = baseline["status"] == final["status"] == "complete"
-        for seed, reference in baseline["runs"].items():
-            old = json.loads(Path(reference["path"]).read_text())
-            new_ref = final["runs"].get(seed)
-            new = json.loads(Path(new_ref["path"]).read_text()) if new_ref else None
-            matched = bool(
-                new
-                and old["status"] == new["status"] == "complete"
-                and old["comparison_sha256"] == new["comparison_sha256"]
-            )
-            comparable = comparable and matched
-            seed_comparisons[seed] = {
-                "matched_complete": matched,
-                "baseline": old["summary"],
-                "updated": new["summary"] if new else None,
-                "learning_signal": new["summary"]["passed_tasks"]
-                - old["summary"]["passed_tasks"]
-                if matched and new
-                else None,
-            }
-        difference = (
-            sum(item["learning_signal"] for item in seed_comparisons.values())
-            if comparable
-            else None
-        )
-    record["comparison"] = {
-        "matched_complete": comparable,
-        "baseline": before["summary"] if before else None,
-        "updated": after["summary"] if after else None,
-        "learning_signal": difference,
-        "by_seed": seed_comparisons,
-        "scope": "Fixed pilot development subset; no held-out acceptance",
-    }
-    if record["configuration"]["pilot"].get("defer_decision", False):
-        conclusion, reason = (
-            "review_results" if progressed and comparable else "insufficient_evidence",
-            "Exploratory results; no numeric main-OPSD threshold was chosen",
-        )
-    elif not progressed or not comparable:
-        conclusion, reason = (
-            "repair_then_retry",
-            "Incomplete update or matched development evidence",
-        )
-    elif record["comparison"]["learning_signal"] > 0:
-        conclusion, reason = (
-            "continue_opsd",
-            "Positive pilot task signal; larger development confirmation required",
-        )
-    else:
-        conclusion, reason = (
-            "stop_investment",
-            "No positive task signal in the matched pilot; loss/KL is insufficient",
-        )
-    record["decision"] = {"action": conclusion, "reason": reason}
-    record["billing"] = {
-        "teacher_category_verified": False,
-        "cache_discount_assumed": False,
-        "actual_cny": record["cost"]["actual_cny"],
-        "sdk_scoring": "0.2.9 compute_logprobs uses prompt logprobs and max_tokens=1",
-        "limitation": "SDK drops billing details; usage and ceilings are not bills",
-    }
-    record["alternative_9b"] = {
-        "started": False,
-        "teacher_identity": None,
-        "compatibility": "unverified; separate conditional task required",
-    }
-
-
 def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
     config = PilotConfig.read(config_path)
-    backend_config = PyTRIOOPSDConfig(**config.backend)
+    condition, backend_config = resolve_condition(config)
     training = OPSDConfig(**config.training)
     if (
         not training.group
@@ -413,7 +211,36 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
         or backend_config.spend_config != training.spend_config
     ):
         raise ValueError("Pilot student and teacher must share a cash allocation")
-    condition = load_config([Path(p) for p in config.condition])
+    manifest = json.loads(Path(config.train_manifest).read_text())
+    planned_visits = _visits(config)
+    selection_sha256 = validate_training_selection(
+        config, condition, backend_config, manifest, planned_visits
+    )
+    preflight_sha256 = None
+    if config.preflight_evidence:
+        evidence = Path(config.preflight_evidence).read_bytes()
+        proof = json.loads(evidence)
+        native = proof.get("native", {})
+        if (
+            proof.get("status") != "complete"
+            or native.get("status") != "complete"
+            or native.get("condition")
+            != json.loads(json.dumps(config_record(condition)))
+            or any(
+                native.get("backend", {}).get(key) != value
+                for key, value in asdict(backend_config).items()
+                if key not in {"group", "spend_config"}
+            )
+            or any(
+                native.get("training", {}).get(key) != value
+                for key, value in asdict(training).items()
+                if key not in {"group", "spend_config"}
+            )
+        ):
+            raise ValueError(
+                "Native preflight evidence does not match formal conditions"
+            )
+        preflight_sha256 = hashlib.sha256(evidence).hexdigest()
     tasks = [
         task_from_record(
             json.loads(
@@ -426,13 +253,14 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
     from ..evaluation.harness import _tasks
 
     _, dev_tasks = _tasks(Path(config.dev_plan))
+    if len({task_family(t) for t in dev_tasks}) != len(dev_tasks):
+        raise ValueError("Development evaluation requires independent task families")
     families = {task_family(t) for t in tasks}
     if len(families) != len(tasks):
         raise ValueError("Pilot training requires independent task families")
     for task in tasks:
         assert task.origin is not None
         validate_task(task, harness=True)
-    manifest = json.loads(Path(config.train_manifest).read_text())
     reserved = (
         {
             entry["family_id"]
@@ -468,7 +296,10 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
         ).hexdigest(),
     }
     frozen = json.loads(json.dumps(frozen))
-    planned_visits = _visits(config)
+    if selection_sha256 is not None:
+        frozen["training_selection_sha256"] = selection_sha256
+    if preflight_sha256 is not None:
+        frozen["preflight_sha256"] = preflight_sha256
     tasks_by_id = {task.task_id: task for task in tasks}
     if path.exists():
         if not resume:
@@ -505,6 +336,8 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
             "optimizer_step": 0,
             "training_tasks": planned_visits,
             "epochs_completed": 0,
+            "training_complete": False,
+            "main_result": None,
             "baseline": None,
             "evaluation": None,
             "dev_task_ids": [t.task_id for t in dev_tasks],
@@ -677,6 +510,12 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
             if record.get("training_stop"):
                 break
             record["epochs_completed"] = epoch
+            last = epoch_rows[-1]
+            record.setdefault("epoch_checkpoints", {})[str(epoch)] = {
+                "snapshot": last["updated_policy"],
+                "training_state": last["training_state"],
+                "optimizer_step": last["optimizer_step"],
+            }
             write_document(path, record)
             if config.evaluate_each_epoch and epoch < config.epochs:
                 last = epoch_rows[-1]
@@ -716,6 +555,23 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
         run._roles()
         record["student_policy"] = run.student.identity
         record["teacher_policy"] = adapter.teacher_identity
+        record["training_complete"] = (
+            record["epochs_completed"] == config.epochs
+            and run.record["optimizer_step"] == len(planned_visits)
+            and all(row.get("updated_policy") for row in record["training_tasks"])
+        )
+        record["main_result"] = None
+        if config.require_complete_training and not record["training_complete"]:
+            record["status"] = "incomplete"
+            return path
+        if record["training_complete"]:
+            record["main_result"] = {
+                "epoch": config.epochs,
+                "snapshot": run.student.identity,
+                "training_state": run.record["last_update"]["training_state"],
+                "optimizer_step": run.record["optimizer_step"],
+                "selection": "prespecified final epoch; no development selection",
+            }
         stage = _evaluate_checkpoint(
             config=config,
             root=root,
@@ -786,6 +642,18 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
                 **spend_metrics(record["cost"]),
             },
         )
+        for phase, point in record["development_curve"].items():
+            monitor.log(
+                f"development-{phase}-{point['status']}",
+                {
+                    "eval/phase": phase,
+                    "train/optimizer_step": point["optimizer_step"],
+                    "eval/mean_accuracy": point["mean_accuracy"],
+                    "eval/planned_families": point["planned_families"],
+                    "eval/planned_episodes": point["planned_episodes"],
+                    "eval/missing_episodes": len(point["missing"]),
+                },
+            )
         monitor.finish()
     return path
 
@@ -803,7 +671,9 @@ def run_opsd_pilot(
         return _pilot(config_path, root, resume)
 
 
-def verify_opsd_checkpoints(config_path: Path, output_dir: Path) -> Path:
+def verify_opsd_checkpoints(
+    config_path: Path, output_dir: Path, *, native: bool = False
+) -> Path:
     """Verify the saved training state without another optimizer update."""
     root = output_dir.resolve()
     config = PilotConfig.read(config_path)
@@ -822,8 +692,9 @@ def verify_opsd_checkpoints(config_path: Path, output_dir: Path) -> Path:
         record: dict[str, Any] = {"status": "started"}
         write_document(path, record)
         try:
+            _, backend_config = resolve_condition(config)
             adapter = PyTRIOOPSD(
-                PyTRIOOPSDConfig(**config.backend),
+                backend_config,
                 ledger=ledger,
                 output_dir=root / "training",
             )
@@ -838,8 +709,18 @@ def verify_opsd_checkpoints(config_path: Path, output_dir: Path) -> Path:
             )
             adapter.bind_run(run.record["run_id"])
             record = adapter.verify_progress(run)
+            if native and record["status"] == "complete":
+                from .preflight import verify_native_preflight
+
+                record["native"] = verify_native_preflight(
+                    config_path, root, adapter, run
+                )
         except BaseException as error:
             record = {"status": "failed", "error_type": type(error).__name__}
+            if isinstance(error, ValueError) and str(error).startswith(
+                ("Native preflight", "Truncated thinking", "Real truncation")
+            ):
+                record["reason"] = str(error)
         finally:
             record["cost"] = _cost(
                 ledger,

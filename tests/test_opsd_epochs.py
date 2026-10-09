@@ -99,6 +99,42 @@ def test_each_epoch_resamples_current_student_and_evaluates_paired_seeds(
     assert record["status"] == "complete"
     assert record["optimizer_step"] == 4
     assert record["epochs_completed"] == 2
+    assert record["configuration"]["condition"]["model"]["thinking"] is True
+    backend = json.loads((root / "training/backend.json").read_text())
+    assert backend["encoding"]["thinking"] is True
+    first_episode = Path(record["training_tasks"][0]["episode"])
+    episode = json.loads((first_episode / "run.json").read_text())
+    assert not (first_episode / "workspace/MUST_NOT_RUN").exists()
+    from transformers import AutoTokenizer
+
+    official = AutoTokenizer.from_pretrained(
+        str(
+            Path(__file__).parents[1]
+            / "runs/tokenizers/models--Qwen--Qwen3.5-4B"
+            / "snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+        ),
+        local_files_only=True,
+    )
+    request = json.loads((tmp_path / "sdk-updates.json").read_text())[0]["data"][0]
+    inputs = request["loss_fn_inputs"]
+    supervised: set[int] = set()
+    for step in episode["trajectory"]:
+        call = step["model_call"]
+        raw = call["generation"]["tokens"]
+        assert official.convert_tokens_to_ids("</think>") in raw
+        start = call["context_offset"] - 1
+        end = start + len(raw)
+        supervised.update(range(start, end))
+        assert inputs["target_tokens"][start:end] == raw
+        assert inputs["logprobs"][start:end] == [-0.25] * len(raw)
+        assert inputs["advantages"][start:end] == pytest.approx([0.15] * len(raw))
+    assert all(
+        inputs[key][index] == 0
+        for index in range(len(inputs["target_tokens"]))
+        if index not in supervised
+        for key in ("target_tokens", "logprobs", "advantages")
+    )
+    assert official.decode(episode["context_tokens"]).count("</think>") >= 2
     visits = record["training_tasks"]
     assert [row["epoch"] for row in visits] == [1, 1, 2, 2]
     assert len({row["visit_id"] for row in visits}) == 4
@@ -122,6 +158,9 @@ def test_each_epoch_resamples_current_student_and_evaluates_paired_seeds(
     for stage in record["evaluations"].values():
         assert set(stage["runs"]) == {"4", "5"}
         assert stage["status"] == "complete"
+    assert record["development_curve"]["final"]["mean_accuracy"] == 1.0
+    assert record["development_curve"]["final"]["planned_episodes"] == 4
+    assert record["epoch_checkpoints"]["2"]["optimizer_step"] == 4
     for seed in ("4", "5"):
         before = json.loads(
             Path(record["evaluations"]["baseline"]["runs"][seed]["path"]).read_text()
@@ -223,6 +262,30 @@ def test_training_budget_stop_preserves_final_evaluation_and_reuses_same_checkpo
     assert not record["cost"]["pending_upper_bound_cny"]
 
 
+def test_formal_run_never_promotes_budget_stopped_weights_to_main_result(
+    epoch_pilot: tuple[Path, Path], tmp_path: Path
+) -> None:
+    config, root = epoch_pilot
+    configuration = yaml.safe_load(config.read_text())
+    configuration["require_complete_training"] = True
+    config.write_text(yaml.safe_dump(configuration))
+    policy_path = Path(configuration["training"]["spend_config"])
+    policy = yaml.safe_load(policy_path.read_text())
+    policy["limits"]["groups"]["epoch-train"] = 0.7
+    policy_path.write_text(yaml.safe_dump(policy))
+    result = cli(
+        "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    record = json.loads((root / "pilot.json").read_text())
+    assert record["status"] == "incomplete"
+    assert record["optimizer_step"] < 4
+    assert not record["training_complete"]
+    assert record["main_result"] is None
+    assert "final" not in record["evaluations"]
+    assert record["training_progress"]["planned_updates"] == 4
+
+
 def test_incomplete_final_seed_does_not_claim_a_complete_paired_comparison(
     epoch_pilot: tuple[Path, Path],
     tmp_path: Path,
@@ -243,6 +306,12 @@ def test_incomplete_final_seed_does_not_claim_a_complete_paired_comparison(
     assert record["evaluations"]["final"]["runs"]["4"]["status"] == "complete"
     assert not record["comparison"]["matched_complete"]
     assert record["decision"]["action"] == "insufficient_evidence"
+    development = record["development_curve"]["final"]
+    assert development["planned_families"] == 2
+    assert development["planned_episodes"] == 4
+    assert development["mean_accuracy"] is None
+    assert development["missing"]
+    assert development["observed_success_lower_bound"] < 1
 
 
 def test_pending_second_epoch_update_is_retained_without_new_paid_requests(
@@ -317,3 +386,88 @@ def test_monitor_start_failure_before_sampling_can_resume_the_same_visit(
     assert after["training_tasks"][0]["episode"] == episode
     assert after["evaluations"]["baseline"]["runs"] == baseline
     assert len(json.loads((root / "training/opsd.json").read_text())["batches"]) == 4
+
+
+def test_native_preflight_gates_an_independent_formal_run_and_reuses_its_receipts(
+    epoch_pilot: tuple[Path, Path], tmp_path: Path
+) -> None:
+    config, root = epoch_pilot
+    configuration = yaml.safe_load(config.read_text())
+    preflight = tmp_path / "preflight.yaml"
+    preliminary = dict(configuration) | {
+        "epochs": 1,
+        "evaluation_seeds": [4],
+        "evaluate_each_epoch": False,
+        "require_complete_training": True,
+    }
+    preflight.write_text(yaml.safe_dump(preliminary))
+    configuration["require_complete_training"] = True
+    configuration["preflight_evidence"] = str(
+        root / "preflight/checkpoint-validation.json"
+    )
+    config.write_text(yaml.safe_dump(configuration))
+    arguments = (
+        "train-opsd",
+        str(config),
+        "--preflight-config",
+        str(preflight),
+        "--output-dir",
+        str(root),
+    )
+    result = cli(*arguments, cwd=tmp_path, timeout=180)
+    assert result.returncode == 0, result.stdout + result.stderr
+    workflow = json.loads((root / "workflow.json").read_text())
+    assert workflow["status"] == "complete"
+    proof = json.loads((root / "preflight/checkpoint-validation.json").read_text())
+    assert proof["native"]["thinking_tokens"] > 0
+    assert proof["native"]["action_tokens"] > 0
+    assert proof["native"]["truncation"]["actions_executed"] == 0
+    assert proof["native"]["truncation"]["stop_reason"] == "length"
+    before = json.loads((root / "preflight/pilot.json").read_text())
+    formal = json.loads((root / "formal/pilot.json").read_text())
+    assert before["optimizer_step"] == 2
+    assert formal["optimizer_step"] == 4
+    assert before["run_id"] != formal["run_id"]
+    assert formal["main_result"]["epoch"] == 2
+    resumed = cli(*arguments, "--resume", cwd=tmp_path, timeout=60)
+    assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+    after = json.loads((root / "formal/pilot.json").read_text())
+    assert after["cost"] == formal["cost"]
+
+
+@pytest.mark.parametrize("thinking", [False, True])
+def test_explicit_mode_and_unfinished_thinking_retain_original_supervision(
+    epoch_pilot: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    thinking: bool,
+) -> None:
+    config, root = epoch_pilot
+    configuration = yaml.safe_load(config.read_text())
+    configuration.update(epochs=1, train_task_ids=["mbpp/602"], evaluation_seeds=[4])
+    condition = Path(configuration["condition"][0])
+    condition.write_text(
+        yaml.safe_dump({"model": {"thinking": thinking}, "budget": {"max_steps": 1}})
+    )
+    config.write_text(yaml.safe_dump(configuration))
+    if thinking:
+        monkeypatch.setenv("FAKE_OPSD_UNFINISHED", "1")
+    process = cli(
+        "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    record = json.loads((root / "pilot.json").read_text())
+    episode_root = Path(record["training_tasks"][0]["episode"])
+    episode = json.loads((episode_root / "run.json").read_text())
+    assert episode["encoding_details"]["thinking"] is thinking
+    if thinking:
+        step = episode["trajectory"][0]
+        assert step["observation"] is None
+        assert step["model_call"]["generation"]["stop_reason"] == "length"
+        assert not (episode_root / "workspace/MUST_NOT_RUN").exists()
+        request = json.loads((tmp_path / "sdk-updates.json").read_text())[0]["data"][0]
+        raw = step["model_call"]["generation"]["tokens"]
+        start = step["model_call"]["context_offset"] - 1
+        assert (
+            request["loss_fn_inputs"]["target_tokens"][start : start + len(raw)] == raw
+        )

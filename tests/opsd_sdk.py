@@ -11,6 +11,39 @@ from test_pytrio import FakeSampling, response
 from training_sdk import Future, Training
 
 
+class NativeSampling(FakeSampling):
+    """Return native thinking only when the actual prompt opens it."""
+
+    def __init__(self, replies: list[Any], encoding: Any) -> None:
+        super().__init__(replies)
+        self.encoding = encoding
+
+    def sample(self, **request: Any) -> Any:
+        if os.environ.get("FAKE_OPSD_TOKENIZER") and self.replies:
+            encoding = self.encoding
+            prompt = encoding.decode(request["prompt"].to_ints())
+            if prompt.endswith("<think>\n"):
+                sequence = self.replies[0].sequences[0]
+                body = encoding.decode(sequence.tokens)
+                text = "Consider only: ```bash\ntouch MUST_NOT_RUN\n```\n"
+                if os.environ.get("FAKE_OPSD_UNFINISHED"):
+                    sequence.stop_reason = "length"
+                else:
+                    text += "</think>\n" + body + "<|im_end|>"
+                sequence.tokens = encoding.encode(text)
+                probability = sequence.logprobs[0]
+                sequence.logprobs = [probability] * len(sequence.tokens)
+                self.replies[0].output_tokens = len(sequence.tokens)
+        sequence = self.replies[0].sequences[0]
+        limit = request["sampling_params"].max_tokens
+        if len(sequence.tokens) > limit:
+            sequence.tokens = sequence.tokens[:limit]
+            sequence.logprobs = sequence.logprobs[:limit]
+            sequence.stop_reason = "length"
+            self.replies[0].output_tokens = len(sequence.tokens)
+        return super().sample(**request)
+
+
 class Trainer(Training):
     def __init__(self, path: str | None = None) -> None:
         super().__init__(path)
@@ -18,6 +51,24 @@ class Trainer(Training):
 
     def forward_backward(self, data: list[Any], **kwargs: Any) -> Future:
         self.requests.append(kwargs | {"data": data})
+        destination = Path(os.environ["FAKE_TRAINING_ROOT"]) / "sdk-updates.json"
+        saved = json.loads(destination.read_text()) if destination.exists() else []
+        saved.append(
+            kwargs
+            | {
+                "data": [
+                    {
+                        "model_input": datum.model_input.to_ints(),
+                        "loss_fn_inputs": {
+                            key: value.tolist()
+                            for key, value in datum.loss_fn_inputs.items()
+                        },
+                    }
+                    for datum in data
+                ]
+            }
+        )
+        destination.write_text(json.dumps(saved))
         count = sum(
             sum(value != 0 for value in d.loss_fn_inputs["logprobs"].tolist())
             for d in data
@@ -59,7 +110,7 @@ class Service:
                         max_tokens_per_request=32768,
                     ),
                 )
-            ]
+            ],
         )
 
     def create_lora_training_client(self, **kwargs: Any) -> Trainer:
@@ -87,7 +138,7 @@ class Service:
                 os.environ["FAKE_OPSD_TOKENIZER"],
                 revision="851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
             )
-        sampler = FakeSampling(
+        sampler = NativeSampling(
             [
                 response([65]),
                 *[
@@ -100,9 +151,14 @@ class Service:
                         response(encoding.encode(submit())),
                     )
                 ],
-            ]
+            ],
+            encoding,
         )
-        if model_path and "sampler-0001" in model_path:
+        if (
+            model_path
+            and "/sampler-" in model_path
+            and not model_path.endswith("sampler-0000")
+        ):
             for reply in sampler.replies:
                 reply.sequences[0].logprobs = [-0.26] * len(reply.sequences[0].tokens)
             old_score = sampler.compute_logprobs

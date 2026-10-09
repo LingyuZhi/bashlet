@@ -286,6 +286,7 @@ def main() -> None:
     opsd.add_argument("pilot_config", type=Path)
     opsd.add_argument("--output-dir", type=Path, required=True)
     opsd.add_argument("--resume", action="store_true")
+    opsd.add_argument("--preflight-config", type=Path)
     verify_opsd = commands.add_parser(
         "verify-opsd", help="Verify saved OPSD state and probabilities"
     )
@@ -392,11 +393,21 @@ def main() -> None:
         if options.command == "train-opsd":
             from .distillation.pilot import run_opsd_pilot
 
-            path = run_opsd_pilot(
-                options.pilot_config, options.output_dir, resume=options.resume
-            )
+            if options.preflight_config:
+                from .distillation.preflight import run_with_preflight
+
+                path = run_with_preflight(
+                    options.pilot_config,
+                    options.preflight_config,
+                    options.output_dir,
+                    resume=options.resume,
+                )
+            else:
+                path = run_opsd_pilot(
+                    options.pilot_config, options.output_dir, resume=options.resume
+                )
             record = json.loads(path.read_text())
-            print(f"{record['status']}: {record['decision']['action']}\n{path}")
+            print(f"{record['status']}\n{path}")
             raise SystemExit(0 if record["status"] == "complete" else 2)
         if options.command == "report-collection-pilot":
             from .curation.pilot import report_collection_pilot

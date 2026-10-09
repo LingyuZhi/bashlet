@@ -1,0 +1,22 @@
+model:
+  class: PyTRIOModel
+  model: Qwen/Qwen3.5-4B
+  model_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  tokenizer: Qwen/Qwen3.5-4B
+  tokenizer_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  tokenizer_cache_dir: runs/tokenizers
+  thinking: true
+  timeout_seconds: 300
+  max_retries: 0
+  api_key_env: pytrio_api_key
+  dotenv_path: .env
+  sampling:
+    max_tokens: 1024
+    temperature: 1.0
+    top_p: 1.0
+    seed: 31002
+budget:
+  max_steps: 20
+  max_generated_tokens: 16384
+  max_seconds: 600.0
+  max_consecutive_invalid: 3

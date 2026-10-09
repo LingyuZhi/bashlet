@@ -275,6 +275,7 @@ def evaluate(
     resume: bool = False,
     resume_running_episodes: bool = False,
     resume_elapsed_seconds: dict[str, float] | None = None,
+    require_online: bool | None = None,
 ) -> Path:
     """CLI orchestration; every planned attempt uses the existing experiment seam."""
     plan, tasks = _tasks(plan_path)
@@ -476,7 +477,9 @@ def evaluate(
                         for k in ("source", "conversion", "split", "task_ids")
                     },
                 },
-                require_online=evidence_kind == "experimental" and not local,
+                require_online=(evidence_kind == "experimental" and not local)
+                if require_online is None
+                else require_online,
             )
         for task, row in zip(tasks, rows, strict=True):
             if row["outcome"] != "not_started" and task.task_id not in resumed_episodes:

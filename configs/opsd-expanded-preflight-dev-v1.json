@@ -1,0 +1,9 @@
+{
+  "version": "development-evaluation-v1",
+  "name": "opsd-expanded-native-preflight",
+  "manifest": "../runs/issue31-expanded-freeze-v8-20261009/manifest.json",
+  "split": "dev",
+  "task_ids": [
+    "public/humaneval/101/v5"
+  ]
+}

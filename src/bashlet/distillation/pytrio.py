@@ -43,6 +43,7 @@ class PyTRIOOPSDConfig:
     train_attn: bool = True
     train_mlp: bool = True
     train_unembed: bool = False
+    thinking: bool = True
     source: Literal["base", "sft"] = "base"
     initial_sampler: str | None = None
     initial_state: str | None = None
@@ -55,6 +56,8 @@ class PyTRIOOPSDConfig:
     spend_config: str = "configs/spend.yaml"
 
     def __post_init__(self) -> None:
+        if type(self.thinking) is not bool:
+            raise ValueError("OPSD thinking must be a boolean")
         if self.base_model != MODEL or not self.model_revision:
             raise ValueError("OPSD requires the selected Qwen3.5-4B model")
         if self.source not in ("base", "sft"):
@@ -206,7 +209,7 @@ class PyTRIOOPSD:
         self.teacher_encoding = encoding or QwenChatMLEncoding(
             config.base_model,
             revision=config.model_revision,
-            thinking=False,
+            thinking=config.thinking,
             cache_dir=config.tokenizer_cache_dir,
         )
         if config.source == "sft":
@@ -229,6 +232,7 @@ class PyTRIOOPSD:
                         key: self.record["config"].get(key)
                         for key in ("initial_training_record", "initial_selection")
                     }
+                    | {"thinking": self.record["config"].get("thinking", False)}
                 )
                 != asdict(config)
                 or self.record["encoding"] != self.teacher_encoding.describe()

@@ -1,0 +1,52 @@
+train_manifest: runs/issue31-expanded-freeze-v8-20261009/manifest.json
+train_task_ids:
+- mbpp/602
+- harness/header-key
+- harness/stock-value
+dev_plan: configs/opsd-expanded-preflight-dev-v1.json
+condition:
+- configs/bash-block-v6.yaml
+- configs/opsd-expanded-condition-v1.yaml
+ledger_path: runs/spend.sqlite3
+backend:
+  source: base
+  rank: 16
+  seed: 31002
+  train_attn: true
+  train_mlp: true
+  train_unembed: false
+  timeout_seconds: 300
+  api_key_env: pytrio_api_key
+  dotenv_path: .env
+  tokenizer_cache_dir: runs/tokenizers
+  spend_config: configs/opsd-expanded-spend-v1.yaml
+  group: opsd-expanded-preflight-v1
+  thinking: true
+training:
+  distillation_coefficient: 1.0
+  learning_rate: 5.0e-06
+  timeout_seconds: 300
+  max_context_tokens: 32768
+  spend_config: configs/opsd-expanded-spend-v1.yaml
+  group: opsd-expanded-preflight-v1
+monitoring:
+  project: bashlet
+  entity: null
+  group: opsd-expanded-preflight-20261009
+  mode: online
+  log_every: 1
+  timeout_seconds: 20
+  dotenv_path: .env
+evaluation_group: opsd-expanded-preflight-v1
+stop_on_training_budget: true
+defer_decision: true
+epochs: 1
+shuffle_seed: 31003
+evaluation_seeds:
+- 4
+evaluate_each_epoch: false
+evaluation_groups:
+  baseline: opsd-expanded-preflight-v1
+  intermediate: opsd-expanded-preflight-v1
+  final: opsd-expanded-preflight-v1
+require_complete_training: true
