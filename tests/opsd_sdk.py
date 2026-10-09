@@ -166,6 +166,15 @@ def install() -> None:
 
     def log(self: Any, data: dict[str, Any], *, step: int) -> None:
         old_log(self, data, step=step)
+        train_marker = Path(os.environ["FAKE_TRAINING_ROOT"]) / "train-interrupted"
+        interrupt_step = os.environ.get("FAKE_OPSD_INTERRUPT_TRAIN_STEP")
+        if (
+            interrupt_step
+            and data.get("train/optimizer_step") == int(interrupt_step)
+            and not train_marker.exists()
+        ):
+            train_marker.touch()
+            raise KeyboardInterrupt
         marker = Path(os.environ["FAKE_TRAINING_ROOT"]) / "eval-interrupted"
         if (
             os.environ.get("FAKE_OPSD_INTERRUPT_EVAL")

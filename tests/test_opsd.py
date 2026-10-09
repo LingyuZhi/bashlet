@@ -146,6 +146,46 @@ def test_real_repair_scores_original_tokens_and_submits_shifted_sampled_token_up
     assert result.opsd is not None and result.opsd["status"] == "completed"
 
 
+@pytest.mark.parametrize("different_source", [False, True])
+def test_updates_continue_across_training_sources_with_one_frozen_teacher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, different_source: bool
+) -> None:
+    run, adapter = controlled_run(tmp_path, monkeypatch)
+    first = repair_task()
+    assert first.origin is not None
+    second = replace(
+        first,
+        origin=replace(
+            first.origin, source_sha256=("b" if different_source else "a") * 64
+        ),
+    )
+    for task in (first, second, first):
+        result = run_experiment(
+            task=task, model=run.student, opsd_run=run, output_dir=tmp_path / "episodes"
+        )
+        assert result.opsd is not None and result.opsd["status"] == "completed"
+    assert run.record["optimizer_step"] == 3
+    assert adapter.teacher_identity == run.snapshot.identity
+    metadata = json.loads((run.root / "monitor.json").read_text())["config"]
+    if different_source:
+        assert [s["source_sha256"] for s in metadata["data_source"]["sources"]] == [
+            "a" * 64,
+            "b" * 64,
+        ]
+    else:
+        assert metadata["data_source"]["source_sha256"] == "a" * 64
+    from bashlet.config import load_config
+
+    with pytest.raises(ValueError, match="Monitoring resume must preserve"):
+        run_experiment(
+            task=second,
+            model=run.student,
+            opsd_run=run,
+            config=load_config(overrides=["budget.max_steps=1"]),
+            output_dir=tmp_path / "episodes",
+        )
+
+
 def test_frozen_teacher_drift_after_scoring_is_detected_before_updating(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

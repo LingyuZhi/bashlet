@@ -273,6 +273,8 @@ def evaluate(
     model: Model | None = None,
     phase: str | None = None,
     resume: bool = False,
+    resume_running_episodes: bool = False,
+    resume_elapsed_seconds: dict[str, float] | None = None,
 ) -> Path:
     """CLI orchestration; every planned attempt uses the existing experiment seam."""
     plan, tasks = _tasks(plan_path)
@@ -286,6 +288,10 @@ def evaluate(
         model.describe() if isinstance(model, ModelBackend) else {}
     )
     local = isinstance(model, VLLMModel) and details.get("development_only") is False
+    if local and resume:
+        assert isinstance(model, VLLMModel)
+        model.probe()
+        details = model.describe()
     if evidence_kind == "experimental" and not (
         (
             details.get("backend") == "pytrio"
@@ -335,6 +341,14 @@ def evaluate(
     if direct_code is not None:
         comparison["direct_code"] = asdict(direct_code)
         del comparison["protocol"]
+    if local:
+        from ..snapshots import encoding_condition
+
+        comparison["encoding"] = encoding_condition(model.encoding.describe())
+        if resume:
+            assert isinstance(model, VLLMModel)
+            comparison["inference"] = details.get("inference_conditions")
+            comparison["max_context_tokens"] = model.max_context_tokens
     record: dict[str, Any] = {
         "version": VERSION,
         "track": track,
@@ -351,6 +365,7 @@ def evaluate(
         "tasks": rows,
     }
     previous_requests: set[str] = set()
+    resumed_episodes: dict[str, Path] = {}
     if resume and path.exists():
         previous = json.loads(path.read_text())
         expected = json.loads(json.dumps(record))
@@ -385,6 +400,15 @@ def evaluate(
                 else None
             )
             if (
+                resume_running_episodes
+                and episode
+                and episode["policy"] == snapshot
+                and episode["status"] == "running"
+                and direct_code is None
+            ):
+                assert episode_path is not None
+                resumed_episodes[row["task_id"]] = episode_path.parent
+            elif (
                 episode
                 and episode["policy"] == snapshot
                 and episode["status"] not in {"running", "submitted"}
@@ -454,7 +478,7 @@ def evaluate(
                 require_online=evidence_kind == "experimental" and not local,
             )
         for task, row in zip(tasks, rows, strict=True):
-            if row["outcome"] != "not_started":
+            if row["outcome"] != "not_started" and task.task_id not in resumed_episodes:
                 continue
             active_row = row
             row["outcome"] = "running"
@@ -472,6 +496,8 @@ def evaluate(
                 on_update=progress,
                 assess_first_implementation=direct_code is None,
                 direct_code=direct_code,
+                resume_run_dir=resumed_episodes.get(task.task_id),
+                resume_elapsed_seconds=(resume_elapsed_seconds or {}).get(task.task_id),
             )
             episode = json.loads((result.run_dir / "run.json").read_text())
             _episode_row(row, result.run_dir / "run.json", episode)

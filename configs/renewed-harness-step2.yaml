@@ -1,3 +1,0 @@
-model:
-  model: renewed-harness-step2
-  snapshot_manifest: runs/issue29-renewed-sft/local-step2/snapshot.json

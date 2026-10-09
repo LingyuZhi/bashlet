@@ -1,0 +1,23 @@
+# Preserve the original sampling and interaction conditions.
+model:
+  class: PyTRIOModel
+  model: Qwen/Qwen3.5-4B
+  model_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  sampling:
+    max_tokens: 1024
+    temperature: 1.0
+    top_p: 1.0
+    seed: 4
+  tokenizer: Qwen/Qwen3.5-4B
+  tokenizer_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+  tokenizer_cache_dir: runs/tokenizers
+  api_key_env: pytrio_api_key
+  dotenv_path: .env
+  timeout_seconds: 300
+  max_retries: 0
+  group: opsd-scale-eval-v1
+  spend_config: configs/opsd-scale-spend-v1.yaml
+budget:
+  max_steps: 6
+  max_generated_tokens: 4096
+  max_seconds: 300.0

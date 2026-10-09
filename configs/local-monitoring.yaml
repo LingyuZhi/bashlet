@@ -1,7 +1,0 @@
-project: bashlet
-entity: null
-group: issue21-local-inference
-mode: online
-log_every: 1
-timeout_seconds: 20
-dotenv_path: .env

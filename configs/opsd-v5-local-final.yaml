@@ -1,0 +1,4 @@
+# Load after opsd-v5-local-base.yaml; inference conditions remain paired.
+model:
+  model: opsd-step268
+  snapshot_manifest: runs/opsd-v5-local-20261008/opsd-step268-model/snapshot.json

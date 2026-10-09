@@ -92,6 +92,55 @@ def _extract_adapter(archive: Path, destination: Path) -> dict[str, str]:
     return files
 
 
+def _opsd_export_record(
+    training: dict[str, Any], backend: dict[str, Any], step: int
+) -> dict[str, Any]:
+    """Resolve an update against both the algorithm and backend records."""
+    if backend["sdk_version"] != SDK_VERSION:
+        raise ValueError(f"Expected OPSD backend PyTRIO {SDK_VERSION}")
+    if training["encoding_details"] != backend["encoding"]:
+        raise ValueError("OPSD algorithm and backend encoding records disagree")
+    updates = [
+        item
+        for item in backend["updates"]
+        if item["optimizer_step"] == step and item["status"] == "completed"
+    ]
+    if len(updates) != 1:
+        raise ValueError("Select exactly one existing sampler checkpoint")
+    update = updates[0]
+    base_model = backend["config"]["base_model"]
+    policy = f"pytrio/{base_model}@{update['sampler']}"
+    algorithm_updates = [
+        batch["update"]
+        for batch in training["batches"]
+        if batch["status"] == "completed"
+        and batch.get("update", {}).get("optimizer_step") == step
+    ]
+    if (
+        len(algorithm_updates) != 1
+        or algorithm_updates[0]["student_policy"] != policy
+        or algorithm_updates[0]["training_state"] != update["training_state"]
+        or not update["sampler"].startswith(
+            f"trio://{update['training_run_cuid']}/sampler_weights/"
+        )
+    ):
+        raise ValueError("OPSD algorithm and backend checkpoint records disagree")
+    return {
+        "metadata": {
+            "base_model": base_model,
+            "server_model_revision": backend["server_model_revision"],
+            "encoding": training["snapshot"]["encoding"],
+        },
+        "checkpoints": [
+            {
+                "optimizer_step": step,
+                "training_run_cuid": update["training_run_cuid"],
+                "sampler": {"kind": "sampler_weights", "path": update["sampler"]},
+            }
+        ],
+    }
+
+
 def export_snapshot(
     training_run: Path,
     step: int,
@@ -102,9 +151,26 @@ def export_snapshot(
 ) -> Path:
     """Download a saved sampler, without creating a trainer or a sampler client."""
     training_path = training_run / "training.json"
+    if not training_path.exists():
+        training_path = training_run / "opsd.json"
     training_bytes = training_path.read_bytes()
     training = json.loads(training_bytes)
     training_digest = hashlib.sha256(training_bytes).hexdigest()
+    source_bytes = {training_path.name: training_bytes}
+    if training_path.name == "opsd.json":
+        backend_bytes = (training_run / "backend.json").read_bytes()
+        backend = json.loads(backend_bytes)
+        source_bytes["backend.json"] = backend_bytes
+        training = _opsd_export_record(training, backend, step)
+        encoding_details = backend["encoding"]
+    else:
+        encoding_details = (
+            json.loads(Path(training["config"]["dataset"]).read_text())[
+                "encoding_details"
+            ]
+            if "config" in training
+            else None
+        )
     if version("pytrio") != SDK_VERSION:
         raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
     if training["metadata"]["base_model"] != MODEL:
@@ -123,14 +189,18 @@ def export_snapshot(
     destination = output_dir / "export.json"
     if destination.exists():
         raise ValueError("Export already exists; preserve it or use a new directory")
-    archived = training_run.resolve() / "training-records" / f"{training_digest}.json"
-    archived.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    try:
-        with archived.open("xb") as stream:
-            stream.write(training_bytes)
-    except FileExistsError:
-        if archived.read_bytes() != training_bytes:
-            raise ValueError("Archived training record hash mismatch") from None
+    source_records = {}
+    for name, content in source_bytes.items():
+        digest = hashlib.sha256(content).hexdigest()
+        archived = training_run.resolve() / "training-records" / f"{digest}.json"
+        archived.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            with archived.open("xb") as stream:
+                stream.write(content)
+        except FileExistsError:
+            if archived.read_bytes() != content:
+                raise ValueError("Archived training record hash mismatch") from None
+        source_records[name] = {"path": str(archived), "sha256": digest}
     import pytrio as trio
 
     trio.configure(
@@ -173,19 +243,14 @@ def export_snapshot(
         {
             "schema_version": 1,
             "sdk_version": SDK_VERSION,
-            "training_record": str(archived),
+            "training_record": source_records[training_path.name]["path"],
             "training_record_sha256": training_digest,
+            "source_records": source_records,
             "optimizer_step": step,
             "base_model": MODEL,
             "server_model_revision": training["metadata"]["server_model_revision"],
             "training_encoding": training["metadata"]["encoding"],
-            "training_encoding_details": (
-                json.loads(Path(training["config"]["dataset"]).read_text())[
-                    "encoding_details"
-                ]
-                if "config" in training
-                else None
-            ),
+            "training_encoding_details": encoding_details,
             "remote_training_run": remote_run.model_dump(mode="json"),
             "checkpoint": checkpoint.model_dump(mode="json"),
             "download": download.model_dump(mode="json"),

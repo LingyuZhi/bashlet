@@ -7,7 +7,7 @@ import sys
 from collections import deque
 from collections.abc import Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from threading import Barrier, Event
 from types import SimpleNamespace
@@ -438,13 +438,25 @@ def test_cli_inspects_and_reconciles_a_timed_out_request_without_resubmission(
     path = tmp_path / "spend.sqlite3"
     sdk = FakeSampling([response([65]), TimeoutError("remote outcome unknown")])
     ledger = SpendLedger(path, policy=SpendPolicy(funded_cny=10))
+    policy_path = tmp_path / "policy.yaml"
+    policy_path.write_text(json.dumps({"limits": asdict(ledger.policy)}))
     result = run_experiment(
         task=double_task(), model=model_for(sdk, ledger), output_dir=tmp_path
     )
     assert result.status == "infrastructure_error"
 
     status = subprocess.run(
-        [sys.executable, "-m", "bashlet", "spend", "status", "--ledger", str(path)],
+        [
+            sys.executable,
+            "-m",
+            "bashlet",
+            "spend",
+            "status",
+            "--ledger",
+            str(path),
+            "--policy",
+            str(policy_path),
+        ],
         capture_output=True,
         text=True,
         timeout=30,
@@ -474,6 +486,8 @@ def test_cli_inspects_and_reconciles_a_timed_out_request_without_resubmission(
             pending["id"],
             "--ledger",
             str(path),
+            "--policy",
+            str(policy_path),
             "--actual-cny",
             "0.02",
             "--outcome",

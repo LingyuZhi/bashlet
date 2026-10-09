@@ -13,18 +13,24 @@ from pathlib import Path
 from . import protocol
 from .config import ExperimentConfig, config_record, load_config
 from .models import (
+    Bash,
     ContextExhausted,
+    DecodedReply,
     EpisodeResult,
+    Generation,
     InteractionBudget,
     InvalidAction,
     Isolation,
+    Limits,
     Model,
     ModelBackend,
     ModelCall,
     ModelResponseError,
+    Observation,
     SamplingParams,
     Step,
     Usage,
+    WorkspaceEntry,
 )
 from .sandbox import Sandbox
 from .spend import BudgetRefused
@@ -35,7 +41,7 @@ _PROBE_OUTPUT_BYTES = 16_384
 
 def _verify_isolation(sandbox: Sandbox, run_dir: Path) -> Isolation:
     probe_dir = run_dir / "probe"
-    probe_dir.mkdir()
+    probe_dir.mkdir(exist_ok=True)
     canary = run_dir / "private" / "host-private.txt"
     canary.write_text("host-private-canary")
     paths = {
@@ -207,6 +213,117 @@ def save_record(
     pending.replace(result.run_dir / "run.json")
 
 
+def _restore_episode(
+    path: Path,
+    instruction: str,
+    workspace: Path,
+    run_dir: Path,
+    model: Model,
+    condition: ExperimentConfig,
+    elapsed_seconds: float | None,
+) -> EpisodeResult:
+    """Validate a committed checkpoint before continuing its sampled history."""
+    raw = json.loads(path.read_text())
+    if (
+        raw["status"] != "running"
+        or raw["policy"] != model.identity
+        or raw["encoding"] != model.encoding.identity
+        or raw["config"] != json.loads(json.dumps(config_record(condition)))
+        or Path(raw["workspace"]) != workspace
+        or Path(raw["run_dir"]) != run_dir
+    ):
+        raise ValueError("Episode checkpoint identity or conditions changed")
+    steps = []
+    context = model.encoding.prompt(condition.protocol.system_prompt, instruction)
+    for item in raw["trajectory"]:
+        saved_call = dict(item["model_call"])
+        saved_generation = saved_call.pop("generation")
+        generation = Generation(
+            **(
+                saved_generation
+                | {
+                    "tokens": tuple(saved_generation["tokens"]),
+                    "logprobs": tuple(saved_generation["logprobs"])
+                    if saved_generation["logprobs"] is not None
+                    else None,
+                }
+            )
+        )
+        sampling = SamplingParams(**saved_call.pop("sampling"))
+        generation.validate(sampling)
+        reply = saved_call.pop("reply")
+        call = ModelCall(
+            **saved_call,
+            generation=generation,
+            sampling=sampling,
+            reply=DecodedReply(**reply) if reply is not None else None,
+        )
+        if call.context_offset != len(context) or call.policy != model.identity:
+            raise ValueError("Episode checkpoint sampled prefix changed")
+        context.extend(generation.tokens)
+        if not isinstance(item["feedback"], str):
+            raise ValueError("Episode checkpoint has an incomplete observation")
+        context.extend(model.encoding.continuation(generation.tokens, item["feedback"]))
+        action = item["action"]
+        if action["kind"] not in {"bash", "invalid"}:
+            raise ValueError("Only bash interaction checkpoints can resume")
+        steps.append(
+            Step(
+                action=Bash(action["command"])
+                if action["kind"] == "bash"
+                else InvalidAction(action["reason"]),
+                observation=Observation(**item["observation"])
+                if item["observation"] is not None
+                else None,
+                model_call=call,
+                feedback=item["feedback"],
+                candidate=item["candidate"],
+                verification=item["verification"],
+                workspace_manifest={
+                    k: WorkspaceEntry(**v)
+                    for k, v in item["workspace_manifest"].items()
+                },
+                usage=Usage(**item["usage"]) if item["usage"] is not None else None,
+            )
+        )
+    usage = Usage(**raw["usage"])
+    if (
+        context != raw["context_tokens"]
+        or usage.steps != len(steps)
+        or usage.generated_tokens
+        != sum(len(s.model_call.generation.tokens) for s in steps if s.model_call)
+        or usage.invalid_actions
+        != sum(isinstance(s.action, InvalidAction) for s in steps)
+    ):
+        raise ValueError("Episode checkpoint history or budget evidence changed")
+    initial = {
+        k: WorkspaceEntry(**v) for k, v in raw["initial_workspace_manifest"].items()
+    }
+    expected = steps[-1].workspace_manifest if steps else initial
+    if capture_workspace(workspace, run_dir) != expected:
+        raise ValueError("Episode workspace differs from its committed checkpoint")
+    if elapsed_seconds is not None:
+        if elapsed_seconds < usage.elapsed_seconds:
+            raise ValueError("Resume cannot reduce elapsed interaction usage")
+        usage.elapsed_seconds = elapsed_seconds
+    return EpisodeResult(
+        run_dir=run_dir,
+        workspace=workspace,
+        limits=Limits(**raw["limits"]),
+        isolation=Isolation(**raw["isolation"]),
+        policy=model.identity,
+        policy_details=raw["policy_details"],
+        encoding=model.encoding.identity,
+        encoding_details=raw["encoding_details"],
+        budget=condition.budget,
+        started_at=raw["started_at"],
+        trajectory=steps,
+        initial_workspace_manifest=initial,
+        context_tokens=context,
+        usage=usage,
+    )
+
+
 def run_episode(
     *,
     instruction: str,
@@ -215,6 +332,8 @@ def run_episode(
     config: ExperimentConfig | None = None,
     run_dir: Path | None = None,
     on_update: Callable[[EpisodeResult], None] | None = None,
+    resume_from: Path | None = None,
+    resume_elapsed_seconds: float | None = None,
 ) -> EpisodeResult:
     """Run one Episode on an existing workspace, without Task data or grading.
 
@@ -222,6 +341,11 @@ def run_episode(
     operator-only records and blobs; by default a unique directory under runs/.
     ``on_update`` can persist an experiment record or render progress for a CLI.
     The workspace is modified in place and remains available after termination.
+
+    ``resume_from`` continues a committed observation boundary without executing
+    previous actions again. Raw tokens and consumed budgets remain in place.
+    ``resume_elapsed_seconds`` can additionally charge time through a failure;
+    offline downtime is excluded from the resumed interaction clock.
     """
     condition = config if config is not None else load_config()
     run_dir = (run_dir or Path("runs") / uuid.uuid4().hex).resolve()
@@ -231,15 +355,27 @@ def run_episode(
     sandbox = Sandbox(condition.environment)
     budget, sampling = condition.budget, condition.model.sampling
     backend = model if isinstance(model, ModelBackend) else None
-    result = EpisodeResult(
-        run_dir=run_dir,
-        workspace=workspace,
-        limits=sandbox.limits,
-        isolation=Isolation(False, reason="Not yet checked"),
-        policy=model.identity,
-        encoding=model.encoding.identity,
-        encoding_details=model.encoding.describe(),
-        budget=budget,
+    result = (
+        _restore_episode(
+            resume_from,
+            instruction,
+            workspace,
+            run_dir,
+            model,
+            condition,
+            resume_elapsed_seconds,
+        )
+        if resume_from is not None
+        else EpisodeResult(
+            run_dir=run_dir,
+            workspace=workspace,
+            limits=sandbox.limits,
+            isolation=Isolation(False, reason="Not yet checked"),
+            policy=model.identity,
+            encoding=model.encoding.identity,
+            encoding_details=model.encoding.describe(),
+            budget=budget,
+        )
     )
 
     def save() -> None:
@@ -254,7 +390,8 @@ def run_episode(
     recording_step: int | None = None
     try:
         save()
-        result.initial_workspace_manifest = capture_workspace(workspace, run_dir)
+        if resume_from is None:
+            result.initial_workspace_manifest = capture_workspace(workspace, run_dir)
         result.isolation = _verify_isolation(sandbox, run_dir)
         if not result.isolation.passed:
             result.status = "infrastructure_error"
@@ -267,7 +404,7 @@ def run_episode(
                 raise
             except Exception as error:
                 raise _SamplerError(f"Capability probe failed: {error}") from error
-        started = time.monotonic()
+        started = time.monotonic() - result.usage.elapsed_seconds
 
         def record_step(step: Step) -> None:
             nonlocal recording_step
@@ -283,10 +420,15 @@ def run_episode(
             recording_step = None
 
         context = result.context_tokens
-        context.extend(
-            model.encoding.prompt(condition.protocol.system_prompt, instruction)
-        )
+        if resume_from is None:
+            context.extend(
+                model.encoding.prompt(condition.protocol.system_prompt, instruction)
+            )
         consecutive_invalid = 0
+        for previous in reversed(result.trajectory):
+            if not isinstance(previous.action, InvalidAction):
+                break
+            consecutive_invalid += 1
         while True:
             result.usage.elapsed_seconds = time.monotonic() - started
             reason = _budget_exhausted_reason(budget, result.usage)

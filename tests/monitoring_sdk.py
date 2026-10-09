@@ -68,6 +68,20 @@ class CommError(Exception):
 
 
 def init(**kwargs: Any) -> Run:
+    if (
+        os.environ.get("FAKE_WANDB_TRAIN_START_FAIL")
+        and kwargs["config"]["phase"] == "epoch-train"
+    ):
+        root = Path(os.environ["FAKE_TRAINING_ROOT"])
+        state = root / "training-service.json"
+        marker = root / "monitor-start-failed"
+        if (
+            state.exists()
+            and json.loads(state.read_text())["optimizer_step"] == 1
+            and not marker.exists()
+        ):
+            marker.touch()
+            raise CommError()
     if os.environ.get("FAKE_WANDB_AUTH_FAIL"):
         raise PermissionError("authentication failed")
     if os.environ.get("FAKE_WANDB_REVOKED"):

@@ -316,7 +316,7 @@ class PyTRIOOPSD:
         if self.client.model_id != self.config.base_model:
             raise ValueError("Training model differs from the selected initial model")
 
-    def _model(self, path: str) -> PyTRIOModel:
+    def _model(self, path: str, *, group: str | None = None) -> PyTRIOModel:
         return PyTRIOModel(
             model=self.config.base_model,
             model_revision=self.config.model_revision,
@@ -325,7 +325,7 @@ class PyTRIOOPSD:
             service_client=self.service,
             ledger=self.ledger,
             spend_config=self.config.spend_config,
-            group=self.config.group,
+            group=group if group is not None else self.config.group,
             timeout_seconds=self.config.timeout_seconds,
             max_retries=0,
             run_id=self.run_id,
@@ -338,10 +338,10 @@ class PyTRIOOPSD:
     def bind_run(self, run_id: str) -> None:
         self.run_id = self._student.run_id = run_id
 
-    def evaluation_model(self) -> PyTRIOModel:
+    def evaluation_model(self, *, group: str | None = None) -> PyTRIOModel:
         """A distinct guarded sampler, bound to the current student's weights."""
         assert self._student.model_path is not None
-        model = self._model(self._student.model_path)
+        model = self._model(self._student.model_path, group=group)
         model.operation = "evaluation"
         model.verify_loaded_sampler()
         return model

@@ -1,7 +1,8 @@
 """Raw-model OPSD through the established experiment and CLI seams."""
 
 import json
-from dataclasses import replace
+import sqlite3
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
@@ -215,16 +216,166 @@ def test_running_workflow_obeys_a_cash_limit_tightened_by_another_process(
         )
 
 
-@pytest.mark.parametrize("interrupt", [False, True])
+def test_cash_authorization_retains_requests_bills_and_pending_commitments(
+    tmp_path: Path,
+) -> None:
+    policy = SpendPolicy(funded_cny=5)
+    ledger = SpendLedger(tmp_path / "spend.sqlite3", policy=policy)
+    settled = ledger.reserve(
+        operation="sampling", group="opsd-pilot", payload={"old": True}, upper_cny=2
+    )
+    ledger.complete(settled)
+    ledger.reconcile_total(actual_cny=1.08, evidence={"source": "verified bill"})
+    ledger.reserve(
+        operation="sampling",
+        group="opsd-pilot",
+        payload={"pending": True},
+        upper_cny=0.4,
+    )
+    before = ledger.snapshot()
+    approved = replace(
+        policy,
+        funded_cny=16.08,
+        groups=policy.groups | {"scale-train": 8, "scale-eval": 7},
+    )
+    with pytest.raises(ValueError, match="policy differs"):
+        SpendLedger(ledger.path, policy=approved)
+    old_path, new_path, evidence = (
+        tmp_path / "old.yaml",
+        tmp_path / "new.yaml",
+        tmp_path / "approval.json",
+    )
+    old_path.write_text(yaml.safe_dump({"limits": asdict(policy)}))
+    new_path.write_text(yaml.safe_dump({"limits": asdict(approved)}))
+    evidence.write_text(json.dumps({"source": "user", "new_run_cap_cny": 15}))
+    result = cli(
+        "spend",
+        "authorize-policy",
+        str(new_path),
+        "--ledger",
+        str(ledger.path),
+        "--policy",
+        str(old_path),
+        "--evidence",
+        str(evidence),
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    after = json.loads(result.stdout)
+    assert after["entries"] == before["entries"]
+    assert after["project_bill"] == before["project_bill"]
+    assert after["funded_remaining_cny"] == 14.6
+    assert after["pending_cny"] == 0.4
+    ledger.authorize_policy(approved, evidence={"source": "same approval"})
+    with sqlite3.connect(ledger.path) as db:
+        events = db.execute(
+            "SELECT evidence FROM events WHERE request_id='policy_authorization'"
+        ).fetchall()
+    assert len(events) == 1
+    event = json.loads(events[0][0])
+    assert event["previous"] == asdict(policy)
+    assert event["current"] == asdict(approved)
+    assert event["authorization"]["new_run_cap_cny"] == 15
+    # A long-lived client must see the new allocation, while prior pending work
+    # remains a commitment and still cannot be submitted twice.
+    ledger.reserve(
+        operation="sampling", group="scale-train", payload={"next": True}, upper_cny=0.1
+    )
+    with pytest.raises(BudgetRefused, match="still pending"):
+        ledger.reserve(
+            operation="sampling",
+            group="opsd-pilot",
+            payload={"pending": True},
+            upper_cny=0.4,
+        )
+    with pytest.raises(ValueError, match="non-empty"):
+        ledger.authorize_policy(approved, evidence={})
+    with pytest.raises(ValueError, match="retain project"):
+        ledger.authorize_policy(
+            replace(approved, regular_cny=151, reserve_cny=49),
+            evidence={"source": "user"},
+        )
+    with pytest.raises(ValueError, match="project ceiling"):
+        ledger.authorize_policy(
+            replace(approved, funded_cny=201), evidence={"source": "user"}
+        )
+
+
+def test_explicit_project_cap_authorization_preserves_prior_cash_and_requests(
+    tmp_path: Path,
+) -> None:
+    policy = SpendPolicy(funded_cny=16.08)
+    ledger = SpendLedger(tmp_path / "spend.sqlite3", policy=policy)
+    request = ledger.reserve(
+        operation="sampling", group="opsd-pilot", payload={"prior": True}, upper_cny=1
+    )
+    ledger.complete(request)
+    before = ledger.snapshot()
+    expanded = replace(
+        policy,
+        regular_cny=350,
+        reserve_cny=50,
+        project_cny=400,
+        funded_cny=316.08,
+        groups=policy.groups | {"full-train": 200, "full-eval": 100},
+    )
+    old_path, new_path, approval = (
+        tmp_path / name for name in ("old.yaml", "new.yaml", "approval.json")
+    )
+    old_path.write_text(yaml.safe_dump({"limits": asdict(policy)}))
+    new_path.write_text(yaml.safe_dump({"limits": asdict(expanded)}))
+    approval.write_text(
+        json.dumps(
+            {
+                "source": "user",
+                "approved_project_limits": {
+                    "regular_cny": 350,
+                    "reserve_cny": 50,
+                    "project_cny": 400,
+                },
+            }
+        )
+    )
+    arguments = (
+        "spend",
+        "authorize-policy",
+        str(new_path),
+        "--ledger",
+        str(ledger.path),
+        "--policy",
+        str(old_path),
+        "--evidence",
+        str(approval),
+    )
+    refused = cli(*arguments, cwd=tmp_path)
+    assert refused.returncode == 2
+    assert "retain project" in refused.stderr
+    approved = cli(*arguments, "--allow-project-increase", cwd=tmp_path)
+    assert approved.returncode == 0, approved.stderr
+    after = json.loads(approved.stdout)
+    assert after["entries"] == before["entries"]
+    assert after["charged_cny"] == 1
+    assert after["funded_remaining_cny"] == 315.08
+    with pytest.raises(ValueError, match="policy differs"):
+        SpendLedger(ledger.path, policy=replace(expanded, funded_cny=317))
+
+
+@pytest.mark.parametrize(
+    ("interrupt", "training_cap"),
+    [(False, None), (True, None), (False, 0.12), (False, 0.31)],
+)
 def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     interrupt: bool,
+    training_cap: float | None,
 ) -> None:
     from test_mbpp import double_row, prepare
     from test_monitoring import external_sdks
 
-    prepared = prepare(tmp_path, [double_row(602), double_row(511), double_row(512)])
+    prepared = prepare(
+        tmp_path, [double_row(602), double_row(603), double_row(511), double_row(512)]
+    )
     dev = tmp_path / "dev.json"
     dev.write_text(
         json.dumps(
@@ -244,20 +395,41 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
         "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
     ).resolve()
     pilot = tmp_path / "pilot.yaml"
+    policy_path = tmp_path / "spend.yaml"
+    policy_path.write_text(Path("configs/spend.yaml").read_text())
+    training_group = "opsd-pilot"
+    extra: dict[str, object] = {}
+    if training_cap is not None:
+        policy = yaml.safe_load(policy_path.read_text())
+        policy["limits"]["groups"].update(
+            {"scale-train": training_cap, "scale-eval": 1}
+        )
+        policy_path = tmp_path / "bounded-spend.yaml"
+        policy_path.write_text(yaml.safe_dump(policy))
+        training_group = "scale-train"
+        extra = {
+            "evaluation_group": "scale-eval",
+            "stop_on_training_budget": True,
+            "defer_decision": True,
+        }
     pilot.write_text(
         yaml.safe_dump(
             {
                 "train_manifest": str(prepared / "manifest.json"),
-                "train_task_ids": ["mbpp/602"],
+                "train_task_ids": ["mbpp/602"]
+                if training_cap is None
+                else ["mbpp/602", "mbpp/603"],
                 "dev_plan": str(dev),
                 "condition": [str(condition)],
                 "ledger_path": str(tmp_path / "spend.sqlite3"),
                 "backend": {
                     "tokenizer_cache_dir": str(tokenizer.parents[2]),
-                    "spend_config": str(Path("configs/spend.yaml").resolve()),
+                    "spend_config": str(policy_path),
+                    "group": training_group,
                 },
-                "training": {"spend_config": str(Path("configs/spend.yaml").resolve())},
+                "training": {"spend_config": str(policy_path), "group": training_group},
                 "monitoring": {"group": "opsd-pilot"},
+                **extra,
             }
         )
     )
@@ -294,6 +466,48 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
         assert recovered["tasks"][0]["run"] == first_run
     assert process.returncode == 0, process.stdout + process.stderr
     record = json.loads((root / "pilot.json").read_text())
+    if training_cap is not None:
+        assert record["training_stop"] == "budget_refused"
+        assert record["optimizer_step"] == (0 if training_cap == 0.12 else 1)
+        assert record["comparison"]["matched_complete"] is True
+        assert record["decision"]["action"] == (
+            "insufficient_evidence" if training_cap == 0.12 else "review_results"
+        )
+        cost = record["cost"]["charged_upper_bound_cny"]
+        resumed = cli(
+            "train-opsd",
+            str(pilot),
+            "--output-dir",
+            str(root),
+            "--resume",
+            cwd=tmp_path,
+        )
+        assert resumed.returncode == 0, resumed.stderr
+        assert (
+            json.loads((root / "pilot.json").read_text())["cost"][
+                "charged_upper_bound_cny"
+            ]
+            == cost
+        )
+        snapshot = SpendLedger(
+            tmp_path / "spend.sqlite3", policy=SpendPolicy.read(policy_path)
+        ).snapshot()
+        assert {entry["group"] for entry in snapshot["entries"]} == {
+            "scale-train",
+            "scale-eval",
+        }
+        assert (
+            sum(
+                entry["charged_cny"]
+                for entry in snapshot["entries"]
+                if entry["group"] == "scale-train"
+            )
+            <= training_cap
+        )
+        updated = json.loads((root / "updated/evaluation.json").read_text())
+        training = json.loads((root / "training/opsd.json").read_text())
+        assert updated["snapshot"] == training["student_policy"]
+        return
     assert record["optimizer_step"] == 1
     assert record["comparison"]["matched_complete"] is True
     assert record["comparison"]["baseline"]["passed_tasks"] == 2

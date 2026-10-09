@@ -7,6 +7,7 @@ import shutil
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, fields
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,7 +35,7 @@ from .models import (
 )
 from .sandbox import Sandbox
 from .tasks import validate_origin
-from .workspace import snapshot_workspace, validate_workspace_path
+from .workspace import capture_workspace, snapshot_workspace, validate_workspace_path
 
 if TYPE_CHECKING:
     from .distillation import OPSDRun
@@ -250,6 +251,8 @@ def run_experiment(
     sft_supervision: Sequence[ActionSupervision] | None = None,
     sft_max_context_tokens: int = 32768,
     opsd_run: "OPSDRun | None" = None,
+    resume_run_dir: Path | None = None,
+    resume_elapsed_seconds: float | None = None,
 ) -> ExperimentResult:
     """Prepare a Task, run its Episode, and grade only an explicit Submission.
 
@@ -288,6 +291,10 @@ def run_experiment(
         )
     if sft_supervision is not None and sft_adapter is None:
         raise ValueError("SFT supervision requires an Adapter")
+    if resume_run_dir is not None and (
+        direct_code is not None or sft_adapter is not None or opsd_run is not None
+    ):
+        raise ValueError("Checkpoint continuation supports interaction evaluation only")
     if sft_adapter is not None:
         validate_sft_request(
             task, model, sft_adapter, executed=sft_supervision is not None
@@ -298,17 +305,26 @@ def run_experiment(
         else "json-function-v1"
     )
     task_json = serialize_task(task)
-    run_dir = output_dir.resolve() / uuid.uuid4().hex
-    run_dir.mkdir(parents=True, mode=0o700)
+    run_dir = (
+        resume_run_dir.resolve()
+        if resume_run_dir is not None
+        else output_dir.resolve() / uuid.uuid4().hex
+    )
+    if resume_run_dir is None:
+        run_dir.mkdir(parents=True, mode=0o700)
     private = run_dir / "private"
-    private.mkdir(mode=0o700)
-    (private / "task.json").write_text(task_json)
+    if resume_run_dir is None:
+        private.mkdir(mode=0o700)
+        (private / "task.json").write_text(task_json)
+    elif (private / "task.json").read_text() != task_json:
+        raise ValueError("Episode checkpoint task changed")
     workspace = run_dir / "workspace"
-    workspace.mkdir()
-    for path, content in task.initial_files.items():
-        target = workspace / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+    if resume_run_dir is None:
+        workspace.mkdir()
+        for path, content in task.initial_files.items():
+            target = workspace / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content)
     metadata: dict[str, object] = {
         "task_id": task.task_id,
         "task_type": task.task_type,
@@ -327,6 +343,52 @@ def run_experiment(
     }
     if direct_code is not None:
         metadata.update(evaluation_track="coding", direct_code=asdict(direct_code))
+
+    resume_from = None
+    if resume_run_dir is not None:
+        resume_from = run_dir / "run.json"
+        checkpoint_bytes = resume_from.read_bytes()
+        checkpoint = json.loads(checkpoint_bytes)
+        metadata["recovery"] = {
+            "resumed_at": datetime.now(UTC).isoformat(),
+            "checkpoint_sha256": hashlib.sha256(checkpoint_bytes).hexdigest(),
+            "saved_usage": checkpoint["usage"],
+            "charged_elapsed_seconds": resume_elapsed_seconds,
+            "replayed_actions": 0,
+        }
+        if not checkpoint["context_tokens"] and not checkpoint["trajectory"]:
+            if checkpoint["usage"]["steps"] or checkpoint["usage"]["generated_tokens"]:
+                raise ValueError("Initial checkpoint has unrecorded sampling usage")
+            current = capture_workspace(workspace, run_dir)
+            actual_files = {
+                path: entry.sha256
+                for path, entry in current.items()
+                if entry.kind == "file"
+            }
+            expected_files = {
+                path: hashlib.sha256(content.encode()).hexdigest()
+                for path, content in task.initial_files.items()
+            }
+            expected_dirs = {
+                str(parent)
+                for path in task.initial_files
+                for parent in Path(path).parents
+                if str(parent) != "."
+            }
+            if actual_files != expected_files or any(
+                entry.kind != "file"
+                and (entry.kind != "directory" or path not in expected_dirs)
+                for path, entry in current.items()
+            ):
+                raise ValueError("Initial checkpoint workspace differs from task files")
+            checkpoint["initial_workspace_manifest"] = {
+                path: asdict(entry) for path, entry in current.items()
+            }
+            checkpoint["context_tokens"] = model.encoding.prompt(
+                condition.protocol.system_prompt, task.prompt
+            )
+            resume_from = private / "resume-initial-checkpoint.json"
+            resume_from.write_text(json.dumps(checkpoint, indent=2))
 
     if opsd_run is not None:
         model = opsd_run.begin(task, model, condition)
@@ -350,6 +412,8 @@ def run_experiment(
             config=condition,
             run_dir=run_dir,
             on_update=save_progress,
+            resume_from=resume_from,
+            resume_elapsed_seconds=resume_elapsed_seconds,
         )
     result = ExperimentResult(
         **{field.name: getattr(episode, field.name) for field in fields(EpisodeResult)},
@@ -402,6 +466,8 @@ def run_experiment(
             "environment_variant_id": task.environment_variant_id,
             "passed": result.passed,
         }
+        if "recovery" in metadata:
+            final_metadata["recovery"] = metadata["recovery"]
         if direct_code is not None:
             final_metadata.update(
                 evaluation_track="coding", direct_code=asdict(direct_code)

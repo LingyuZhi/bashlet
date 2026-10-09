@@ -242,6 +242,50 @@ def test_evaluation_rejects_environment_variants_as_extra_independent_tasks(
     assert not (tmp_path / "runs").exists()
 
 
+def test_preparation_accepts_explicit_unequal_training_type_counts(
+    tmp_path: Path,
+) -> None:
+    _, cohort_path = small_cohort(tmp_path)
+    source_root = tmp_path / "extended-source"
+    source_root.mkdir()
+    mbpp = (
+        prepare(source_root, [double_row(602), double_row(603), double_row(511)])
+        / "manifest.json"
+    )
+    cohort = json.loads(cohort_path.read_text())
+    cohort["training_candidates"] = {
+        "task_ids": [
+            "mbpp/602",
+            "mbpp/603",
+            "harness/header-key",
+            "harness/stock-value",
+        ],
+        "per_type": {"short_program": 2, "code_edit": 1, "workspace": 1},
+    }
+    cohort_path.write_text(json.dumps(cohort))
+    output = tmp_path / "unequal-harness"
+    result = cli(
+        "prepare-harness",
+        "--mbpp-manifest",
+        str(mbpp),
+        "--cohort",
+        str(cohort_path),
+        "--output-dir",
+        str(output),
+        cwd=tmp_path,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["counts"]["train"] == {
+        "short_program": 2,
+        "code_edit": 1,
+        "workspace": 1,
+    }
+    assert manifest["status"] == "complete"
+    assert len([row for row in manifest["tasks"] if row["split"] == "train"]) == 4
+
+
 @pytest.mark.parametrize(
     "change",
     [

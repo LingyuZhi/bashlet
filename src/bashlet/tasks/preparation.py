@@ -228,11 +228,15 @@ def _validate_cohorts(cohort: dict[str, Any], tasks: list[Task]) -> None:
                 raise ValueError("Coding checklist must retain MBPP development tasks")
         else:
             target = cohort[name]["per_type"]
+            counts = (
+                {kind: target for kind in _TYPES} if type(target) is int else target
+            )
             if (
-                type(target) is not int
-                or target < 1
+                not isinstance(counts, dict)
+                or set(counts) != set(_TYPES)
+                or any(type(value) is not int or value < 1 for value in counts.values())
                 or any(
-                    sum(t.task_type == kind for t in selected) != target
+                    sum(t.task_type == kind for t in selected) != counts[kind]
                     for kind in _TYPES
                 )
             ):

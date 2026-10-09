@@ -1,4 +1,0 @@
-# Layer after local-base.yaml, before acceptance-local-v1.yaml.
-model:
-  model: bounded-sft-step8
-  snapshot_manifest: runs/issue26-bounded-sft/local-step8/snapshot.json

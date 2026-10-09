@@ -1,7 +1,0 @@
-project: bashlet
-entity: null
-group: issue25-dual-track-v1
-mode: offline
-log_every: 1
-timeout_seconds: 20
-dotenv_path: .env

@@ -1,0 +1,51 @@
+# 12 distinct training families; 15 development families; fresh step-0 teacher.
+train_manifest: runs/harness-tasks-v1/manifest.json
+train_task_ids:
+- mbpp/602
+- harness/header-key
+- harness/stock-value
+- mbpp/604
+- harness/csv-field
+- harness/service-owners
+- mbpp/606
+- harness/log-level
+- harness/build-flags
+- mbpp/610
+- harness/env-assignment
+- harness/log-counts
+dev_plan: configs/opsd-scale-dev-v1.json
+condition:
+- configs/bash-block-v4.yaml
+- configs/opsd-scale-condition-v1.yaml
+ledger_path: runs/spend.sqlite3
+backend:
+  source: base
+  rank: 16
+  seed: 4
+  train_attn: true
+  train_mlp: true
+  train_unembed: false
+  timeout_seconds: 300
+  api_key_env: pytrio_api_key
+  dotenv_path: .env
+  tokenizer_cache_dir: runs/tokenizers
+  spend_config: configs/opsd-scale-spend-v1.yaml
+  group: opsd-scale-train-v1
+training:
+  distillation_coefficient: 1.0
+  learning_rate: 5.0e-06
+  timeout_seconds: 300
+  max_context_tokens: 32768
+  spend_config: configs/opsd-scale-spend-v1.yaml
+  group: opsd-scale-train-v1
+monitoring:
+  project: bashlet
+  entity: null
+  group: opsd-scale-20261006
+  mode: online
+  log_every: 1
+  timeout_seconds: 20
+  dotenv_path: .env
+evaluation_group: opsd-scale-eval-v1
+stop_on_training_budget: true
+defer_decision: true

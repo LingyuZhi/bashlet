@@ -1,0 +1,27 @@
+# Explicit user authorization: this run adds at most 15 CNY.
+limits:
+  regular_cny: 150
+  reserve_cny: 50
+  project_cny: 200
+  funded_cny: 16.08
+  groups:
+    pytrio-smoke: 0.5
+    opsd-pilot: 5
+    development-baseline: 2
+    sft: 4
+    sft-development: 4
+    local-snapshot-inference: 5
+    renewed-harness-sft: 1.28
+    opsd-scale-train-v1: 8
+    opsd-scale-eval-v1: 7
+prices_cny_per_million:
+  prefill: 1.49
+  cache: 0.3
+  sample: 4.54
+  train: 4.54
+price_source: https://pytrio.cn/home/pricing
+price_recorded: '2026-10-02'
+price_catalog_url: https://pytrio.cn/api/model-prices
+price_version: '2026-08-21'
+billing_quantum_cny: 0.01
+ceiling_multiplier: 2

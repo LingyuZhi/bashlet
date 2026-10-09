@@ -342,7 +342,17 @@ def main() -> None:
     total = spend_commands.add_parser(
         "reconcile-total", help="Confirm cumulative spend; retain unknown request fees"
     )
-    for command in (status, reconcile, total):
+    authorization = spend_commands.add_parser(
+        "authorize-policy", help="Apply evidenced cash limits without resetting spend"
+    )
+    authorization.add_argument("new_policy", type=Path)
+    authorization.add_argument("--evidence", type=Path, required=True)
+    authorization.add_argument(
+        "--allow-project-increase",
+        action="store_true",
+        help="Allow a project-cap increase explicitly listed in the evidence",
+    )
+    for command in (status, reconcile, total, authorization):
         command.add_argument("--ledger", type=Path, default=Path("runs/spend.sqlite3"))
         command.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     reconcile.add_argument("request_id")
@@ -559,6 +569,13 @@ def main() -> None:
             ledger = SpendLedger(
                 options.ledger, policy=SpendPolicy.read(options.policy)
             )
+            if options.spend_command == "authorize-policy":
+                evidence = json.loads(options.evidence.read_text())
+                ledger.authorize_policy(
+                    SpendPolicy.read(options.new_policy),
+                    evidence=evidence,
+                    allow_project_increase=options.allow_project_increase,
+                )
             if options.spend_command in ("reconcile", "reconcile-total"):
                 evidence = json.loads(options.evidence.read_text())
                 if not isinstance(evidence, dict):

@@ -387,9 +387,23 @@ class OPSDRun:
             latest = json.loads(self.path.read_text())
             if latest != self.record:
                 raise ValueError("OPSD progress changed; reopen the run with resume")
+            source = metadata["data_source"]
+            monitor_path = self.root / "monitor.json"
+            if monitor_path.exists():
+                # A run can visit several validated training sources. Keep all
+                # other metadata subject to the normal immutable-config check.
+                metadata["data_source"] = json.loads(monitor_path.read_text())[
+                    "config"
+                ]["data_source"]
             self.monitor = RunMonitor(
                 self.root, self.monitoring, phase=self.config.group, metadata=metadata
             )
+            known = metadata["data_source"]
+            sources = known.get("sources", [known])
+            if source not in sources:
+                self.monitor.update_metadata(
+                    {"data_source": {"sources": [*sources, source]}}
+                )
         except BaseException:
             self._release_lock()
             raise
@@ -620,6 +634,10 @@ class OPSDRun:
             ):
                 raise ValueError(
                     f"Episode cannot supply valid supervision: {result.status}"
+                )
+            if result.budget_kind == "spend" and not result.trajectory:
+                raise BudgetRefused(
+                    "No rollout fits within the remaining cash allocation"
                 )
             validate_history(asdict(result), task, model.encoding, condition.protocol)
             if result.policy != self.record["student_policy"] or not result.trajectory:

@@ -43,7 +43,9 @@ class Training:
 
     def optim_step(self, params: Any) -> Future:
         def complete() -> Any:
-            if os.environ.get("FAKE_OPTIM_FAIL"):
+            if os.environ.get("FAKE_OPTIM_FAIL") or os.environ.get(
+                "FAKE_OPTIM_FAIL_STEP"
+            ) == str(self.state["optimizer_step"] + 1):
                 raise TimeoutError("update still pending")
             self.state["optimizer_step"] += 1
             self.path.write_text(json.dumps(self.state))

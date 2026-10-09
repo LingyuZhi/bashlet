@@ -25,3 +25,7 @@ CONTEXT.md
 .ruff_cache/
 .uv-cache/
 runs/
+outputs/
+
+# Private env variables
+.env

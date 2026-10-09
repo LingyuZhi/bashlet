@@ -146,6 +146,62 @@ class SpendLedger:
             )
         self.path.chmod(0o600)
 
+    def authorize_policy(
+        self,
+        policy: SpendPolicy,
+        *,
+        evidence: dict[str, Any],
+        allow_project_increase: bool = False,
+    ) -> None:
+        """Apply an explicit cash authorization without resetting any charges.
+
+        Ordinary reopening still cannot raise limits. This separate operation
+        records the authorization and both policies in the same transaction.
+        Project caps remain fixed unless explicitly approved in the evidence.
+        """
+        policy.validate()
+        if not evidence or not isinstance(evidence, dict):
+            raise ValueError("Cash authorization evidence must be a non-empty object")
+        encoded = json.dumps(asdict(policy), sort_keys=True, allow_nan=False)
+        with self._transaction() as db:
+            previous = json.loads(
+                db.execute("SELECT value FROM metadata WHERE key='policy'").fetchone()[
+                    0
+                ]
+            )
+            current = asdict(policy)
+            caps = ("regular_cny", "reserve_cny", "project_cny")
+            changed = any(previous[name] != current[name] for name in caps)
+            approved_increase = (
+                allow_project_increase
+                and evidence.get("approved_project_limits")
+                == {name: current[name] for name in caps}
+                and current["regular_cny"] >= previous["regular_cny"]
+                and current["project_cny"] >= previous["project_cny"]
+                and current["reserve_cny"] == previous["reserve_cny"]
+            )
+            if (changed and not approved_increase) or any(
+                name not in policy.groups for name in previous["groups"]
+            ):
+                raise ValueError(
+                    "Authorization must retain project caps and allocations"
+                )
+            if policy.funded_cny > policy.project_cny:
+                raise ValueError("Authorized cash cannot exceed the project ceiling")
+            if previous == current:
+                self.policy = policy
+                return
+            event = json.dumps(
+                {"previous": previous, "current": current, "authorization": evidence},
+                allow_nan=False,
+            )
+            db.execute("UPDATE metadata SET value=? WHERE key='policy'", (encoded,))
+            db.execute(
+                "INSERT INTO events VALUES ('policy_authorization', ?, ?)",
+                (datetime.now(UTC).isoformat(), event),
+            )
+        self.policy = policy
+
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
         db = sqlite3.connect(self.path, timeout=30)

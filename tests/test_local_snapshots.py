@@ -160,6 +160,105 @@ def test_export_preserves_the_existing_sampler_identity_and_download_hashes(
     )
 
 
+def opsd_export_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    training = export_fixture(tmp_path, monkeypatch)
+    (training / "training.json").unlink()
+    encoding = {"format": "test-encoding", "thinking": False}
+    update = {
+        "optimizer_step": 12,
+        "student_policy": f"pytrio/{BASE}@{SAMPLER}",
+        "training_state": "trio://run-test/weights/state-0012",
+    }
+    (training / "opsd.json").write_text(
+        json.dumps(
+            {
+                "snapshot": {"encoding": "test-training-encoding"},
+                "encoding_details": encoding,
+                "batches": [{"status": "completed", "update": update}],
+            }
+        )
+    )
+    (training / "backend.json").write_text(
+        json.dumps(
+            {
+                "sdk_version": "0.2.9",
+                "config": {"base_model": BASE},
+                "server_model_revision": None,
+                "initial_training_run_cuid": "run-before-resume",
+                "encoding": encoding,
+                "updates": [
+                    {
+                        "optimizer_step": 12,
+                        "status": "completed",
+                        "training_run_cuid": "run-test",
+                        "sampler": SAMPLER,
+                        "training_state": update["training_state"],
+                    }
+                ],
+            }
+        )
+    )
+    return training
+
+
+def test_export_opsd_uses_the_resumed_run_and_preserves_both_source_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    training = opsd_export_fixture(tmp_path, monkeypatch)
+    output = tmp_path / "export"
+    process = cli(
+        "export-snapshot",
+        str(training),
+        "--step",
+        "12",
+        "--output-dir",
+        str(output),
+        cwd=tmp_path,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    record = json.loads((output / "export.json").read_text())
+    assert record["remote_training_run"]["training_run_id"] == "run-test"
+    assert record["checkpoint"]["path"] == SAMPLER
+    assert record["training_encoding_details"] == {
+        "format": "test-encoding",
+        "thinking": False,
+    }
+    assert set(record["source_records"]) == {"opsd.json", "backend.json"}
+    for name, source in record["source_records"].items():
+        original = (training / name).read_bytes()
+        assert Path(source["path"]).read_bytes() == original
+        assert source["sha256"] == hashlib.sha256(original).hexdigest()
+    assert record["training_record"] == record["source_records"]["opsd.json"]["path"]
+
+
+@pytest.mark.parametrize("problem", ["encoding", "checkpoint", "pending"])
+def test_export_opsd_rejects_unconfirmed_checkpoint_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, problem: str
+) -> None:
+    training = opsd_export_fixture(tmp_path, monkeypatch)
+    backend_path = training / "backend.json"
+    backend = json.loads(backend_path.read_text())
+    if problem == "encoding":
+        backend["encoding"]["thinking"] = True
+    elif problem == "checkpoint":
+        backend["updates"][0]["sampler"] = SAMPLER.replace("run-test", "run-other")
+    else:
+        backend["updates"][0]["status"] = "pending"
+    backend_path.write_text(json.dumps(backend))
+    output = tmp_path / "export"
+    process = cli(
+        "export-snapshot",
+        str(training),
+        "--step",
+        "12",
+        "--output-dir",
+        str(output),
+        cwd=tmp_path,
+    )
+    assert process.returncode != 0
+    assert not (output / "export.json").exists()
+
+
 def tensor_file(path: Path, shapes: dict[str, list[int]]) -> None:
     """A tiny valid external safetensors checkpoint with literal tensor dimensions."""
     header: dict[str, Any] = {}

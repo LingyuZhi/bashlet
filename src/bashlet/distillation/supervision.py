@@ -112,6 +112,7 @@ def build_supervision(
         "auto_shift": False,
         "distillation_coefficient": config.distillation_coefficient,
         "supervised_tokens": len(differences),
+        "nonzero_signal_tokens": int(np.count_nonzero(advantage_values)),
         "spans": spans,
         "sampled_token_reverse_kl": math.fsum(differences) / len(differences),
         "kl_denominator": "supervised sampled student tokens",
