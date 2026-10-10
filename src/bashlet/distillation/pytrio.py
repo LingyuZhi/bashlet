@@ -514,6 +514,12 @@ class PyTRIOOPSD:
         trajectory = json.loads((episode / "run.json").read_text())
         call = trajectory["trajectory"][0]["model_call"]
         original = json.loads((episode / "private/teacher-0000.json").read_text())
+        if original["policy"] != self.teacher_identity or (
+            original["encoding"] != self.teacher_encoding.identity
+        ):
+            raise ValueError(
+                "Checkpoint scoring must preserve the original teacher identity"
+            )
         normal = trajectory["context_tokens"][
             : call["context_offset"] + len(call["generation"]["tokens"])
         ]
@@ -561,17 +567,78 @@ class PyTRIOOPSD:
             differences.append(
                 max(abs(a - b) for a, b in zip(left[1:], right[1:], strict=True))
             )
+        numeric_consistent = differences[0] <= 0.05
+        parameter_evidence = None
+        if not numeric_consistent and self.config.source == "base":
+            # Full-prefill serving can vary numerically for identical tokens.
+            # Check actual saved parameters instead of loosening the tolerance
+            # or repeatedly scoring until one response happens to match.
+            parameter_evidence = self._verify_original_parameters(run)
+        teacher_unchanged = numeric_consistent or parameter_evidence is not None
         return {
             "status": "complete"
-            if differences[0] <= 0.05 and differences[1] > 1e-6
+            if teacher_unchanged and differences[1] > 1e-6
             else "failed",
             "frozen_teacher_max_difference": differences[0],
             "student_max_difference": differences[1],
-            "frozen_teacher_unchanged": differences[0] <= 0.05,
+            "frozen_teacher_numeric_consistent": numeric_consistent,
+            "frozen_teacher_unchanged": teacher_unchanged,
             "student_probabilities_changed": differences[1] > 1e-6,
+            "parameter_evidence": parameter_evidence,
             "training_state": self.record["optimizer_restoration"],
             "student_policy": self._student.identity,
             "teacher_policy": self.teacher_identity,
             "private_scores": str(private),
-            "limitation": "Control identity and probabilities; weight hash unknown",
+            "limitation": (
+                "Control identity, probabilities and optional adapter hashes; "
+                "remote base weight hash unknown"
+            ),
         }
+
+    def _verify_original_parameters(self, run: OPSDRun) -> dict[str, Any]:
+        import json
+
+        from ..snapshots.artifacts import (
+            export_snapshot,
+            verify_original_adapter_update,
+        )
+
+        teacher = _wait(
+            self.service.create_rest_client().get_sampler(
+                self.teacher.sampling_run_cuid
+            ),
+            time.monotonic() + self.config.timeout_seconds,
+        )
+        if teacher.base_model != self.config.base_model or (
+            teacher.model_path != self.record["initial_sampler"]
+        ):
+            raise ValueError(
+                "Checkpoint parameters: frozen teacher loading identity changed"
+            )
+        self._student.verify_loaded_sampler()
+        exports = []
+        for step, sampler in (
+            (0, self.record["initial_sampler"]),
+            (run.record["optimizer_step"], self._student.model_path),
+        ):
+            directory = run.root / "checkpoint-weights" / f"step-{step}"
+            path = directory / "export.json"
+            if not path.exists():
+                path = export_snapshot(
+                    run.root,
+                    step,
+                    directory,
+                    api_key_env=self.config.api_key_env,
+                    dotenv_path=Path(self.config.dotenv_path),
+                )
+            exported = json.loads(path.read_text())
+            if exported["optimizer_step"] != step or (
+                exported["checkpoint"]["path"] != sampler
+                or exported["base_model"] != self.config.base_model
+                or exported["training_encoding"] != self.teacher_encoding.identity
+            ):
+                raise ValueError(
+                    "Checkpoint parameters: cached export identity mismatch"
+                )
+            exports.append(path)
+        return verify_original_adapter_update(*exports)

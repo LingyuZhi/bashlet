@@ -100,31 +100,41 @@ def _opsd_export_record(
         raise ValueError(f"Expected OPSD backend PyTRIO {SDK_VERSION}")
     if training["encoding_details"] != backend["encoding"]:
         raise ValueError("OPSD algorithm and backend encoding records disagree")
-    updates = [
-        item
-        for item in backend["updates"]
-        if item["optimizer_step"] == step and item["status"] == "completed"
-    ]
-    if len(updates) != 1:
-        raise ValueError("Select exactly one existing sampler checkpoint")
-    update = updates[0]
     base_model = backend["config"]["base_model"]
-    policy = f"pytrio/{base_model}@{update['sampler']}"
-    algorithm_updates = [
-        batch["update"]
-        for batch in training["batches"]
-        if batch["status"] == "completed"
-        and batch.get("update", {}).get("optimizer_step") == step
-    ]
-    if (
-        len(algorithm_updates) != 1
-        or algorithm_updates[0]["student_policy"] != policy
-        or algorithm_updates[0]["training_state"] != update["training_state"]
-        or not update["sampler"].startswith(
-            f"trio://{update['training_run_cuid']}/sampler_weights/"
-        )
-    ):
-        raise ValueError("OPSD algorithm and backend checkpoint records disagree")
+    if step == 0:
+        sampler = backend["initial_sampler"]
+        run_id = backend["initial_training_run_cuid"]
+        if (
+            backend["source"] != "base"
+            or training["snapshot"].get("stage") != "base"
+            or training["snapshot"].get("identity") != f"pytrio/{base_model}@{sampler}"
+            or not sampler.startswith(f"trio://{run_id}/sampler_weights/")
+        ):
+            raise ValueError("Original OPSD snapshot differs from its saved checkpoint")
+    else:
+        updates = [
+            item
+            for item in backend["updates"]
+            if item["optimizer_step"] == step and item["status"] == "completed"
+        ]
+        if len(updates) != 1:
+            raise ValueError("Select exactly one existing sampler checkpoint")
+        update = updates[0]
+        sampler, run_id = update["sampler"], update["training_run_cuid"]
+        policy = f"pytrio/{base_model}@{sampler}"
+        algorithm_updates = [
+            batch["update"]
+            for batch in training["batches"]
+            if batch["status"] == "completed"
+            and batch.get("update", {}).get("optimizer_step") == step
+        ]
+        if (
+            len(algorithm_updates) != 1
+            or algorithm_updates[0]["student_policy"] != policy
+            or algorithm_updates[0]["training_state"] != update["training_state"]
+            or not sampler.startswith(f"trio://{run_id}/sampler_weights/")
+        ):
+            raise ValueError("OPSD algorithm and backend checkpoint records disagree")
     return {
         "metadata": {
             "base_model": base_model,
@@ -134,8 +144,8 @@ def _opsd_export_record(
         "checkpoints": [
             {
                 "optimizer_step": step,
-                "training_run_cuid": update["training_run_cuid"],
-                "sampler": {"kind": "sampler_weights", "path": update["sampler"]},
+                "training_run_cuid": run_id,
+                "sampler": {"kind": "sampler_weights", "path": sampler},
             }
         ],
     }
@@ -260,6 +270,117 @@ def export_snapshot(
         },
     )
     return destination
+
+
+def verify_original_adapter_update(
+    initial_path: Path, updated_path: Path
+) -> dict[str, Any]:
+    """Check downloaded original-base LoRA parameters, independently of scores."""
+    exports = []
+    tensors = []
+    for path in (initial_path, updated_path):
+        exported = json.loads(path.read_text())
+        for name, digest in exported["files_sha256"].items():
+            relative = PurePosixPath(name)
+            if (
+                relative.is_absolute()
+                or ".." in relative.parts
+                or (file_sha256(path.parent / "adapter" / name) != digest)
+            ):
+                raise ValueError("Checkpoint parameters: exported file hash mismatch")
+        if (
+            file_sha256(path.parent / "checkpoint.archive")
+            != exported["archive_sha256"]
+        ):
+            raise ValueError("Checkpoint parameters: archive hash mismatch")
+        source = {}
+        for name, saved in exported["source_records"].items():
+            archived = Path(saved["path"])
+            if file_sha256(archived) != saved["sha256"]:
+                raise ValueError("Checkpoint parameters: source record hash mismatch")
+            source[name] = json.loads(archived.read_text())
+        selected = _opsd_export_record(
+            source["opsd.json"], source["backend.json"], exported["optimizer_step"]
+        )["checkpoints"][0]
+        if selected["sampler"]["path"] != exported["checkpoint"]["path"]:
+            raise ValueError("Checkpoint parameters: archived sampler mismatch")
+        config = json.loads((path.parent / "adapter/adapter_config.json").read_text())
+        if config != exported["adapter_config"] or config.get("bias", "none") != "none":
+            raise ValueError("Checkpoint parameters: adapter configuration mismatch")
+        exports.append(exported)
+        tensors.append(_raw_tensors(path.parent / "adapter/adapter_model.safetensors"))
+    initial, updated = exports
+    if (
+        initial["optimizer_step"] != 0
+        or updated["optimizer_step"] < 1
+        or any(
+            initial[key] != updated[key]
+            for key in (
+                "base_model",
+                "training_encoding",
+                "training_encoding_details",
+                "adapter_config",
+            )
+        )
+        or not tensors[0]
+        or tensors[0].keys() != tensors[1].keys()
+    ):
+        raise ValueError(
+            "Checkpoint parameters: incompatible original and updated adapters"
+        )
+    rank = initial["adapter_config"]["r"]
+    changed = b_matrices = nonzero_b = 0
+    for name, left in tensors[0].items():
+        right = tensors[1][name]
+        if (
+            left["shape"] != right["shape"]
+            or left["dtype"] != right["dtype"]
+            or (left["dtype"] not in _DTYPE_NAMES or len(left["shape"]) != 2)
+        ):
+            raise ValueError("Checkpoint parameters: tensor shape or dtype mismatch")
+        values = [
+            np.frombuffer(t["data"], dtype=_DTYPE_NAMES[t["dtype"]]).reshape(t["shape"])
+            for t in (left, right)
+        ]
+        if any(not np.isfinite(value).all() for value in values):
+            raise ValueError("Checkpoint parameters: nonfinite adapter tensor")
+        if name.endswith(".lora_B.weight"):
+            paired = name.replace(".lora_B.weight", ".lora_A.weight")
+            if (
+                paired not in tensors[0]
+                or left["shape"][1] != rank
+                or (tensors[0][paired]["shape"][0] != rank)
+                or np.count_nonzero(values[0])
+            ):
+                raise ValueError(
+                    "Checkpoint parameters: initial LoRA delta is not zero"
+                )
+            b_matrices += 1
+            nonzero_b += int(np.count_nonzero(values[1]))
+        elif not name.endswith(".lora_A.weight") or (
+            name.replace(".lora_A.weight", ".lora_B.weight") not in tensors[0]
+        ):
+            raise ValueError("Checkpoint parameters: unsupported adapter tensor")
+        changed += not np.array_equal(values[0], values[1])
+    if not b_matrices or not nonzero_b or not changed:
+        raise ValueError("Checkpoint parameters: student adapter did not change")
+    return {
+        "initial_export": str(initial_path),
+        "updated_export": str(updated_path),
+        "initial_export_sha256": file_sha256(initial_path),
+        "updated_export_sha256": file_sha256(updated_path),
+        "initial_weights_sha256": initial["files_sha256"]["adapter_model.safetensors"],
+        "updated_weights_sha256": updated["files_sha256"]["adapter_model.safetensors"],
+        "initial_b_all_zero": True,
+        "b_matrices": b_matrices,
+        "updated_nonzero_b_values": nonzero_b,
+        "changed_tensors": changed,
+        "server_model_revision": initial["server_model_revision"],
+        "limitation": (
+            "Downloaded adapters and Control loading identity; "
+            "remote base weight hash unknown"
+        ),
+    }
 
 
 def prepare_local_snapshot(

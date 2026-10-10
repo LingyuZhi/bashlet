@@ -292,6 +292,21 @@ def main() -> None:
     )
     verify_opsd.add_argument("pilot_config", type=Path)
     verify_opsd.add_argument("--output-dir", type=Path, required=True)
+    verify_opsd.add_argument(
+        "--retry", action="store_true", help="Retry a previously failed verification"
+    )
+    verify_opsd.add_argument(
+        "--native", action="store_true", help="Run native template and token checks"
+    )
+    opsd_watch = commands.add_parser(
+        "watch-opsd", help="Monitor and safely resume the frozen expanded OPSD run"
+    )
+    opsd_watch.add_argument(
+        "--config", type=Path, default=Path("configs/opsd-expanded-monitor-v1.yaml")
+    )
+    opsd_watch.add_argument(
+        "--once", action="store_true", help="Record one monitoring cycle and exit"
+    )
     selection = commands.add_parser(
         "select-sft", help="Select a saved SFT snapshot using development results"
     )
@@ -386,10 +401,20 @@ def main() -> None:
         if options.command == "verify-opsd":
             from .distillation.pilot import verify_opsd_checkpoints
 
-            path = verify_opsd_checkpoints(options.pilot_config, options.output_dir)
+            path = verify_opsd_checkpoints(
+                options.pilot_config,
+                options.output_dir,
+                retry=options.retry,
+                native=options.native,
+            )
             record = json.loads(path.read_text())
             print(f"{record['status']}\n{path}")
             raise SystemExit(0 if record["status"] == "complete" else 2)
+        if options.command == "watch-opsd":
+            from .distillation.watchdog import run_watch
+
+            run_watch(options.config, once=options.once)
+            return
         if options.command == "train-opsd":
             from .distillation.pilot import run_opsd_pilot
 

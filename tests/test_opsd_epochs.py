@@ -476,3 +476,130 @@ def test_explicit_mode_and_unfinished_thinking_retain_original_supervision(
         assert (
             request["loss_fn_inputs"]["target_tokens"][start : start + len(raw)] == raw
         )
+
+
+def test_checkpoint_verification_uses_parameters_when_frozen_scores_vary(
+    epoch_pilot: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, root = epoch_pilot
+    settings = yaml.safe_load(config.read_text())
+    settings.update(epochs=1, train_task_ids=["mbpp/602"], evaluation_seeds=[4])
+    config.write_text(yaml.safe_dump(settings))
+    trained = cli(
+        "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert trained.returncode == 0, trained.stdout + trained.stderr
+    monkeypatch.setenv("FAKE_FROZEN_SCORE_VARIATION", "1")
+    verified = cli(
+        "verify-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert verified.returncode == 0, verified.stdout + verified.stderr
+    proof = json.loads((root / "checkpoint-validation.json").read_text())
+    assert not proof["frozen_teacher_numeric_consistent"]
+    assert proof["frozen_teacher_unchanged"]
+    assert proof["parameter_evidence"]["initial_b_all_zero"]
+    assert proof["parameter_evidence"]["changed_tensors"] > 0
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "FAKE_TEACHER_WEIGHTS_CHANGED",
+        "FAKE_STUDENT_WEIGHTS_UNCHANGED",
+        "tampered_export",
+    ],
+)
+def test_checkpoint_parameter_evidence_rejects_wrong_weights(
+    epoch_pilot: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    damage: str,
+) -> None:
+    config, root = epoch_pilot
+    settings = yaml.safe_load(config.read_text())
+    settings.update(epochs=1, train_task_ids=["mbpp/602"], evaluation_seeds=[4])
+    config.write_text(yaml.safe_dump(settings))
+    trained = cli(
+        "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert trained.returncode == 0, trained.stdout + trained.stderr
+    monkeypatch.setenv("FAKE_FROZEN_SCORE_VARIATION", "1")
+    if damage == "tampered_export":
+        exported = root / "training/checkpoint-weights/step-0"
+        saved = cli(
+            "export-snapshot",
+            str(root / "training"),
+            "--step",
+            "0",
+            "--output-dir",
+            str(exported),
+            "--api-key-env",
+            "pytrio_api_key",
+            cwd=tmp_path,
+            timeout=90,
+        )
+        assert saved.returncode == 0, saved.stdout + saved.stderr
+        with (exported / "adapter/adapter_model.safetensors").open("ab") as stream:
+            stream.write(b"corrupt")
+    else:
+        monkeypatch.setenv(damage, "1")
+    verified = cli(
+        "verify-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert verified.returncode == 2
+    proof = json.loads((root / "checkpoint-validation.json").read_text())
+    assert proof["status"] == "failed"
+    assert proof["reason"].startswith("Checkpoint parameters:")
+
+
+def test_checkpoint_retry_preserves_failure_and_does_not_repeat_updates(
+    epoch_pilot: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, root = epoch_pilot
+    settings = yaml.safe_load(config.read_text())
+    settings.update(epochs=1, train_task_ids=["mbpp/602"], evaluation_seeds=[4])
+    config.write_text(yaml.safe_dump(settings))
+    trained = cli(
+        "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert trained.returncode == 0, trained.stdout + trained.stderr
+    updates = (tmp_path / "sdk-updates.json").read_bytes()
+    monkeypatch.setenv("FAKE_FROZEN_SCORE_INVALID", "1")
+    failed = cli(
+        "verify-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert failed.returncode == 2
+    path = root / "checkpoint-validation.json"
+    previous = path.read_bytes()
+    scores = (root / "training/checkpoint-scores.json").read_bytes()
+    monkeypatch.delenv("FAKE_FROZEN_SCORE_INVALID")
+    monkeypatch.setenv("FAKE_FROZEN_SCORE_VARIATION", "1")
+    resumed = cli(
+        "verify-opsd",
+        str(config),
+        "--output-dir",
+        str(root),
+        "--retry",
+        cwd=tmp_path,
+        timeout=90,
+    )
+    assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+    proof = json.loads(path.read_text())
+    assert proof["verification_attempt"] == 2
+    archive = proof["previous_attempts"][0]
+    assert Path(archive["checkpoint-validation.json"]["path"]).read_bytes() == previous
+    assert Path(archive["checkpoint-scores.json"]["path"]).read_bytes() == scores
+    assert (tmp_path / "sdk-updates.json").read_bytes() == updates
+    # A successful proof cannot be replaced or trigger another paid probe.
+    complete = path.read_bytes()
+    rejected = cli(
+        "verify-opsd",
+        str(config),
+        "--output-dir",
+        str(root),
+        "--retry",
+        cwd=tmp_path,
+        timeout=90,
+    )
+    assert rejected.returncode == 2
+    assert path.read_bytes() == complete

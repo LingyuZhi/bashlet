@@ -672,7 +672,7 @@ def run_opsd_pilot(
 
 
 def verify_opsd_checkpoints(
-    config_path: Path, output_dir: Path, *, native: bool = False
+    config_path: Path, output_dir: Path, *, native: bool = False, retry: bool = False
 ) -> Path:
     """Verify the saved training state without another optimizer update."""
     root = output_dir.resolve()
@@ -687,9 +687,47 @@ def verify_opsd_checkpoints(
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError("Pilot is already active") from None
+        history = []
         if path.exists():
-            raise ValueError("Checkpoint validation exists; do not repeat paid probes")
+            previous = json.loads(path.read_text())
+            if not retry or previous.get("status") not in ("started", "failed"):
+                raise ValueError(
+                    "Checkpoint validation exists; do not repeat paid probes"
+                )
+            workflow_path = root.parent / "workflow.json"
+            if workflow_path.exists() and json.loads(workflow_path.read_text()).get(
+                "preflight_sha256"
+            ):
+                raise ValueError("Accepted preflight evidence cannot be replaced")
+            training_record = json.loads((root / "training/opsd.json").read_text())
+            if (
+                training_record["pending_update"] is not None
+                or ledger.snapshot()["pending_cny"]
+            ):
+                raise ValueError(
+                    "Checkpoint retry requires settled updates and requests"
+                )
+            history = list(previous.get("previous_attempts", []))
+            directory = (
+                root / "verification-attempts" / f"attempt-{len(history) + 1:04d}"
+            )
+            directory.mkdir(parents=True, exist_ok=False)
+            archived = {}
+            for source in (path, root / "training/checkpoint-scores.json"):
+                if source.exists():
+                    content = source.read_bytes()
+                    destination = directory / source.name
+                    destination.write_bytes(content)
+                    archived[source.name] = {
+                        "path": str(destination),
+                        "sha256": hashlib.sha256(content).hexdigest(),
+                    }
+            history.append(archived)
+        elif retry:
+            raise ValueError("No failed checkpoint validation exists to retry")
+        attempt = len(history) + 1
         record: dict[str, Any] = {"status": "started"}
+        record.update(verification_attempt=attempt, previous_attempts=history)
         write_document(path, record)
         try:
             _, backend_config = resolve_condition(config)
@@ -716,12 +754,20 @@ def verify_opsd_checkpoints(
                     config_path, root, adapter, run
                 )
         except BaseException as error:
-            record = {"status": "failed", "error_type": type(error).__name__}
+            record.update(status="failed", error_type=type(error).__name__)
             if isinstance(error, ValueError) and str(error).startswith(
-                ("Native preflight", "Truncated thinking", "Real truncation")
+                (
+                    "Native preflight",
+                    "Truncated thinking",
+                    "Real truncation",
+                    "Checkpoint parameters",
+                    "Checkpoint scoring",
+                    "Checkpoint probabilities",
+                )
             ):
                 record["reason"] = str(error)
         finally:
+            record.update(verification_attempt=attempt, previous_attempts=history)
             record["cost"] = _cost(
                 ledger,
                 training.group,
@@ -737,7 +783,7 @@ def verify_opsd_checkpoints(
             write_document(pilot_path, pilot)
             monitor = RunMonitor.resume(root / "summary")
             monitor.log(
-                "checkpoint-validation",
+                f"checkpoint-validation-attempt-{attempt}",
                 {
                     "run/status": record["status"],
                     "checkpoint/verified": record["status"] == "complete",

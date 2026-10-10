@@ -84,6 +84,15 @@ class Trainer(Training):
 
         return Future(saved)
 
+    def save_weights_for_sampler(self, name: str) -> Future:
+        return Future(
+            lambda: SimpleNamespace(
+                path=f"trio://train-test/sampler_weights/{name}",
+                model=self.model_id,
+                size=10,
+            )
+        )
+
 
 class Service:
     workspace_cuid = "test-workspace"
@@ -187,6 +196,10 @@ class Service:
                     if "Reference implementation (teacher only)" in context
                     else -0.25
                 )
+                if os.environ.get("FAKE_FROZEN_SCORE_VARIATION"):
+                    probability -= 0.2
+                if os.environ.get("FAKE_FROZEN_SCORE_INVALID"):
+                    probability = 0.1
                 return APIFuture.completed(
                     [None, *([probability] * (prompt.length - 1))]
                 )
@@ -207,7 +220,86 @@ class Service:
                 )
             )
 
-        return SimpleNamespace(get_sampler=metadata)
+        def response(data: dict[str, Any]) -> Any:
+            return SimpleNamespace(**data, model_dump=lambda **kwargs: data)
+
+        def checkpoints(run: str) -> Future:
+            return Future(
+                lambda: SimpleNamespace(
+                    checkpoints=[
+                        response(
+                            {
+                                "checkpoint_id": f"ckpt-{step}",
+                                "checkpoint_type": "sampler",
+                                "path": f"trio://{run}/sampler_weights/sampler-{step:04d}",
+                            }
+                        )
+                        for step in range(5)
+                    ]
+                )
+            )
+
+        def download(checkpoint: str, destination: Path, **kwargs: Any) -> Future:
+            def saved() -> Any:
+                import tempfile
+                import zipfile
+
+                import numpy as np
+                from safetensors.numpy import save_file
+
+                step = int(checkpoint.removeprefix("ckpt-"))
+                value = float(step > 0)
+                if os.environ.get("FAKE_TEACHER_WEIGHTS_CHANGED") and step == 0:
+                    value = 1.0
+                if os.environ.get("FAKE_STUDENT_WEIGHTS_UNCHANGED"):
+                    value = 0.0
+                with tempfile.TemporaryDirectory() as temporary:
+                    weights = Path(temporary) / "adapter_model.safetensors"
+                    save_file(
+                        {
+                            "q_proj.lora_A.weight": np.ones((16, 2), dtype=np.float32),
+                            "q_proj.lora_B.weight": np.full(
+                                (2, 16), value, dtype=np.float32
+                            ),
+                        },
+                        weights,
+                    )
+                    with zipfile.ZipFile(destination, "w") as zipped:
+                        zipped.write(weights, "checkpoint/adapter_model.safetensors")
+                        zipped.writestr(
+                            "checkpoint/adapter_config.json",
+                            json.dumps(
+                                {
+                                    "peft_type": "LORA",
+                                    "r": 16,
+                                    "lora_alpha": 32,
+                                    "base_model_name_or_path": Training.model_id,
+                                    "target_modules": ["q_proj"],
+                                }
+                            ),
+                        )
+                return response(
+                    {"checkpoint_id": checkpoint, "status_code": 200, "resumed": False}
+                )
+
+            return Future(saved)
+
+        return SimpleNamespace(
+            get_sampler=metadata,
+            get_training_run=lambda run: Future(
+                lambda: response(
+                    {
+                        "training_run_id": run,
+                        "base_model": Training.model_id,
+                        "is_lora": True,
+                        "corrupted": False,
+                        "lora_rank": 16,
+                    }
+                )
+            ),
+            list_checkpoints=checkpoints,
+            download_checkpoint=download,
+        )
 
 
 def install() -> None:

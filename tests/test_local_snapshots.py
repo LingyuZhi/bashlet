@@ -201,6 +201,38 @@ def opsd_export_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
     return training
 
 
+def test_export_opsd_initial_teacher_uses_the_original_saved_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    training = opsd_export_fixture(tmp_path, monkeypatch)
+    backend_path = training / "backend.json"
+    backend = json.loads(backend_path.read_text())
+    backend.update(
+        source="base", initial_sampler=SAMPLER, initial_training_run_cuid="run-test"
+    )
+    backend["updates"][0]["sampler"] = "trio://later/sampler_weights/sampler-0012"
+    backend_path.write_text(json.dumps(backend))
+    path = training / "opsd.json"
+    record = json.loads(path.read_text())
+    record["snapshot"].update(identity=f"pytrio/{BASE}@{SAMPLER}", stage="base")
+    path.write_text(json.dumps(record))
+    output = tmp_path / "initial-export"
+    process = cli(
+        "export-snapshot",
+        str(training),
+        "--step",
+        "0",
+        "--output-dir",
+        str(output),
+        cwd=tmp_path,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    proof = json.loads((output / "export.json").read_text())
+    assert proof["optimizer_step"] == 0
+    assert proof["checkpoint"]["path"] == SAMPLER
+    assert proof["checkpoint"]["checkpoint_id"] == "ckpt-test"
+
+
 def test_export_opsd_uses_the_resumed_run_and_preserves_both_source_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,0 +1,30 @@
+schema_version: 1
+repository_root: ..
+monitor_session: bashlet-opsd-expanded-monitor-20261010
+worker:
+  session: bashlet-opsd-expanded-20261009
+  log: runs/issue32-four-epoch-20261009/workflow.log
+  command:
+    - bash
+    - scripts/train-expanded-opsd.sh
+    - --resume
+paths:
+  monitor_root: runs/issue32-four-epoch-20261009/monitor
+  workflow: runs/issue32-four-epoch-20261009/workflow.json
+  preflight_pilot: runs/issue32-four-epoch-20261009/preflight/pilot.json
+  preflight_training: runs/issue32-four-epoch-20261009/preflight/training/opsd.json
+  preflight_validation: runs/issue32-four-epoch-20261009/preflight/checkpoint-validation.json
+  formal_pilot: runs/issue32-four-epoch-20261009/formal/pilot.json
+  formal_training: runs/issue32-four-epoch-20261009/formal/training/opsd.json
+  ledger: runs/spend.sqlite3
+frozen_configurations:
+  - configs/opsd-expanded-v1.yaml
+  - configs/opsd-expanded-preflight-v1.yaml
+ledger_groups:
+  - opsd-expanded-preflight-v1
+  - opsd-expanded-train-v1
+  - opsd-expanded-dev-v1
+timing:
+  poll_seconds: 30
+  backoff_min_seconds: 60
+  backoff_max_seconds: 600
