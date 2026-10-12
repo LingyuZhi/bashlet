@@ -125,8 +125,7 @@ def _opsd_export_record(
         algorithm_updates = [
             batch["update"]
             for batch in training["batches"]
-            if batch["status"] == "completed"
-            and batch.get("update", {}).get("optimizer_step") == step
+            if batch.get("update", {}).get("optimizer_step") == step
         ]
         if (
             len(algorithm_updates) != 1
@@ -390,6 +389,7 @@ def prepare_local_snapshot(
     *,
     export_path: Path | None = None,
     merge: bool = False,
+    thinking: bool = False,
 ) -> Path:
     """Bind local weights to their tokenizer and an immutable inference manifest."""
     if len(model_revision) != 40 or any(
@@ -405,7 +405,9 @@ def prepare_local_snapshot(
         raise ValueError("Local base model weights are missing")
     from ..encoding import QwenChatMLEncoding
 
-    encoding = QwenChatMLEncoding(str(base_path), revision=model_revision)
+    encoding = QwenChatMLEncoding(
+        str(base_path), revision=model_revision, thinking=thinking
+    )
     files = {
         path.name: file_sha256(path)
         for path in sorted(base_path.iterdir())

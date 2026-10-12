@@ -257,10 +257,14 @@ class Service:
                     weights = Path(temporary) / "adapter_model.safetensors"
                     save_file(
                         {
-                            "q_proj.lora_A.weight": np.ones((16, 2), dtype=np.float32),
-                            "q_proj.lora_B.weight": np.full(
-                                (2, 16), value, dtype=np.float32
-                            ),
+                            (
+                                "model.language_model.layers.0.self_attn.q_proj."
+                                "lora_A.weight"
+                            ): np.ones((16, 2), dtype=np.float32),
+                            (
+                                "model.language_model.layers.0.self_attn.q_proj."
+                                "lora_B.weight"
+                            ): np.full((2, 16), value, dtype=np.float32),
                         },
                         weights,
                     )

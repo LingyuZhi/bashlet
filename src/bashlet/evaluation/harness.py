@@ -61,7 +61,7 @@ def effective_comparison(record: dict[str, Any]) -> dict[str, Any]:
     return comparison
 
 
-def _tasks(plan_path: Path) -> tuple[dict[str, Any], list[Task]]:
+def _tasks(plan_path: Path, *, split: str = "dev") -> tuple[dict[str, Any], list[Task]]:
     plan = json.loads(plan_path.read_text())
     if not isinstance(plan, dict) or set(plan) != {
         "version",
@@ -79,10 +79,8 @@ def _tasks(plan_path: Path) -> tuple[dict[str, Any], list[Task]]:
         or not plan["name"]
     ):
         raise ValueError("Unknown evaluation version or empty name")
-    if plan["split"] != "dev":
-        raise ValueError(
-            "Development evaluation requires split=dev; held-out is frozen"
-        )
+    if plan["split"] != split or split not in {"dev", "test"}:
+        raise ValueError(f"Evaluation requires split={split}; held-out is frozen")
     task_ids = plan["task_ids"]
     if (
         not isinstance(task_ids, list)
@@ -94,7 +92,7 @@ def _tasks(plan_path: Path) -> tuple[dict[str, Any], list[Task]]:
     manifest_path = (plan_path.parent / plan["manifest"]).resolve()
     tasks = [
         task_from_record(
-            json.loads(task_path(manifest_path, task_id, "dev").read_text())
+            json.loads(task_path(manifest_path, task_id, split).read_text())
         )
         for task_id in task_ids
     ]
@@ -259,6 +257,87 @@ def _episode_row(row: dict[str, Any], path: Path, episode: dict[str, Any]) -> No
     }
 
 
+def _import_results(
+    source: Path,
+    record: dict[str, Any],
+    source_snapshot: str,
+    *,
+    retry_infrastructure: bool,
+    expected_source_sha256: str | None,
+) -> None:
+    """Import terminal evidence explicitly; never rewrite or relabel its source."""
+    from ..snapshots import encoding_condition
+
+    raw = source.read_bytes()
+    source_digest = hashlib.sha256(raw).hexdigest()
+    if expected_source_sha256 is not None and source_digest != expected_source_sha256:
+        raise ValueError(
+            "Historical evaluation evidence differs from its saved receipt"
+        )
+    if record["evidence_kind"] == "experimental" and expected_source_sha256 is None:
+        raise ValueError(
+            "Historical experimental evaluation requires its saved receipt"
+        )
+    previous = json.loads(raw)
+    if previous["snapshot"] != source_snapshot or (
+        previous["plan"] != record["plan"]
+        or previous["evidence_kind"] != record["evidence_kind"]
+        or previous["comparison_sha256"] != _digest(previous["comparison"])
+    ):
+        raise ValueError("Historical evaluation snapshot, plan or evidence mismatch")
+    for key in ("protocol", "environment", "budget", "sampling", "track"):
+        if _digest(previous["comparison"].get(key)) != _digest(
+            record["comparison"].get(key)
+        ):
+            raise ValueError("Historical evaluation tasks and conditions must match")
+    old_encoding, new_encoding = (
+        previous["comparison"]["encoding"],
+        record["comparison"]["encoding"],
+    )
+    if "files_sha256" in old_encoding and "files_sha256" in new_encoding:
+        old_encoding, new_encoding = map(
+            encoding_condition, (old_encoding, new_encoding)
+        )
+    if _digest(old_encoding) != _digest(new_encoding):
+        raise ValueError("Historical evaluation encoding must match")
+    if record["evidence_kind"] == "experimental":
+        details = record["snapshot_details"]
+        checkpoint = (details.get("adapter") or {}).get("checkpoint", {}).get("path")
+        if details.get("backend") != "vllm" or (
+            source_snapshot != f"pytrio/{details.get('base_model')}@{checkpoint}"
+        ):
+            raise ValueError("Local snapshot must export the historical checkpoint")
+    imported = 0
+    for row, old in zip(record["tasks"], previous["tasks"], strict=True):
+        if row["task_id"] != old["task_id"] or row["task_sha256"] != old["task_sha256"]:
+            raise ValueError("Historical evaluation task identity changed")
+        outcome = old.get("outcome", "not_started")
+        if outcome == "not_started":
+            continue
+        missing = outcome in {"infrastructure_error", "interrupted", "running"} or (
+            old.get("budget_kind") == "spend"
+        )
+        if missing and retry_infrastructure:
+            continue
+        row.update(old)
+        if old.get("run"):
+            row["run"] = str((source.parent / old["run"]).resolve())
+        row.update(evaluation_snapshot=source_snapshot, historical=True)
+        imported += not missing
+    provenance = {
+        "path": str(source.resolve()),
+        "sha256": source_digest,
+        "snapshot": source_snapshot,
+        "imported_tasks": imported,
+        "retry_infrastructure": retry_infrastructure,
+        "cost": previous.get("cost"),
+    }
+    record.update(historical_source=provenance, mixed_inference=True)
+    record["comparison"]["historical_source"] = {
+        key: provenance[key] for key in ("path", "sha256", "snapshot")
+    }
+
+
 def evaluate(
     *,
     plan_path: Path,
@@ -276,9 +355,14 @@ def evaluate(
     resume_running_episodes: bool = False,
     resume_elapsed_seconds: dict[str, float] | None = None,
     require_online: bool | None = None,
+    continue_from: Path | None = None,
+    source_snapshot: str | None = None,
+    retry_infrastructure: bool = False,
+    plan_split: str = "dev",
+    expected_source_sha256: str | None = None,
 ) -> Path:
     """CLI orchestration; every planned attempt uses the existing experiment seam."""
-    plan, tasks = _tasks(plan_path)
+    plan, tasks = _tasks(plan_path, split=plan_split)
     track = "coding" if direct_code is not None else "harness"
     model = model if model is not None else load_model(condition.model)
     if model.identity != snapshot:
@@ -366,10 +450,22 @@ def evaluate(
         "comparison_sha256": _digest(comparison),
         "tasks": rows,
     }
+    if continue_from is not None:
+        _import_results(
+            continue_from,
+            record,
+            source_snapshot or snapshot,
+            retry_infrastructure=retry_infrastructure,
+            expected_source_sha256=expected_source_sha256,
+        )
+    elif source_snapshot is not None or retry_infrastructure:
+        raise ValueError("Historical snapshot and retry policy require --continue-from")
     previous_requests: set[str] = set()
     resumed_episodes: dict[str, Path] = {}
     if resume and path.exists():
         previous = json.loads(path.read_text())
+        if previous.get("historical_source") != record.get("historical_source"):
+            raise ValueError("Evaluation resume must preserve historical provenance")
         expected = json.loads(json.dumps(record))
         if any(
             previous.get(key) != expected[key]
@@ -505,6 +601,7 @@ def evaluate(
             )
             episode = json.loads((result.run_dir / "run.json").read_text())
             _episode_row(row, result.run_dir / "run.json", episode)
+            row["evaluation_snapshot"] = snapshot
             if (
                 local
                 and isinstance(model, VLLMModel)

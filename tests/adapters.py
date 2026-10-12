@@ -152,6 +152,18 @@ class EvaluationModel(ScriptedModel):
         return submit()
 
 
+class ContinuationEvaluationModel(EvaluationModel):
+    """A second external service, refusing any completed historical task."""
+
+    def _respond(self, context: str) -> str:
+        task = context.split("<|user|>")[1]
+        if "already_completed" in task:
+            raise RuntimeError("Historical task must not run again")
+        if turn_number(context) == 1:
+            return write_file("def double(n): return n * 2\n")
+        return submit()
+
+
 class DirectEvaluationModel(EvaluationModel):
     """Respond to either frozen evaluation prompt at the model-call boundary."""
 

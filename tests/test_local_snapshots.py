@@ -352,6 +352,25 @@ def local_service_config(base: Path) -> dict[str, Any]:
     }
 
 
+def test_local_snapshot_records_native_thinking_through_the_cli(tmp_path: Path) -> None:
+    base = base_fixture(tmp_path)
+    output = tmp_path / "thinking-snapshot"
+    prepared = cli(
+        "prepare-local-snapshot",
+        str(base),
+        "--model-revision",
+        REVISION,
+        "--output-dir",
+        str(output),
+        "--thinking",
+        cwd=tmp_path,
+    )
+    assert prepared.returncode == 0, prepared.stdout + prepared.stderr
+    manifest = json.loads((output / "snapshot.json").read_text())
+    assert manifest["encoding_details"]["thinking"] is True
+    assert manifest["encoding_details"]["assistant_header"].endswith("<think>\n")
+
+
 def test_verified_local_base_uses_the_existing_experiment_and_is_traceable(
     tmp_path: Path, service: FakeVLLM
 ) -> None:

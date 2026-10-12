@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
+import subprocess
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -34,6 +36,47 @@ def _evaluate_checkpoint(
     optimizer_step: int,
 ) -> dict[str, Any]:
     from ..evaluation.harness import _digest, _tasks
+
+    routing = root / "evaluation-routing.json"
+    if routing.exists():
+        from ..snapshots.manifest import file_sha256
+
+        receipt = json.loads(routing.read_text())
+        local_config = Path(receipt["config"])
+        if file_sha256(local_config) != receipt["sha256"]:
+            raise ValueError("Local evaluation routing configuration changed")
+        import yaml
+
+        settings = yaml.safe_load(local_config.read_text())
+        command = [
+            "uv",
+            "run",
+            "--locked",
+            "bashlet",
+            "evaluate-checkpoint",
+            str(local_config.resolve()),
+            "--phase",
+            phase,
+        ]
+        executor = settings.get("executor", [])
+        if executor:
+            remote = "cd " + shlex.quote(str(Path.cwd())) + " && " + shlex.join(command)
+            command = [*executor, "bash -lc " + shlex.quote(remote)]
+        completed = subprocess.run(command, check=False)
+        destination = Path(settings["output_dir"]).resolve() / phase / "stage.json"
+        if not destination.exists():
+            raise ValueError("Local checkpoint evaluation did not produce evidence")
+        stage: dict[str, Any] = json.loads(destination.read_text())
+        if stage["snapshot"] != snapshot or stage["optimizer_step"] != optimizer_step:
+            raise ValueError(
+                "Local checkpoint evaluation used another saved checkpoint"
+            )
+        if completed.returncode and stage["status"] == "complete":
+            raise ValueError("Local checkpoint evaluator exited abnormally")
+        record.setdefault("evaluations", {})[phase] = stage
+        record["development_curve"] = development_curve(record)
+        write_document(path, record)
+        return stage
 
     allocation = (
         "baseline"

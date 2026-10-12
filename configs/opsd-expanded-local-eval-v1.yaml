@@ -1,0 +1,21 @@
+pilot_config: configs/opsd-expanded-v1.yaml
+pilot_run: runs/issue32-four-epoch-20261009/formal
+output_dir: runs/issue32-local-eval-20261011
+historical_baseline: runs/issue32-four-epoch-20261009/formal/evaluation/baseline
+retry_infrastructure: true
+base_path: runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+model_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+api_key_env: pytrio_api_key
+condition:
+  - configs/opsd-expanded-local-condition-v1.yaml
+  - configs/bash-block-v6.yaml
+test_plan: configs/opsd-expanded-test-local-v1.json
+executor: [ssh, n30126]
+server:
+  session: bashlet-issue32-vllm-20261011
+  template: configs/local-vllm/serve-opsd-expanded.yaml
+  cuda_module: cuda/12.8
+  base_url: http://127.0.0.1:8004
+  timeout_seconds: 600
+monitoring:
+  group: opsd-expanded-local-eval-20261011

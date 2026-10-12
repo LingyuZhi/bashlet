@@ -194,12 +194,23 @@ def main() -> None:
     evaluation.add_argument("--snapshot", required=True, help="Expected model identity")
     evaluation.add_argument("--monitor-config", type=Path)
     evaluation.add_argument("--training-run", type=Path)
+    evaluation.add_argument("--run-dir", type=Path)
+    evaluation.add_argument("--resume", action="store_true")
+    evaluation.add_argument("--continue-from", type=Path)
+    evaluation.add_argument("--source-snapshot")
+    evaluation.add_argument("--source-sha256")
+    evaluation.add_argument("--retry-infrastructure", action="store_true")
     evaluation.add_argument(
         "--evidence-kind",
         choices=("experimental", "test-double"),
         default="experimental",
     )
     _execution_options(evaluation)
+    checkpoint_eval = commands.add_parser(
+        "evaluate-checkpoint", help="Evaluate saved OPSD weights with local vLLM"
+    )
+    checkpoint_eval.add_argument("evaluation_config", type=Path)
+    checkpoint_eval.add_argument("--phase", default="baseline")
     acceptance = commands.add_parser(
         "evaluate-acceptance",
         help="Run or extend the frozen Harness and direct coding checks",
@@ -336,6 +347,7 @@ def main() -> None:
     local.add_argument("--model-revision", required=True)
     local.add_argument("--output-dir", type=Path, required=True)
     local.add_argument("--export", type=Path, dest="export_path")
+    local.add_argument("--thinking", action="store_true")
     local.add_argument(
         "--merge",
         action="store_true",
@@ -500,6 +512,7 @@ def main() -> None:
                     options.output_dir,
                     export_path=options.export_path,
                     merge=options.merge,
+                    thinking=options.thinking,
                 )
             )
             return
@@ -571,6 +584,12 @@ def main() -> None:
                 if options.monitor_config
                 else None,
                 training_run=options.training_run,
+                run_dir=options.run_dir,
+                resume=options.resume,
+                continue_from=options.continue_from,
+                source_snapshot=options.source_snapshot,
+                expected_source_sha256=options.source_sha256,
+                retry_infrastructure=options.retry_infrastructure,
             )
             record = json.loads(path.read_text())
             summary = record["summary"]
@@ -580,6 +599,13 @@ def main() -> None:
                 f"missing={summary['missing_task_ids']}\n{path}"
             )
             raise SystemExit(2 if record["status"] != "complete" else 0)
+        if options.command == "evaluate-checkpoint":
+            from .evaluation.checkpoints import evaluate_checkpoint
+
+            path = evaluate_checkpoint(options.evaluation_config, phase=options.phase)
+            record = json.loads(path.read_text())
+            print(f"{record['status']}\n{path}")
+            raise SystemExit(0 if record["status"] == "complete" else 2)
         if options.command == "prepare-harness":
             manifest = prepare_harness(
                 mbpp_manifest=options.mbpp_manifest,
