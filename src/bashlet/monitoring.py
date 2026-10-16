@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-import yaml
 from dotenv import dotenv_values
+
+from bashlet.config import read_yaml
 
 
 def write_document(path: Path, value: dict[str, Any]) -> None:
@@ -35,7 +36,7 @@ def code_revision() -> str | None:
 class MonitorConfig:
     project: str = "bashlet"
     entity: str | None = None
-    group: str = "bashlet-sft-v1"
+    group: str = "bashlet"
     mode: Literal["online", "offline"] = "online"
     log_every: int = 1
     timeout_seconds: int = 20
@@ -43,7 +44,7 @@ class MonitorConfig:
 
     @classmethod
     def read(cls, path: Path) -> "MonitorConfig":
-        return cls(**yaml.safe_load(path.read_text()))
+        return cls(**read_yaml(path))
 
     def __post_init__(self) -> None:
         if self.mode not in {"online", "offline"}:

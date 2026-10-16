@@ -141,7 +141,7 @@ class Service:
     ) -> Any:
         encoding: Any = ByteEncoding()
         if os.environ.get("FAKE_OPSD_TOKENIZER"):
-            from bashlet.encoding import QwenChatMLEncoding
+            from bashlet.backends.encoding import QwenChatMLEncoding
 
             encoding = QwenChatMLEncoding(
                 os.environ["FAKE_OPSD_TOKENIZER"],
@@ -319,6 +319,12 @@ def install() -> None:
     import training_sdk
 
     training_sdk.install()
+    from evaluation_sdk import _evaluate_checkpoint
+
+    from bashlet.distillation import run as pilot
+
+    if not os.environ.get("FAKE_USE_LOCAL_EVALUATION"):
+        vars(pilot)["_evaluate_checkpoint"] = _evaluate_checkpoint
     pytrio.ServiceClient = Service
     import monitoring_sdk
 

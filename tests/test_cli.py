@@ -327,7 +327,8 @@ def test_show_accepts_steps_with_optional_untagged_explanations(tmp_path: Path) 
 
 
 @pytest.mark.parametrize(
-    "class_name", ["bashlet.replay.ReplayModel", "bashlet.replay:ReplayModel"]
+    "class_name",
+    ["bashlet.backends.replay.ReplayModel", "bashlet.backends.replay:ReplayModel"],
 )
 def test_imported_model_receives_its_constructor_parameters_and_layered_sampling(
     tmp_path: Path,

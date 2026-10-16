@@ -410,7 +410,6 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
         extra = {
             "evaluation_group": "scale-eval",
             "stop_on_training_budget": True,
-            "defer_decision": True,
         }
     pilot.write_text(
         yaml.safe_dump(
@@ -421,6 +420,10 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
                 else ["mbpp/602", "mbpp/603"],
                 "dev_plan": str(dev),
                 "condition": [str(condition)],
+                "evaluation": {
+                    "base_path": str(tokenizer),
+                    "model": {"base_url": "http://test-double"},
+                },
                 "ledger_path": str(tmp_path / "spend.sqlite3"),
                 "backend": {
                     "tokenizer_cache_dir": str(tokenizer.parents[2]),
@@ -447,7 +450,9 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
     )
     if interrupt:
         assert process.returncode == 2, process.stdout + process.stderr
-        partial = json.loads((root / "baseline/evaluation.json").read_text())
+        partial = json.loads(
+            (root / "evaluation/baseline/seed-4/evaluation.json").read_text()
+        )
         assert [row["outcome"] for row in partial["tasks"]] == ["passed", "not_started"]
         first_hash = partial["tasks"][0]["episode_sha256"]
         first_run = partial["tasks"][0]["run"]
@@ -461,7 +466,9 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
             cwd=tmp_path,
             timeout=60,
         )
-        recovered = json.loads((root / "baseline/evaluation.json").read_text())
+        recovered = json.loads(
+            (root / "evaluation/baseline/seed-4/evaluation.json").read_text()
+        )
         assert recovered["tasks"][0]["episode_sha256"] == first_hash
         assert recovered["tasks"][0]["run"] == first_run
     assert process.returncode == 0, process.stdout + process.stderr
@@ -504,7 +511,7 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
             )
             <= training_cap
         )
-        updated = json.loads((root / "updated/evaluation.json").read_text())
+        updated = json.loads(Path(record["evaluation"]).read_text())
         training = json.loads((root / "training/opsd.json").read_text())
         assert updated["snapshot"] == training["student_policy"]
         return
@@ -512,15 +519,17 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
     assert record["comparison"]["matched_complete"] is True
     assert record["comparison"]["baseline"]["passed_tasks"] == 2
     assert record["comparison"]["updated"]["passed_tasks"] == 2
-    assert record["decision"]["action"] == "stop_investment"
-    before = json.loads((root / "baseline/evaluation.json").read_text())
-    after = json.loads((root / "updated/evaluation.json").read_text())
+    assert record["decision"]["action"] == "review_results"
+    before = json.loads(
+        (root / "evaluation/baseline/seed-4/evaluation.json").read_text()
+    )
+    after = json.loads((root / "evaluation/final/seed-4/evaluation.json").read_text())
     assert before["comparison_sha256"] == after["comparison_sha256"]
     assert before["snapshot"] != after["snapshot"]
-    for phase in ("baseline", "updated"):
+    for phase in ("evaluation/baseline/seed-4", "evaluation/final/seed-4"):
         for path in (root / phase / "episodes").glob("*/run.json"):
             episode = json.loads(path.read_text())
-            from bashlet.encoding import QwenChatMLEncoding
+            from bashlet.backends.encoding import QwenChatMLEncoding
 
             encoding = QwenChatMLEncoding(str(tokenizer), revision=tokenizer.name)
             assert "Reference implementation (teacher only)" not in encoding.decode(
@@ -568,28 +577,3 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
         complete["cost"]["charged_upper_bound_cny"]
         == proof["cost"]["charged_upper_bound_cny"]
     )
-
-    selection = tmp_path / "ineligible.json"
-    selection.write_text(json.dumps({"status": "no_qualified_snapshot"}))
-    candidate = yaml.safe_load(pilot.read_text())
-    candidate["backend"].update(
-        source="sft",
-        initial_sampler=after["snapshot"].split("@", 1)[1],
-        initial_state=proof["training_state"]["training_state"],
-        initial_training_record=str(root / "training/backend.json"),
-        initial_selection=str(selection),
-    )
-    sft = tmp_path / "ineligible-sft.yaml"
-    sft.write_text(yaml.safe_dump(candidate))
-    refused = cli(
-        "train-opsd",
-        str(sft),
-        "--output-dir",
-        str(tmp_path / "refused"),
-        cwd=tmp_path,
-        timeout=60,
-    )
-    assert refused.returncode == 2, refused.stdout + refused.stderr
-    rejected = json.loads((tmp_path / "refused/pilot.json").read_text())
-    assert "qualified real selection" in rejected["reason"]
-    assert rejected["optimizer_step"] == 0

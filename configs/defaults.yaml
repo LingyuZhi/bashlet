@@ -1,0 +1,75 @@
+# Shared Harness mechanics. Experiment settings override these defaults.
+extends: bash-block-v6.yaml
+protocol:
+  user_prompt: 'instruction verbatim as the first user message'
+  observation_template: |-
+    <returncode>{exit_code}</returncode>
+    <output>
+    {output}</output>
+  timeout_template: |-
+    The command timed out. All processes from this step were terminated.
+    <returncode>{exit_code}</returncode>
+    <output>
+    {output}</output>
+  observation_head_chars: 2000
+  observation_tail_chars: 2000
+  elision_template: |-
+    [... {omitted_chars} characters omitted ...]
+    Narrow the output with head, tail, sed, or a more selective search.
+  output_limit_message: |-
+    The sandbox output byte limit was reached; further output was discarded. Narrow the output with head, tail, sed, or a more selective search.
+  invalid_action_format: |-
+    <format_error>{reason}</format_error>
+    Nothing was executed. Finish native thinking if enabled, then provide exactly one non-empty, closed ```bash block. An explanation before the block is optional.
+  history: 'append-only token context: encoding.prompt(system, user), then per step the raw sampled tokens followed by encoding.continuation(tokens, feedback); earlier tokens are never decoded and re-encoded'
+  submission_marker: COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT
+environment:
+  id: linux-bwrap-v1
+  bwrap: /usr/bin/bwrap
+  timeout_seconds: 30.0
+  probe_timeout_seconds: 30.0
+  output_bytes: 16384
+  submission_bytes: 65536
+  submission_files: 1024
+  memory_bytes: 536870912
+  file_bytes: 1048576
+  nofile: 64
+  path: /opt/bin:/opt/python/bin:/usr/bin:/bin
+  lang: C.UTF-8
+  home: /home/agent
+  python: {source: sandbox-python/.venv, target: /opt/python}
+  python_version: 3.10.12
+  pytest_version: 9.1.1
+  variables:
+    PYTHONDONTWRITEBYTECODE: '1'
+    PYTEST_ADDOPTS: '-p no:cacheprovider'
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+  etc_files:
+    passwd: "agent:x:{uid}:{gid}:Sandbox agent:{home}:/bin/bash\n"
+    group: "agent:x:{gid}:\n"
+    hosts: "127.0.0.1 localhost\n::1 localhost\n"
+    nsswitch.conf: "passwd: files\ngroup: files\nhosts: files\n"
+    resolv.conf: "nameserver 127.0.0.1\n"
+    gitconfig: "[user]\n\tname = agent\n\temail = agent@localhost\n[init]\n\tdefaultBranch = main\n"
+  ro_bind:
+    - {source: /usr/bin, target: /usr/bin}
+    - {source: /usr/lib, target: /usr/lib}
+    - {source: /usr/lib64, target: /usr/lib64}
+    - {source: /etc/alternatives, target: /etc/alternatives}
+  symlink:
+    - {source: usr/bin, target: /bin}
+    - {source: usr/lib, target: /lib}
+    - {source: usr/lib64, target: /lib64}
+budget:
+  max_steps: 10
+  max_generated_tokens: 8192
+  max_seconds: 120.0
+  max_consecutive_invalid: 3
+model:
+  class: ReplayModel
+  sampling:
+    max_tokens: 1024
+    temperature: 1.0
+    top_p: 1.0
+    seed: null
+  thinking: false

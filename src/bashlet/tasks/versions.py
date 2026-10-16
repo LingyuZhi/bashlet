@@ -9,8 +9,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from ..models import Task
-from ..protocol import fingerprint
+from bashlet.harness.models import Task
+from bashlet.harness.protocol import fingerprint
 
 GROUP_ROLES = (
     ("training_candidates", "train_candidate"),
@@ -59,8 +59,8 @@ def preparing_cohort(
 
 def validate_assignment(task: Task) -> None:
     """Role claims need the admitted cohort or a complete frozen manifest."""
-    from . import task_path, task_split
-    from .sources import registered_origin
+    from bashlet.tasks import task_path, task_split
+    from bashlet.tasks.sources import registered_origin
 
     assignment = task.assignment
     assert assignment is not None and task.origin is not None

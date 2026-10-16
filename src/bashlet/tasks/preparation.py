@@ -10,12 +10,12 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from ..config import ExperimentConfig, config_record
-from ..experiment import run_experiment, serialize_task, task_from_record
-from ..models import FunctionGrader, Task, TaskAssignment, TaskOrigin
-from ..protocol import fingerprint
-from ..replay import ReplayModel, Utf8Encoding
-from . import (
+from bashlet.backends.replay import ReplayModel, Utf8Encoding
+from bashlet.config import ExperimentConfig, config_record
+from bashlet.harness.experiment import run_experiment, serialize_task, task_from_record
+from bashlet.harness.models import FunctionGrader, Task, TaskAssignment, TaskOrigin
+from bashlet.harness.protocol import fingerprint
+from bashlet.tasks import (
     _CONFIGS,
     AUTHORED_LOCK,
     CONVERSION,
@@ -28,7 +28,7 @@ from . import (
     task_split,
     validate_task,
 )
-from .sources import (
+from bashlet.tasks.sources import (
     SOURCE_REGISTRY,
     admitted_sources,
     catalog_task_record,
@@ -36,9 +36,9 @@ from .sources import (
     registered_origin,
     source_file,
 )
-from .versions import preparing_cohort
+from bashlet.tasks.versions import preparing_cohort
 
-DEFAULT_COHORT = _CONFIGS / "harness-cohort-v1.json"
+DEFAULT_COHORT = _CONFIGS / "opsd-expanded-plan-v1.json"
 _TYPES = ("short_program", "code_edit", "workspace")
 
 
@@ -295,7 +295,7 @@ def _definitions(
 
 
 def _validate_cohorts(cohort: dict[str, Any], tasks: list[Task]) -> None:
-    from .audit import validate_independence
+    from bashlet.tasks.audit import validate_independence
 
     validate_independence(
         cohort, [task_family(t) for t in tasks if t.variant_id == "base"]
@@ -517,7 +517,7 @@ def _prepare_harness(
     """
     cohort_bytes = cohort_path.read_bytes()
     cohort = json.loads(cohort_bytes)
-    from .freeze import validate_plan
+    from bashlet.tasks.freeze import validate_plan
 
     validate_plan(cohort)
     versioned = cohort["version"] == "harness-task-cohort-v2"
@@ -691,7 +691,7 @@ def _prepare_harness(
                 },
             )
         if versioned:
-            from .freeze import publish_selection
+            from bashlet.tasks.freeze import publish_selection
 
             publish_selection(output_dir, manifest)
         manifest["status"] = "complete"

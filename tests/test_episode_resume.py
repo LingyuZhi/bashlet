@@ -11,7 +11,7 @@ from test_mbpp import double_row, prepare
 from bashlet import CommandGrader, Task, run_experiment
 from bashlet.config import load_config
 from bashlet.evaluation import evaluate
-from bashlet.models import EpisodeResult
+from bashlet.harness.models import EpisodeResult
 
 
 class PowerLoss(BaseException):

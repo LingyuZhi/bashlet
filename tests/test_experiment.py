@@ -749,7 +749,7 @@ def test_run_records_one_merged_config_and_three_stable_fingerprints(
     assert record["fingerprints"] == again["fingerprints"]
     assert set(record["fingerprints"]) == {"protocol", "environment", "budget"}
     assert record["fingerprints"]["protocol"] == record["protocol"]["sha256"]
-    assert record["config"]["protocol"]["name"] == "bash-block-v3"
+    assert record["config"]["protocol"]["name"] == "bash-block-v6"
     assert record["config"]["budget"] == record["budget"]
     assert record["config"]["model"]["sampling"]["max_tokens"] == 1024
 
@@ -859,7 +859,7 @@ def test_model_block_does_not_change_condition_fingerprints(tmp_path: Path) -> N
     overlay = tmp_path / "model.yaml"
     overlay.write_text(
         "model:\n"
-        "  class: bashlet.replay.ReplayModel\n"
+        "  class: bashlet.backends.replay.ReplayModel\n"
         "  thinking: true\n"
         "  sampling:\n"
         "    temperature: 0.2\n"
@@ -872,7 +872,7 @@ def test_model_block_does_not_change_condition_fingerprints(tmp_path: Path) -> N
     )
     record = json.loads((result.run_dir / "run.json").read_text())
     assert record["fingerprints"] == baseline
-    assert record["config"]["model"]["class"] == "bashlet.replay.ReplayModel"
+    assert record["config"]["model"]["class"] == "bashlet.backends.replay.ReplayModel"
     assert record["config"]["model"]["thinking"] is True
     assert record["config"]["model"]["sampling"]["temperature"] == 0.2
     assert record["config"]["model"]["sampling"]["max_tokens"] == 1024

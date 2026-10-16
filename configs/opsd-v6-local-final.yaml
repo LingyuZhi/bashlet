@@ -1,5 +1,0 @@
-# Load after opsd-v6-local-base.yaml.
-model:
-  base_url: http://127.0.0.1:18033
-  model: opsd-step268
-  snapshot_manifest: runs/opsd-v6-thinking-local-20261008/snapshots/opsd-step268/disable_thinking/snapshot.json

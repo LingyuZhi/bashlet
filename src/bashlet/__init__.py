@@ -1,9 +1,12 @@
 """The shared small-experiment interface for bashlet."""
 
-from .encoding import QwenChatMLEncoding
-from .episode import run_episode
-from .experiment import run_experiment
-from .models import (
+from bashlet.backends.encoding import QwenChatMLEncoding
+from bashlet.backends.pytrio import PyTRIOModel
+from bashlet.backends.replay import ReplayModel, Utf8Encoding
+from bashlet.backends.vllm import VLLMModel
+from bashlet.harness.episode import run_episode
+from bashlet.harness.experiment import run_experiment
+from bashlet.harness.models import (
     Bash,
     CommandGrader,
     ContextExhausted,
@@ -24,11 +27,8 @@ from .models import (
     Task,
     TaskOrigin,
 )
-from .protocol import PROTOCOL_SHA256, PROTOCOL_VERSION
-from .pytrio import PyTRIOModel
-from .replay import ReplayModel, Utf8Encoding
-from .spend import BudgetRefused, SpendLedger, SpendPolicy
-from .vllm import VLLMModel
+from bashlet.harness.protocol import PROTOCOL_SHA256, PROTOCOL_VERSION
+from bashlet.spend import BudgetRefused, SpendLedger, SpendPolicy
 
 __all__ = [
     "PROTOCOL_SHA256",

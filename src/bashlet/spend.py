@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import httpx
-import yaml
 
 _MICROS = 1_000_000
 DEFAULT_POLICY = Path(__file__).with_name("configs") / "spend.yaml"
@@ -55,7 +54,9 @@ class SpendPolicy:
 
     @classmethod
     def read(cls, path: Path) -> "SpendPolicy":
-        data = yaml.safe_load(path.read_text())
+        from bashlet.config import read_yaml
+
+        data = read_yaml(path)
         return cls(**data["limits"])
 
     def validate(self) -> None:

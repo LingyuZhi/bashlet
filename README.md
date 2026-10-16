@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.13%2B-3776AB?style=for-the-badge&amp;logo=python&amp;logoColor=white" alt="Python 3.13+"></a>
-  <a href="configs/bash-block-v3.yaml"><img src="https://img.shields.io/badge/Harness-Bash-10B981?style=for-the-badge&amp;logo=gnubash&amp;logoColor=white" alt="Bash Harness"></a>
-  <a href="#training"><img src="https://img.shields.io/badge/Training-SFT%20%26%20OPSD-7C3AED?style=for-the-badge" alt="SFT &amp; OPSD"></a>
+  <a href="configs/defaults.yaml"><img src="https://img.shields.io/badge/Harness-Bash-10B981?style=for-the-badge&amp;logo=gnubash&amp;logoColor=white" alt="Bash Harness"></a>
+  <a href="#training"><img src="https://img.shields.io/badge/Training-OPSD-7C3AED?style=for-the-badge" alt="SFT &amp; OPSD"></a>
   <a href="configs/local-vllm/"><img src="https://img.shields.io/badge/Inference-vLLM-0EA5E9?style=for-the-badge" alt="vLLM"></a>
 </p>
 
@@ -36,7 +36,7 @@ bashlet 是一个通过 bash 命令编写、运行和修复代码的极简编程
 - 💻 **任务交互**：`agent` 接收自然语言指令和工作目录；`task` 运行带独立评分的编程任务。
 - 🛡️ **隔离执行**：使用 Bubblewrap 沙箱，每步启动新 shell，工作区文件在步骤之间保留。
 - 📝 **轨迹记录**：保存命令、真实观察、工作区变化，以及采样生成的原始 token 和 logprob。
-- 🧠 **后训练与评测**：通过 PyTRIO 进行 SFT 和 OPSD；支持本地 vLLM 采样与评测。
+- 🧠 **后训练与评测**：通过 PyTRIO 进行 OPSD；支持本地 vLLM 采样与评测。
 
 <a id="quickstart"></a>
 
@@ -46,7 +46,7 @@ bashlet 是一个通过 bash 命令编写、运行和修复代码的极简编程
 
 - **宿主环境**：Python 3.13+ 和 uv。
 - **执行环境**：Linux，允许创建 user、mount、PID、network namespaces；提供 `/usr/bin/bwrap`、`/usr/bin/prlimit`、`/bin/bash`，以及 git、awk、sed、grep。
-- **默认沙箱环境**：`/usr/bin/python3` 为 Python 3.10.12，独立虚拟环境使用锁定的 pytest 9.1.1。其他环境需调整[默认配置](configs/bash-block-v3.yaml)中的 `environment` 设置。
+- **默认沙箱环境**：`/usr/bin/python3` 为 Python 3.10.12，独立虚拟环境使用锁定的 pytest 9.1.1。其他环境需调整[默认配置](configs/defaults.yaml)中的 `environment` 设置。
 
 ### 🧪 运行示例任务
 
@@ -100,18 +100,29 @@ uv run --locked bashlet task examples/pytrio-smoke.json \
 
 ## 🧬 训练与评测入口
 
-OPSD 可以直接从指令模型开始；SFT 是可选起点。
+OPSD 从原始指令模型开始，学生更新，特权教师冻结。训练使用 PyTRIO，评测使用本地 vLLM。
 
-| 🎯 用途 | ⌨️ CLI 命令 | 📄 配置或说明 |
+每个实验使用一个 YAML 入口。[configs/opsd.yaml](configs/opsd.yaml) 引用共用条件和预检配置；配置中的路径相对声明它的 YAML 文件解析。本地 tokenizer 路径使用 `./` 或 `../` 前缀，Hub 模型名保持原样。先准备数据、模型权重与服务环境，再按实际资源调整该配置。
+
+```bash
+uv run --locked bashlet train-opsd configs/opsd.yaml
+uv run --locked bashlet train-opsd configs/opsd.yaml --resume
+uv run --locked bashlet evaluate-checkpoint configs/opsd.yaml --phase final
+uv run --locked bashlet watch-opsd --config configs/opsd.yaml
+```
+
+`train-opsd` 会先执行配置中的预检，再运行正式训练。每轮评测共享训练的 Harness、预算和采样条件，模型权重由保存的 checkpoint 确定。更改新实验的轮数、种子或预算只需改配置；同一运行恢复时必须保持其冻结条件。`--phase test` 仅允许在完整训练结束后访问最终测试集。
+
+| 用途 | CLI 命令 | 配置或说明 |
 | --- | --- | --- |
-| 准备 MBPP 任务 | `prepare-mbpp` | [数据源配置](configs/mbpp-sanitized-v1.json) |
-| 准备多类型任务 | `prepare-harness` | [v1 配置](configs/harness-tasks-v1.md)、[v2 数据角色](configs/harness-tasks-v2.md)、[836 家族冻结](configs/opsd-expanded-data-v8.md) |
-| 导出 SFT 数据 | `prepare-sft` | [已执行轨迹的输入格式](configs/executed-trajectories.md) |
-| SFT 训练 | `train-sft` | [SFT 配置](configs/sft-v1.yaml) |
-| OPSD 训练 | `train-opsd` | [OPSD 小试配置](configs/opsd-pilot-v1.yaml) |
-| 固定开发集评测 | `evaluate` | [开发集清单](configs/mbpp-dev-8-v1.json) |
+| 准备 MBPP 任务 | `prepare-mbpp` | [数据源](configs/mbpp-sanitized-v1.json) |
+| 导入公开任务 | `import-public-tasks` | [公开来源](configs/opsd-public-import-v5.json)、[P3](configs/opsd-p3-import-v1.json) |
+| 验证和冻结混合任务集 | `prepare-harness` | [当前数据计划](configs/opsd-expanded-plan-v1.json)、[准备说明](configs/opsd-expanded-data-v8.md) |
+| 导出保存的权重 | `export-snapshot` | 使用 OPSD 运行中的 `training/` 目录 |
+| 准备本地模型 | `prepare-local-snapshot` | 基模与导出的 adapter |
+| 独立任务评测 | `evaluate` | 固定任务清单与已验证的本地模型 |
 
-通过 `uv run --locked bashlet --help` 查看命令，各子命令的 `--help` 提供详细参数。示例配置引用已准备的数据和模型产物，使用前需调整路径与凭证设置。
+通过 `uv run --locked bashlet --help` 查看入口。历史 SFT 和旧协议实验使用对应 Git 版本；整理前的完整源码保存在标签 `opsd-536-before-refactor-20261016`。复现还需要相应数据、权重和锁定依赖。
 
 <a id="development"></a>
 

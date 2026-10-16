@@ -13,10 +13,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
-from ..encoding import QwenChatMLEncoding
-from ..models import Encoding, Model, ModelResponseError
-from ..monitoring import write_document
-from ..pytrio import (
+from bashlet.backends.encoding import QwenChatMLEncoding
+from bashlet.backends.pytrio import (
     MODEL,
     SDK_VERSION,
     PyTRIOModel,
@@ -25,8 +23,16 @@ from ..pytrio import (
     save_training_checkpoints,
     validate_training_capacity,
 )
-from ..spend import SpendLedger, TokenPricing
-from . import InitialSnapshot, OPSDRun, TeacherScores, UpdateRejected, UpdateResult
+from bashlet.distillation import (
+    InitialSnapshot,
+    OPSDRun,
+    TeacherScores,
+    UpdateRejected,
+    UpdateResult,
+)
+from bashlet.harness.models import Encoding, Model, ModelResponseError
+from bashlet.monitoring import write_document
+from bashlet.spend import SpendLedger, TokenPricing
 
 if TYPE_CHECKING:
     import pytrio as trio
@@ -43,11 +49,7 @@ class PyTRIOOPSDConfig:
     train_mlp: bool = True
     train_unembed: bool = False
     thinking: bool = True
-    source: Literal["base", "sft"] = "base"
-    initial_sampler: str | None = None
-    initial_state: str | None = None
-    initial_training_record: str | None = None
-    initial_selection: str | None = None
+    source: Literal["base"] = "base"
     timeout_seconds: int = 300
     api_key_env: str = "pytrio_api_key"
     dotenv_path: str = ".env"
@@ -59,24 +61,8 @@ class PyTRIOOPSDConfig:
             raise ValueError("OPSD thinking must be a boolean")
         if self.base_model != MODEL or not self.model_revision:
             raise ValueError("OPSD requires the selected Qwen3.5-4B model")
-        if self.source not in ("base", "sft"):
-            raise ValueError("Unknown initial model source")
-        if self.source == "base" and (
-            self.initial_sampler
-            or self.initial_state
-            or self.initial_training_record
-            or self.initial_selection
-        ):
-            raise ValueError("Original-model initialization cannot load SFT weights")
-        if self.source == "sft" and not (
-            self.initial_sampler
-            and self.initial_state
-            and self.initial_training_record
-            and self.initial_selection
-        ):
-            raise ValueError(
-                "SFT initialization needs a qualified selection and checkpoint pair"
-            )
+        if self.source != "base":
+            raise ValueError("OPSD starts from the original base model")
         for value in (self.rank, self.timeout_seconds):
             if type(value) is not int or value < 1:
                 raise ValueError("Rank and timeout must be positive integers")
@@ -106,8 +92,8 @@ class PyTRIOOPSD:
     """One trainer, a frozen sampler, and the existing guarded student backend.
 
     Step 0 is saved before either role samples, so both load the same immutable
-    URI. A base start has fresh LoRA/optimizer state. An SFT start loads weights
-    with a fresh optimizer; resume alone loads the full optimizer state.
+    URI. Initialization has fresh LoRA/optimizer state; resume alone loads the full
+    optimizer state.
     """
 
     def __init__(
@@ -122,7 +108,8 @@ class PyTRIOOPSD:
         import json
 
         import pytrio as trio
-        import yaml
+
+        from bashlet.config import read_yaml
 
         if version("pytrio") != SDK_VERSION:
             raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
@@ -130,44 +117,7 @@ class PyTRIOOPSD:
         self.path = output_dir.resolve() / "backend.json"
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.run_id: str | None = None
-        self.pricing = TokenPricing(
-            yaml.safe_load(Path(config.spend_config).read_text())
-        )
-        if config.source == "sft":
-            assert config.initial_training_record is not None
-            assert config.initial_selection is not None
-            selection = json.loads(Path(config.initial_selection).read_text())
-            if (
-                selection.get("status") != "selected"
-                or selection.get("evidence_kind") != "experimental"
-                or selection.get("student_snapshot") != config.initial_sampler
-                or selection.get("frozen_teacher_snapshot") != config.initial_sampler
-                or selection.get("sft_training_state") != config.initial_state
-                or selection.get("optimizer_transition") != "reset-for-opsd"
-                or not any(
-                    row.get("decision") == "qualified"
-                    and row.get("sampler", {}).get("path") == config.initial_sampler
-                    and row.get("training_state", {}).get("path")
-                    == config.initial_state
-                    for row in selection.get("candidates", [])
-                )
-            ):
-                raise ValueError(
-                    "SFT initialization requires a qualified real selection"
-                )
-            selected = json.loads(Path(config.initial_training_record).read_text())
-            if selected.get("metadata", {}).get(
-                "base_model"
-            ) != config.base_model or not any(
-                row.get("sampler")
-                == {"kind": "sampler_weights", "path": config.initial_sampler}
-                and row.get("training_state")
-                == {"kind": "training_state", "path": config.initial_state}
-                for row in selected.get("checkpoints", [])
-            ):
-                raise ValueError(
-                    "Selected SFT sampler and training state are not a recorded pair"
-                )
+        self.pricing = TokenPricing(read_yaml(Path(config.spend_config)))
         if service_client is None:
             catalog = self.pricing.verify(config.base_model, config.timeout_seconds)
             trio.configure(
@@ -211,53 +161,26 @@ class PyTRIOOPSD:
             thinking=config.thinking,
             cache_dir=config.tokenizer_cache_dir,
         )
-        if config.source == "sft":
-            if selected["metadata"].get(
-                "encoding"
-            ) != self.teacher_encoding.identity or any(
-                selected["config"].get(key) != getattr(config, key)
-                for key in ("rank", "seed", "train_attn", "train_mlp", "train_unembed")
-            ):
-                raise ValueError(
-                    "SFT encoding or LoRA configuration differs from its recorded state"
-                )
         self.client: Any = None
         if self.path.exists():
             self.record = json.loads(self.path.read_text())
             if (
-                (
-                    self.record["config"]
-                    | {
-                        key: self.record["config"].get(key)
-                        for key in ("initial_training_record", "initial_selection")
-                    }
-                    | {"thinking": self.record["config"].get("thinking", False)}
-                )
-                != asdict(config)
+                self.record["config"] != asdict(config)
                 or self.record["encoding"] != self.teacher_encoding.describe()
                 or self.record["workspace_cuid"] != self.service.workspace_cuid
             ):
                 raise ValueError("OPSD backend resume must preserve loading identities")
         else:
-            if config.source == "base":
-                self.client = self.service.create_lora_training_client(
-                    base_model=config.base_model,
-                    rank=config.rank,
-                    seed=config.seed,
-                    train_attn=config.train_attn,
-                    train_mlp=config.train_mlp,
-                    train_unembed=config.train_unembed,
-                )
-            else:
-                self.client = self.service.create_training_client_from_state(
-                    config.initial_state
-                )
+            self.client = self.service.create_lora_training_client(
+                base_model=config.base_model,
+                rank=config.rank,
+                seed=config.seed,
+                train_attn=config.train_attn,
+                train_mlp=config.train_mlp,
+                train_unembed=config.train_unembed,
+            )
             self._validate_trainer()
             sampler, state = self._save(0)
-            if config.source == "sft":
-                # Keep the selected SFT teacher; prove the loaded student below.
-                assert config.initial_sampler is not None
-                sampler = config.initial_sampler
             self.record = {
                 "config": asdict(config),
                 "encoding": self.teacher_encoding.describe(),
@@ -340,14 +263,6 @@ class PyTRIOOPSD:
 
     def bind_run(self, run_id: str) -> None:
         self.run_id = self._student.run_id = run_id
-
-    def evaluation_model(self, *, group: str | None = None) -> PyTRIOModel:
-        """A distinct guarded sampler, bound to the current student's weights."""
-        assert self._student.model_path is not None
-        model = self._model(self._student.model_path, group=group)
-        model.operation = "evaluation"
-        model.verify_loaded_sampler()
-        return model
 
     def _save(self, step: int, deadline: float | None = None) -> tuple[str, str]:
         deadline = deadline or time.monotonic() + self.config.timeout_seconds
@@ -557,7 +472,7 @@ class PyTRIOOPSD:
     def _verify_original_parameters(self, run: OPSDRun) -> dict[str, Any]:
         import json
 
-        from ..snapshots.artifacts import (
+        from bashlet.snapshots.artifacts import (
             export_snapshot,
             verify_original_adapter_update,
         )

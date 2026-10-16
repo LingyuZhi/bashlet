@@ -17,7 +17,7 @@ from bashlet import (
     SamplingParams,
 )
 from bashlet.distillation import TeacherScores, UpdateResult
-from bashlet.models import JSONValue, Model
+from bashlet.harness.models import JSONValue, Model
 
 SYSTEM, USER, ASSISTANT, END = 256, 257, 258, 259
 # Whole-word tokens a model may sample. ByteEncoding never produces them when
@@ -365,7 +365,7 @@ class Future[T]:
 class ControlledOPSD:
     """Declared test SFT, token scorer, and completed optimizer receipt."""
 
-    teacher_identity = "test/sft@selected"
+    teacher_identity = "test/base@initial"
     teacher_encoding = ByteEncoding()
 
     def __init__(self, reference_marker: str = "TEACHER_ONLY_REFERENCE") -> None:

@@ -16,8 +16,12 @@ import ml_dtypes  # noqa: F401 -- registers the BF16 NumPy dtype
 import numpy as np
 from safetensors import TensorSpec, deserialize, safe_open, serialize_file
 
-from ..pytrio import MODEL, SDK_VERSION, _credential
-from .manifest import _snapshot_identity, encoding_condition, file_sha256
+from bashlet.backends.pytrio import MODEL, SDK_VERSION, _credential
+from bashlet.snapshots.manifest import (
+    _snapshot_identity,
+    encoding_condition,
+    file_sha256,
+)
 
 _DTYPE_NAMES = {
     "BF16": "bfloat16",
@@ -159,27 +163,15 @@ def export_snapshot(
     dotenv_path: Path = Path(".env"),
 ) -> Path:
     """Download a saved sampler, without creating a trainer or a sampler client."""
-    training_path = training_run / "training.json"
-    if not training_path.exists():
-        training_path = training_run / "opsd.json"
+    training_path = training_run / "opsd.json"
     training_bytes = training_path.read_bytes()
     training = json.loads(training_bytes)
     training_digest = hashlib.sha256(training_bytes).hexdigest()
-    source_bytes = {training_path.name: training_bytes}
-    if training_path.name == "opsd.json":
-        backend_bytes = (training_run / "backend.json").read_bytes()
-        backend = json.loads(backend_bytes)
-        source_bytes["backend.json"] = backend_bytes
-        training = _opsd_export_record(training, backend, step)
-        encoding_details = backend["encoding"]
-    else:
-        encoding_details = (
-            json.loads(Path(training["config"]["dataset"]).read_text())[
-                "encoding_details"
-            ]
-            if "config" in training
-            else None
-        )
+    backend_bytes = (training_run / "backend.json").read_bytes()
+    backend = json.loads(backend_bytes)
+    source_bytes = {"opsd.json": training_bytes, "backend.json": backend_bytes}
+    training = _opsd_export_record(training, backend, step)
+    encoding_details = backend["encoding"]
     if version("pytrio") != SDK_VERSION:
         raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
     if training["metadata"]["base_model"] != MODEL:
@@ -403,7 +395,7 @@ def prepare_local_snapshot(
     weights = sorted(base_path.glob("*.safetensors"))
     if not weights:
         raise ValueError("Local base model weights are missing")
-    from ..encoding import QwenChatMLEncoding
+    from bashlet.backends.encoding import QwenChatMLEncoding
 
     encoding = QwenChatMLEncoding(
         str(base_path), revision=model_revision, thinking=thinking

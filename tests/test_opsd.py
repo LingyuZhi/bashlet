@@ -20,13 +20,13 @@ from bashlet import (
     run_experiment,
 )
 from bashlet.distillation import (
+    InitialSnapshot,
     OPSDConfig,
     OPSDRun,
-    SFTSnapshot,
     TeacherScores,
     UpdateResult,
 )
-from bashlet.models import (
+from bashlet.harness.models import (
     ContextExhausted,
     EpisodeResult,
     Generation,
@@ -84,14 +84,12 @@ def controlled_run(
     )
     run = OPSDRun(
         tmp_path / "training",
-        snapshot=SFTSnapshot(
-            "test/sft@selected", ByteEncoding().identity, "test-double"
+        snapshot=InitialSnapshot(
+            "test/base@initial", ByteEncoding().identity, "test-double"
         ),
         adapter=adapter,
         ledger=ledger,
-        config=OPSDConfig.read(
-            Path(__file__).parents[1] / "configs/opsd-contract-v1.yaml"
-        ),
+        config=OPSDConfig(distillation_coefficient=0.5, timeout_seconds=30),
         monitoring=MonitorConfig(group="controlled-opsd"),
     )
     return run, adapter
@@ -141,7 +139,7 @@ def test_real_repair_scores_original_tokens_and_submits_shifted_sampled_token_up
         if i not in supervised
     )
     assert run.student.identity == "test/student@opsd-1"
-    assert adapter.teacher_identity == "test/sft@selected"
+    assert adapter.teacher_identity == "test/base@initial"
     assert adapter.refreshed == [1]
     assert result.opsd is not None and result.opsd["status"] == "completed"
 
@@ -398,7 +396,7 @@ def test_monitor_disconnect_and_training_state_resume_preserve_progress_and_even
     record = json.loads((run.root / "opsd.json").read_text())
     assert record["optimizer_step"] == 2
     assert record["student_policy"] == "test/student@opsd-2"
-    assert record["teacher_policy"] == "test/sft@selected"
+    assert record["teacher_policy"] == "test/base@initial"
     assert record["batches"][-1]["cost"]["charged_upper_bound_cny"] > 1
 
 
@@ -610,7 +608,7 @@ def test_in_flight_batch_prevents_new_rollout_and_refresh_until_completion(
             before = run.ledger.snapshot()["entries"]
             record = json.loads((run.root / "opsd.json").read_text())
             assert record["optimizer_step"] == 0
-            assert run.student.identity == "test/sft@selected"
+            assert run.student.identity == "test/base@initial"
             assert not adapter.refreshed
             other_adapter = ControlledOPSD()
             with pytest.raises(ValueError, match="already active"):
@@ -649,7 +647,7 @@ def test_in_flight_batch_prevents_new_rollout_and_refresh_until_completion(
     )
     assert second.policy == "test/student@opsd-1"
     assert run.student.identity == "test/student@opsd-2"
-    assert adapter.teacher_identity == "test/sft@selected"
+    assert adapter.teacher_identity == "test/base@initial"
 
 
 def test_monitor_outage_and_pending_spend_cannot_bypass_the_update_budget(
@@ -824,7 +822,7 @@ def test_confirmed_zero_bill_is_reported_as_known_zero(
 @pytest.mark.parametrize(
     "role", ["base-teacher", "latest-teacher", "base-student", "encoding"]
 )
-def test_incorrect_sft_roles_are_refused_before_any_sampling(
+def test_incorrect_initial_roles_are_refused_before_any_sampling(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     role: str,

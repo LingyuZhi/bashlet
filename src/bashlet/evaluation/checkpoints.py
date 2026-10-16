@@ -14,11 +14,11 @@ from typing import Any
 import httpx
 import yaml
 
-from ..config import config_record, load_config, load_model
-from ..monitoring import MonitorConfig, write_document
-from ..snapshots import export_snapshot, prepare_local_snapshot
-from ..snapshots.manifest import file_sha256
-from .harness import _digest, evaluate
+from bashlet.config import ModelConfig, config_record, load_model
+from bashlet.evaluation.harness import _digest, _require_verified_local, evaluate
+from bashlet.monitoring import MonitorConfig, write_document
+from bashlet.snapshots import export_snapshot, prepare_local_snapshot
+from bashlet.snapshots.manifest import file_sha256
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -163,7 +163,7 @@ def _server(config: dict[str, Any], manifest: Path) -> None:
     while time.monotonic() < deadline:
         try:
             response = httpx.get(
-                server["base_url"] + "/health", timeout=3, trust_env=False
+                config["model"]["base_url"] + "/health", timeout=3, trust_env=False
             )
             if response.status_code == 200:
                 return
@@ -173,51 +173,55 @@ def _server(config: dict[str, Any], manifest: Path) -> None:
     raise ValueError("Local vLLM did not become ready; inspect service/server.log")
 
 
-def _historical_receipt(
-    pilot: dict[str, Any], seed: str, source: Path, snapshot: str
-) -> dict[str, Any]:
-    reference: dict[str, Any] | None = (
-        pilot.get("evaluations", {}).get("baseline", {}).get("runs", {}).get(seed)
+def _settings(config_path: Path, run_dir: Path | None = None) -> dict[str, Any]:
+    from bashlet.distillation.config import RunConfig
+    from bashlet.distillation.pytrio import PyTRIOOPSDConfig
+
+    original = RunConfig.read(config_path)
+    if original.evaluation is None:
+        raise ValueError("The experiment must configure local checkpoint evaluation")
+    formal = run_dir or Path(original.output_dir) / (
+        "formal" if original.preflight else ""
     )
-    if reference:
-        recorded = Path(reference["path"])
-        if file_sha256(recorded) != reference["sha256"]:
-            raise ValueError(
-                "Historical Baseline evidence differs from its saved receipt"
-            )
-        if recorded.resolve() != source.resolve():
-            # Training resume replaces the stage with the local continuation.
-            # Follow its pinned provenance back to the original cloud evidence.
-            reference = _read(recorded).get("historical_source")
-            if not reference or reference.get("snapshot") != snapshot:
-                raise ValueError(
-                    "Historical Baseline continuation has no source receipt"
-                )
-    if not reference or (
-        Path(reference["path"]).resolve() != source.resolve()
-        or file_sha256(source) != reference["sha256"]
-    ):
-        raise ValueError("Historical Baseline evidence differs from its saved receipt")
-    return reference
+    backend = PyTRIOOPSDConfig(**original.backend)
+    return original.evaluation | {
+        "pilot_run": str(formal.resolve()),
+        "output_dir": str(formal.resolve() / "evaluation"),
+        "model_revision": backend.model_revision,
+        "api_key_env": backend.api_key_env,
+    }
 
 
-def _stage(config_path: Path, phase: str, *, heldout: bool = False) -> Path:
-    from ..distillation.conditions import resolve_condition
-    from ..distillation.development import development_curve
-    from ..distillation.pilot import PilotConfig
+def _stage(
+    config_path: Path, phase: str, *, heldout: bool = False, run_dir: Path | None = None
+) -> Path:
+    from bashlet.distillation.config import RunConfig, resolve_condition
+    from bashlet.distillation.development import development_curve
 
-    settings = yaml.safe_load(config_path.read_text())
+    settings = _settings(config_path, run_dir)
     formal = Path(settings["pilot_run"]).resolve()
     pilot = _read(formal / "pilot.json")
     if heldout:
         _endpoint(pilot)
-    original = PilotConfig.read(Path(settings["pilot_config"]))
+    original = RunConfig.read(config_path)
     if _digest(asdict(original)) != _digest(pilot["configuration"]["pilot"]):
         raise ValueError(
             "Local evaluation must retain the recorded training configuration"
         )
     expected, _ = resolve_condition(original)
-    condition = load_config([Path(p) for p in settings["condition"]])
+    parameters = dict(settings.get("model", {}))
+    parameters.setdefault(
+        "model", expected.model.parameters.get("model", "Qwen/Qwen3.5-4B")
+    )
+    parameters.update(
+        model_revision=settings["model_revision"],
+        tokenizer=settings["base_path"],
+        tokenizer_revision=settings["model_revision"],
+        thinking=expected.model.parameters["thinking"],
+    )
+    condition = replace(
+        expected, model=ModelConfig("VLLMModel", expected.model.sampling, parameters)
+    )
     old, new = config_record(expected), config_record(condition)
     frozen = pilot["configuration"]
     if (
@@ -237,14 +241,8 @@ def _stage(config_path: Path, phase: str, *, heldout: bool = False) -> Path:
         raise ValueError("Local evaluation must preserve sampling and native thinking")
     if condition.model.class_name.replace(":", ".").split(".")[-1] != "VLLMModel":
         raise ValueError("Checkpoint evaluation requires the local VLLMModel backend")
-    receipt_path = formal / "evaluation-routing.json"
-    receipt = {"config": str(config_path.resolve()), "sha256": file_sha256(config_path)}
-    if receipt_path.exists() and _read(receipt_path) != receipt:
-        raise ValueError("Local evaluation routing is already frozen to another config")
-    write_document(receipt_path, receipt)
     source_snapshot, step = _snapshot(pilot, phase)
     manifest = _prepare(settings, source_snapshot, step, new["model"]["thinking"])
-    _server(settings, manifest)
     condition = replace(
         condition,
         model=replace(
@@ -274,7 +272,7 @@ def _stage(config_path: Path, phase: str, *, heldout: bool = False) -> Path:
         "local_snapshot": local_snapshot,
         "optimizer_step": step,
         "split": "test" if heldout else "dev",
-        "routing_sha256": file_sha256(config_path),
+        "routing_sha256": _digest(asdict(original)),
         "status": "running",
         "runs": {},
     }
@@ -286,61 +284,20 @@ def _stage(config_path: Path, phase: str, *, heldout: bool = False) -> Path:
             "Local evaluation resume must retain its checkpoint and routing"
         )
     monitoring = MonitorConfig(**(original.monitoring | settings.get("monitoring", {})))
+    server_ready = False
     for seed in original.evaluation_seeds:
         seed_key = str(seed)
-        source = (
-            Path(settings["historical_baseline"]) / f"seed-{seed}/evaluation.json"
-            if phase == "baseline" and settings.get("historical_baseline")
-            else None
-        )
         reference = stage["runs"].get(seed_key)
-        source_receipt = (
-            _historical_receipt(pilot, seed_key, source, source_snapshot)
-            if source and source.exists()
-            else None
-        )
         if reference:
-            path = Path(reference["path"])
-            if file_sha256(path) != reference["sha256"]:
+            saved = Path(reference["path"])
+            if file_sha256(saved) != reference["sha256"]:
                 raise ValueError("Local evaluation evidence changed")
             if reference["status"] == "complete":
+                _require_verified_local(_read(saved), saved)
                 continue
-        elif source and source.exists() and _read(source)["status"] == "complete":
-            previous = _read(source)
-            if previous["snapshot"] != source_snapshot or (
-                previous["config"]["model"]["sampling"]["seed"] != seed
-                or previous["plan"]["task_ids"] != plan["task_ids"]
-            ):
-                raise ValueError(
-                    "Historical Baseline checkpoint, seed or tasks changed"
-                )
-            if previous["comparison_sha256"] != _digest(previous["comparison"]) or any(
-                _digest(previous["config"][key]) != _digest(old[key])
-                for key in ("protocol", "environment", "budget")
-            ):
-                raise ValueError("Historical Baseline conditions or evidence changed")
-            sampling = dict(old["model"]["sampling"]) | {"seed": seed}
-            if previous["config"]["model"]["sampling"] != sampling:
-                raise ValueError("Historical Baseline sampling changed")
-            from ..snapshots import encoding_condition
-
-            if _digest(
-                encoding_condition(previous["comparison"]["encoding"])
-            ) != _digest(
-                encoding_condition(_read(manifest)["encoding_details"])
-            ) or previous["plan"]["manifest_sha256"] != file_sha256(
-                Path(original.train_manifest)
-            ):
-                raise ValueError("Historical Baseline encoding or data changed")
-            stage["runs"][seed_key] = {
-                "path": str(source.resolve()),
-                "sha256": file_sha256(source),
-                "status": "complete",
-                "backend": "pytrio",
-                "historical": True,
-            }
-            write_document(destination, stage)
-            continue
+        if not server_ready:
+            _server(settings, manifest)
+            server_ready = True
         resolved = replace(
             condition,
             model=replace(
@@ -360,16 +317,12 @@ def _stage(config_path: Path, phase: str, *, heldout: bool = False) -> Path:
             training_run=formal / "training/opsd.json",
             phase=phase + "-local-eval",
             resume=(directory / "evaluation.json").exists(),
-            continue_from=source if source and source.exists() else None,
-            source_snapshot=source_snapshot if source and source.exists() else None,
-            expected_source_sha256=source_receipt["sha256"] if source_receipt else None,
-            retry_infrastructure=settings.get("retry_infrastructure", False)
-            if source and source.exists()
-            else False,
             plan_split="test" if heldout else "dev",
             require_online=False,
         )
         result = _read(path)
+        if result["status"] == "complete":
+            _require_verified_local(result, path)
         stage["runs"][seed_key] = {
             "path": str(path),
             "sha256": file_sha256(path),
@@ -395,30 +348,16 @@ def _stage(config_path: Path, phase: str, *, heldout: bool = False) -> Path:
         "evaluations": {phase: stage},
     }
     point = development_curve(record)[phase]
-    per_seed, counts = {}, {"pytrio": 0, "vllm": 0}
+    per_seed = {}
+    completed = 0
     for seed, reference in stage["runs"].items():
         result = _read(Path(reference["path"]))
         per_seed[seed] = result["summary"]
-        for row in result["tasks"]:
-            if row["task_id"] in result["summary"]["missing_task_ids"]:
-                continue
-            backend = (
-                "pytrio"
-                if reference.get("historical") or row.get("historical")
-                else "vllm"
-            )
-            counts[backend] += 1
+        completed += len(result["tasks"]) - len(result["summary"]["missing_task_ids"])
     report = point | {
         "split": stage["split"],
         "per_seed": per_seed,
-        "backend_counts": counts,
-        "mixed_inference": all(counts.values()),
-        "comparison_limitation": (
-            "Historical cloud results retained by request; "
-            "a mixed Baseline is not a fully local paired control."
-        )
-        if all(counts.values())
-        else None,
+        "backend_counts": {"vllm": completed},
     }
     report_path = root / "report.json"
     # Dictionary iteration order can differ after a process restart. Reuse the
@@ -428,8 +367,10 @@ def _stage(config_path: Path, phase: str, *, heldout: bool = False) -> Path:
     return destination
 
 
-def evaluate_checkpoint(config_path: Path, *, phase: str = "baseline") -> Path:
-    settings = yaml.safe_load(config_path.read_text())
+def evaluate_checkpoint(
+    config_path: Path, *, phase: str = "baseline", run_dir: Path | None = None
+) -> Path:
+    settings = _settings(config_path, run_dir)
     # Reject premature test access before creating output files or exporting weights.
     if phase == "test":
         _endpoint(_read(Path(settings["pilot_run"]) / "pilot.json"))
@@ -443,10 +384,12 @@ def evaluate_checkpoint(config_path: Path, *, phase: str = "baseline") -> Path:
                 "A local checkpoint evaluation is already active"
             ) from None
         if phase == "test":
-            baseline = _stage(config_path, "test-baseline", heldout=True)
+            baseline = _stage(
+                config_path, "test-baseline", heldout=True, run_dir=run_dir
+            )
             if _read(baseline)["status"] != "complete":
                 return baseline
-            final = _stage(config_path, "test-final", heldout=True)
+            final = _stage(config_path, "test-final", heldout=True, run_dir=run_dir)
             base_stage, final_stage = _read(baseline), _read(final)
             matched = final_stage["status"] == "complete"
             for seed, old in base_stage["runs"].items():
@@ -474,4 +417,4 @@ def evaluate_checkpoint(config_path: Path, *, phase: str = "baseline") -> Path:
             destination = root / "test-comparison.json"
             write_document(destination, comparison)
             return destination
-        return _stage(config_path, phase)
+        return _stage(config_path, phase, run_dir=run_dir)

@@ -1,4 +1,0 @@
-# Load after opsd-v6-local-base.yaml.
-model:
-  thinking: true
-  snapshot_manifest: runs/opsd-v6-thinking-local-20261008/snapshots/baseline/enable_thinking/snapshot.json

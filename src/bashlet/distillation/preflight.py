@@ -11,13 +11,13 @@ from typing import Any
 
 import numpy as np
 
-from ..config import config_record
-from ..experiment import run_experiment, task_from_record
-from ..monitoring import write_document
-from ..tasks import task_path
-from . import OPSDRun
-from .conditions import resolve_condition
-from .pytrio import PyTRIOOPSD
+from bashlet.config import ExperimentConfig, config_record
+from bashlet.distillation import OPSDConfig, OPSDRun
+from bashlet.distillation.config import resolve_condition
+from bashlet.distillation.pytrio import PyTRIOOPSD, PyTRIOOPSDConfig
+from bashlet.harness.experiment import run_experiment, task_from_record
+from bashlet.monitoring import write_document
+from bashlet.tasks import task_path
 
 
 def verify_native_preflight(
@@ -27,10 +27,10 @@ def verify_native_preflight(
     import pytrio as trio
     from transformers import AutoTokenizer
 
-    from ..encoding import _snapshot
-    from .pilot import PilotConfig
+    from bashlet.backends.encoding import _snapshot
+    from bashlet.distillation.config import RunConfig
 
-    config = PilotConfig.read(config_path)
+    config = RunConfig.read(config_path)
     condition, backend = resolve_condition(config)
     if not backend.thinking or run.record["pending_update"] is not None:
         raise ValueError("Native preflight requires thinking and settled updates")
@@ -194,11 +194,13 @@ def verify_native_preflight(
 
 
 def _run_with_preflight(
-    config_path: Path, preflight_config: Path, output_dir: Path,
+    config_path: Path,
+    preflight_config: Path,
+    output_dir: Path,
     execution_limit: Path | None,
 ) -> Path:
     """Gate the existing training workflow; never mix preflight parameters."""
-    from .pilot import run_opsd_pilot, verify_opsd_checkpoints
+    from bashlet.distillation.run import train_opsd, verify_opsd_checkpoints
 
     root = output_dir.resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -219,7 +221,7 @@ def _run_with_preflight(
         raise ValueError("Workflow resume must preserve both configurations")
     write_document(path, record)
     preflight_root = root / "preflight"
-    pilot = run_opsd_pilot(
+    pilot = train_opsd(
         preflight_config,
         preflight_root,
         resume=(preflight_root / "pilot.json").exists(),
@@ -247,9 +249,12 @@ def _run_with_preflight(
     )
     write_document(path, record)
     formal_root = root / "formal"
-    formal = run_opsd_pilot(
-        config_path, formal_root, resume=(formal_root / "pilot.json").exists(),
+    formal = train_opsd(
+        config_path,
+        formal_root,
+        resume=(formal_root / "pilot.json").exists(),
         execution_limit=execution_limit,
+        preflight_evidence=proof,
     )
     record.update(status=json.loads(formal.read_text())["status"], formal=str(formal))
     write_document(path, record)
@@ -274,7 +279,9 @@ def run_with_preflight(
         if (root / "workflow.json").exists() and not resume:
             raise ValueError("OPSD workflow exists; use --resume")
         try:
-            return _run_with_preflight(config_path, preflight_config, root, execution_limit)
+            return _run_with_preflight(
+                config_path, preflight_config, root, execution_limit
+            )
         except BaseException as error:
             path = root / "workflow.json"
             if path.exists():
@@ -287,3 +294,34 @@ def run_with_preflight(
                 )
                 write_document(path, record)
             raise
+
+
+def validate_preflight_evidence(
+    proof_path: Path | None,
+    condition: ExperimentConfig,
+    backend_config: PyTRIOOPSDConfig,
+    training: OPSDConfig,
+) -> str | None:
+    """Bind a completed native proof to the exact new run's research conditions."""
+    if proof_path is None:
+        return None
+    evidence = proof_path.read_bytes()
+    proof = json.loads(evidence)
+    native = proof.get("native", {})
+    if (
+        proof.get("status") != "complete"
+        or native.get("status") != "complete"
+        or native.get("condition") != json.loads(json.dumps(config_record(condition)))
+        or any(
+            native.get("backend", {}).get(key) != value
+            for key, value in asdict(backend_config).items()
+            if key not in {"group", "spend_config"}
+        )
+        or any(
+            native.get("training", {}).get(key) != value
+            for key, value in asdict(training).items()
+            if key not in {"group", "spend_config"}
+        )
+    ):
+        raise ValueError("Native preflight evidence does not match formal conditions")
+    return hashlib.sha256(evidence).hexdigest()

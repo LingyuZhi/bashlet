@@ -5,11 +5,11 @@ model:
   model_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
   tokenizer: Qwen/Qwen3.5-4B
   tokenizer_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
-  tokenizer_cache_dir: runs/tokenizers
+  tokenizer_cache_dir: ../runs/tokenizers
   thinking: false
-  ledger_path: runs/spend.sqlite3
+  ledger_path: ../runs/spend.sqlite3
   api_key_env: PYTRIO_API_KEY
-  dotenv_path: .env
+  dotenv_path: ../.env
   timeout_seconds: 60
   max_retries: 1
   retry_delay_seconds: 0.5

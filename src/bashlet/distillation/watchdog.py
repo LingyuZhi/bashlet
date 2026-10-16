@@ -16,115 +16,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from .recovery import reconciled_rejection
-
-
-class WatchdogError(ValueError):
-    """The watchdog cannot safely inspect or control the configured run."""
-
-
-@dataclass(frozen=True)
-class WatchConfig:
-    root: Path
-    monitor_root: Path
-    workflow: Path
-    preflight_pilot: Path
-    preflight_training: Path
-    preflight_validation: Path
-    formal_pilot: Path
-    formal_training: Path
-    ledger: Path
-    ledger_groups: tuple[str, ...]
-    config_files: tuple[Path, ...]
-    worker_session: str
-    monitor_session: str
-    worker_log: Path
-    worker_command: tuple[str, ...]
-    poll_seconds: int
-    backoff_min_seconds: int
-    backoff_max_seconds: int
-
-    @classmethod
-    def read(cls, path: Path) -> WatchConfig:
-        try:
-            raw = yaml.safe_load(path.read_text())
-        except (OSError, yaml.YAMLError):
-            raise WatchdogError("monitor configuration is unreadable") from None
-        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
-            raise WatchdogError("unsupported monitor configuration")
-
-        config_dir = path.resolve().parent
-        root_text = raw.get("repository_root")
-        if not isinstance(root_text, str) or not root_text:
-            raise WatchdogError("repository_root must be a path")
-        root = _resolve(config_dir, root_text)
-
-        paths = raw.get("paths")
-        worker = raw.get("worker")
-        timing = raw.get("timing")
-        if not isinstance(paths, dict) or not isinstance(worker, dict):
-            raise WatchdogError("monitor paths and worker settings are required")
-        if not isinstance(timing, dict):
-            raise WatchdogError("monitor timing settings are required")
-
-        def path_value(key: str) -> Path:
-            value = paths.get(key)
-            if not isinstance(value, str) or not value:
-                raise WatchdogError(f"paths.{key} must be a path")
-            return _resolve(root, value)
-
-        session = worker.get("session")
-        command = worker.get("command")
-        if not isinstance(session, str) or not session:
-            raise WatchdogError("worker.session is required")
-        monitor_session = raw.get("monitor_session")
-        if not isinstance(monitor_session, str) or not monitor_session:
-            raise WatchdogError("monitor_session is required")
-        if command != ["bash", "scripts/train-expanded-opsd.sh", "--resume"]:
-            raise WatchdogError("worker command must use the fixed --resume entrypoint")
-
-        config_files_raw = raw.get("frozen_configurations")
-        if not isinstance(config_files_raw, list) or not config_files_raw:
-            raise WatchdogError("frozen_configurations must be a non-empty list")
-        config_files = tuple(_resolve(root, item) for item in config_files_raw)
-        groups = raw.get("ledger_groups")
-        expected_groups = (
-            "opsd-expanded-preflight-v1",
-            "opsd-expanded-train-v1",
-            "opsd-expanded-dev-v1",
-        )
-        if groups != list(expected_groups):
-            raise WatchdogError("ledger_groups must match the frozen OPSD run")
-        poll_seconds = _required_int(timing, "poll_seconds")
-        backoff_min = _required_int(timing, "backoff_min_seconds")
-        backoff_max = _required_int(timing, "backoff_max_seconds")
-        if not 1 <= poll_seconds <= 60:
-            raise WatchdogError("poll_seconds must be between 1 and 60")
-        if not 60 <= backoff_min <= backoff_max <= 600:
-            raise WatchdogError("restart backoff must stay between 60 and 600 seconds")
-
-        return cls(
-            root=root,
-            monitor_root=path_value("monitor_root"),
-            workflow=path_value("workflow"),
-            preflight_pilot=path_value("preflight_pilot"),
-            preflight_training=path_value("preflight_training"),
-            preflight_validation=path_value("preflight_validation"),
-            formal_pilot=path_value("formal_pilot"),
-            formal_training=path_value("formal_training"),
-            ledger=path_value("ledger"),
-            ledger_groups=expected_groups,
-            config_files=config_files,
-            worker_session=session,
-            monitor_session=monitor_session,
-            worker_log=_resolve(root, _required_string(worker, "log")),
-            worker_command=tuple(command),
-            poll_seconds=poll_seconds,
-            backoff_min_seconds=backoff_min,
-            backoff_max_seconds=backoff_max,
-        )
+from bashlet.distillation.config import WatchConfig, WatchdogError
+from bashlet.distillation.recovery import reconciled_rejection
 
 
 @dataclass(frozen=True)
@@ -142,27 +35,6 @@ class EvidenceState:
     workflow_stage: str | None
     pending_requests: int
     ledger_requests: dict[str, int]
-
-
-def _resolve(base: Path, value: Any) -> Path:
-    if not isinstance(value, str) or not value:
-        raise WatchdogError("configured paths must be non-empty strings")
-    path = Path(value)
-    return (path if path.is_absolute() else base / path).resolve()
-
-
-def _required_string(raw: dict[str, Any], key: str) -> str:
-    value = raw.get(key)
-    if not isinstance(value, str) or not value:
-        raise WatchdogError(f"worker.{key} is required")
-    return value
-
-
-def _required_int(raw: dict[str, Any], key: str) -> int:
-    value = raw.get(key)
-    if type(value) is not int:
-        raise WatchdogError(f"{key} must be an integer")
-    return value
 
 
 def _read_object(path: Path) -> dict[str, Any] | None:
@@ -324,7 +196,9 @@ def _ledger_state(config: WatchConfig) -> tuple[dict[str, int], dict[str, int]]:
 
 
 def _training_gate(
-    pilot: dict[str, Any], training: dict[str, Any] | None, root: Path,
+    pilot: dict[str, Any],
+    training: dict[str, Any] | None,
+    root: Path,
 ) -> str | None:
     if training is None:
         return "training state record is missing"
@@ -350,9 +224,10 @@ def _training_gate(
             if reconciled_rejection(batch, pilot, root, len(updates)):
                 continue
             return "training history contains an unreconciled rejected batch"
-        if type(update.get("optimizer_step")) is not int or update.get(
-            "optimizer_step"
-        ) != len(updates) + 1:
+        if (
+            type(update.get("optimizer_step")) is not int
+            or update.get("optimizer_step") != len(updates) + 1
+        ):
             return "training history contains an unresolved batch"
         if not isinstance(update.get("student_policy"), str) or not update.get(
             "student_policy"
@@ -370,8 +245,13 @@ def _training_gate(
         not batches or isinstance(batches[-1].get("update"), dict)
     ):
         return "training record has an explicit failure"
-    if batches and not updates and (
-        training.get("optimizer_step") != 0 or training.get("last_update") is not None
+    if (
+        batches
+        and not updates
+        and (
+            training.get("optimizer_step") != 0
+            or training.get("last_update") is not None
+        )
     ):
         return "training state does not match its final durable optimizer receipt"
     if updates:
@@ -456,11 +336,14 @@ def _proof_is_complete(
 
 
 def _formal_complete(pilot: dict[str, Any], training: dict[str, Any] | None) -> bool:
+    epochs = pilot.get("configuration", {}).get("pilot", {}).get("epochs")
     return (
         training is not None
         and pilot.get("status") == "complete"
         and pilot.get("training_complete") is True
-        and pilot.get("epochs_completed") == 4
+        and type(epochs) is int
+        and epochs > 0
+        and pilot.get("epochs_completed") == epochs
         and training.get("pending_update") is None
     )
 
@@ -515,7 +398,7 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
     preflight_training = _read_object(config.preflight_training)
     if preflight is None:
         if workflow_stage != "preflight-training" or counts.get(
-            "opsd-expanded-preflight-v1", 0
+            config.ledger_groups[0], 0
         ):
             return result(
                 "blocked", "preflight record is missing after related work started"
@@ -525,12 +408,14 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             return result("blocked", "preflight has an explicit failure")
         if preflight_training is not None:
             problem = _training_gate(
-                preflight, preflight_training, config.preflight_pilot.parent,
+                preflight,
+                preflight_training,
+                config.preflight_pilot.parent,
             )
             if problem is not None:
                 return result("blocked", problem)
         elif preflight.get("status") == "complete" or counts.get(
-            "opsd-expanded-preflight-v1", 0
+            config.ledger_groups[0], 0
         ):
             return result("blocked", "preflight has work but no training-state record")
 
@@ -561,9 +446,7 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             return result(
                 "blocked", "workflow failure requires explicit reconciliation"
             )
-        if counts.get("opsd-expanded-train-v1", 0) or counts.get(
-            "opsd-expanded-dev-v1", 0
-        ):
+        if sum(counts.get(group, 0) for group in config.ledger_groups[1:]):
             return result(
                 "blocked", "formal pilot record is missing after related work started"
             )
@@ -573,9 +456,10 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
     if _has_blocking_failure(formal):
         return result("blocked", "formal run has an explicit failure")
     development = formal.get("development_execution")
-    if development is not None and _sha256(Path(development["config"])) != development[
-        "sha256"
-    ]:
+    if (
+        development is not None
+        and _sha256(Path(development["config"])) != development["sha256"]
+    ):
         return result("blocked", "background development configuration changed")
     if workflow_status == "failed" and not _recoverable_record_failure(formal):
         return result("blocked", "workflow failure requires explicit reconciliation")
@@ -589,20 +473,18 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             return result("blocked", problem)
     elif formal.get("status") == "complete":
         return result("blocked", "completed formal run has no training-state record")
-    elif counts.get("opsd-expanded-train-v1", 0) or counts.get(
-        "opsd-expanded-dev-v1", 0
-    ):
+    elif sum(counts.get(group, 0) for group in config.ledger_groups[1:]):
         return result(
             "blocked", "formal run has ledger activity but no training-state record"
         )
     if formal.get("status") == "complete":
         if not _formal_complete(formal, formal_training):
             return result(
-                "blocked", "formal run says complete without the four-epoch endpoint"
+                "blocked", "formal run says complete without the configured endpoint"
             )
         if workflow_status == "complete":
             return result(
-                "complete", "four-epoch formal run and development are complete"
+                "complete", "configured formal run and development are complete"
             )
         return result(
             "resume", "formal endpoint is complete; resume can finalize workflow state"
@@ -615,9 +497,10 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             or formal_training.get("optimizer_step") != execution["max_updates"]
             or formal.get("training_complete") is not False
             or formal.get("main_result") is not None
-            or formal.get("evaluations", {}).get(
-                f"epoch-{formal.get('epochs_completed')}", {}
-            ).get("status") != "complete"
+            or formal.get("evaluations", {})
+            .get(f"epoch-{formal.get('epochs_completed')}", {})
+            .get("status")
+            != "complete"
         ):
             return result(
                 "blocked", "execution limit endpoint evidence is inconsistent"

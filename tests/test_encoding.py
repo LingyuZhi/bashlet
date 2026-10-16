@@ -75,7 +75,7 @@ def test_missing_cached_template_is_fetched_from_the_mirror(
         return str(official_tokenizer.name_or_path)
 
     # Replace the external Hub download boundary; tokenization remains real.
-    monkeypatch.setattr("bashlet.encoding.snapshot_download", hub_download)
+    monkeypatch.setattr("bashlet.backends.encoding.snapshot_download", hub_download)
     encoding = QwenChatMLEncoding(QWEN, revision=REVISION)
     expected = official_tokenizer.apply_chat_template(
         [

@@ -1,4 +1,0 @@
-# Layer after local-base.yaml; both identities use the same inference conditions.
-model:
-  model: sft-step12
-  snapshot_manifest: runs/issue21-local-inference/local-sft-step12-merged-v2/snapshot.json

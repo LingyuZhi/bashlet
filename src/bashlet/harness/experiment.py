@@ -1,0 +1,449 @@
+"""Task preparation, task-independent interaction, submission grading and analysis."""
+
+import hashlib
+import json
+import keyword
+import shutil
+import uuid
+from collections.abc import Callable, Sequence
+from dataclasses import asdict, fields
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from bashlet.config import ExperimentConfig, load_config
+from bashlet.harness.analysis import analyze_episode
+from bashlet.harness.episode import run_episode, save_record
+from bashlet.harness.models import (
+    CaseResult,
+    CommandGrader,
+    EpisodeResult,
+    ExperimentResult,
+    FirstImplementation,
+    FunctionGrader,
+    Grade,
+    GradingCase,
+    Model,
+    Task,
+    TaskAssignment,
+    TaskOrigin,
+)
+from bashlet.harness.sandbox import Sandbox
+from bashlet.harness.workspace import (
+    capture_workspace,
+    snapshot_workspace,
+    validate_workspace_path,
+)
+from bashlet.tasks import validate_task
+
+if TYPE_CHECKING:
+    from bashlet.distillation import OPSDRun
+
+_GRADING_DRIVER = """
+import contextlib, importlib.util, json, sys
+request = json.load(sys.stdin)
+sys.path.insert(0, '/workspace')
+with contextlib.redirect_stdout(sys.stderr):
+    name = request['module'][:-3].replace('/', '.')
+    source = '/workspace/' + request['module']
+    spec = importlib.util.spec_from_file_location(name, source)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    answer = getattr(module, request['function'])(*request['args'])
+print(json.dumps(answer, allow_nan=False))
+"""
+
+
+def task_from_record(data: dict[str, Any]) -> Task:
+    """Decode the trusted Task format shared by CLI and evaluation plans."""
+    task_data = dict(data)
+    grader_data = dict(task_data.pop("grader"))
+    grader: FunctionGrader | CommandGrader
+    if "command" in grader_data:
+        grader = CommandGrader(**grader_data)
+    else:
+        cases = tuple(
+            GradingCase(args=tuple(case["args"]), expected=case["expected"])
+            for case in grader_data.pop("cases")
+        )
+        grader = FunctionGrader(**grader_data, cases=cases)
+    if "implementation_paths" in task_data:
+        task_data["implementation_paths"] = tuple(task_data["implementation_paths"])
+    if task_data.get("origin") is not None:
+        task_data["origin"] = TaskOrigin(**task_data["origin"])
+    if task_data.get("assignment") is not None:
+        task_data["assignment"] = TaskAssignment(**task_data["assignment"])
+    task = Task(**task_data, grader=grader)
+    validate_task(task)
+    return task
+
+
+def serialize_task(task: Task) -> str:
+    """Canonical private Task document used for both storage and identity hashes."""
+    record = asdict(task)
+    if task.assignment is None:
+        record.pop("assignment")
+    return json.dumps(record, ensure_ascii=True, allow_nan=False, indent=2)
+
+
+def _validate_task(task: Task, environment_id: str) -> None:
+    if not task.task_id:
+        raise ValueError("A task identity is required")
+    validate_task(task)
+    if task.environment_id != environment_id:
+        raise ValueError(
+            f"Task environment {task.environment_id!r} "
+            f"does not match {environment_id!r}"
+        )
+    grader = task.grader
+    if isinstance(grader, FunctionGrader):
+        if not grader.cases:
+            raise ValueError("At least one grading case is required")
+        validate_workspace_path(grader.module_path)
+        if not grader.module_path.endswith(".py"):
+            raise ValueError("The grading module must be a Python file")
+        function = grader.function_name
+        if not function.isidentifier() or keyword.iskeyword(function):
+            raise ValueError("The task function must be a Python identifier")
+    else:
+        if not grader.command.strip() or "\x00" in grader.command:
+            raise ValueError("The grading command must be non-empty and contain no NUL")
+        _validate_files(grader.hidden_files)
+    _validate_files(task.initial_files)
+    for path in task.implementation_paths:
+        validate_workspace_path(path)
+
+
+def _validate_files(files: dict[str, str]) -> None:
+    for path, content in files.items():
+        validate_workspace_path(path)
+        if not isinstance(content, str):
+            raise ValueError(f"Task file {path!r} must contain text")
+        parents = Path(path).parents
+        if any(str(parent) in files for parent in parents):
+            raise ValueError(f"Conflicting task file path {path!r}")
+
+
+def _grade(
+    grader: FunctionGrader | CommandGrader,
+    sandbox: Sandbox,
+    run_dir: Path,
+    *,
+    submission: str = "submission",
+    destination: str = "private/grading-workspace",
+) -> Grade:
+    workspace = run_dir / destination
+    shutil.copytree(run_dir / submission, workspace)
+    if isinstance(grader, CommandGrader):
+        try:
+            for path, content in grader.hidden_files.items():
+                file_path = workspace / path
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.unlink(missing_ok=True)
+                file_path.write_text(content)
+        except (FileExistsError, IsADirectoryError, NotADirectoryError) as error:
+            return Grade(
+                False, 0, 1, (CaseResult(False, "grading_path_conflict", str(error)),)
+            )
+        observation = sandbox.execute(
+            workspace,
+            ["/bin/bash", "--noprofile", "--norc", "-c", grader.command],
+            readonly=True,
+        )
+        if observation.status == "interrupted":
+            raise KeyboardInterrupt
+        passed = observation.status == "ok"
+        command_result = CaseResult(
+            passed,
+            "passed" if passed else observation.status,
+            observation.stderr if observation.status == "infrastructure_error" else "",
+        )
+        return Grade(passed, int(passed), 1, (command_result,))
+    results: list[CaseResult] = []
+    for case in grader.cases:
+        observation = sandbox.execute(
+            workspace,
+            [sandbox.python, "-I", "-B", "-c", _GRADING_DRIVER],
+            stdin=json.dumps(
+                {
+                    "module": grader.module_path,
+                    "function": grader.function_name,
+                    "args": case.args,
+                }
+            ).encode(),
+            readonly=True,
+        )
+        if observation.status == "interrupted":
+            raise KeyboardInterrupt
+        if observation.status == "infrastructure_error":
+            results.append(CaseResult(False, observation.status, observation.stderr))
+            break
+        if observation.status != "ok":
+            results.append(CaseResult(False, observation.status))
+        elif observation.output_truncated:
+            results.append(CaseResult(False, "output_limit"))
+        else:
+            try:
+                passed = json.loads(observation.stdout) == case.expected
+                results.append(
+                    CaseResult(passed, "passed" if passed else "wrong_answer")
+                )
+            except (ValueError, RecursionError):
+                results.append(CaseResult(False, "invalid_output"))
+    passed_cases = sum(result.passed for result in results)
+    return Grade(
+        passed_cases == len(grader.cases),
+        passed_cases,
+        len(grader.cases),
+        tuple(results),
+    )
+
+
+def _assess_first(
+    result: ExperimentResult, task: Task, condition: ExperimentConfig
+) -> FirstImplementation:
+    assessment = FirstImplementation()
+    if not result.candidates:
+        return assessment
+    candidate = result.candidates[0]
+    assessment.candidate_index = candidate.index
+    assessment.formed_at_step = candidate.formed_at_step
+    manifest = result.trajectory[candidate.formed_at_step].workspace_manifest
+    try:
+        assessment.snapshot = snapshot_workspace(
+            manifest,
+            result.run_dir,
+            result.limits,
+            destination="private/first-implementation",
+        )
+        assessment.grade = _grade(
+            task.grader,
+            Sandbox(condition.environment),
+            result.run_dir,
+            submission=assessment.snapshot.path,
+            destination="private/first-grading-workspace",
+        )
+        assessment.status = (
+            "infrastructure_error"
+            if any(c.status == "infrastructure_error" for c in assessment.grade.cases)
+            else "graded"
+        )
+    except ValueError as error:
+        assessment.status, assessment.reason = "invalid_snapshot", str(error)
+    except OSError as error:
+        assessment.status, assessment.reason = "infrastructure_error", str(error)
+    except KeyboardInterrupt:
+        assessment.status, assessment.reason = (
+            "interrupted",
+            "First grading interrupted",
+        )
+    return assessment
+
+
+def run_experiment(
+    *,
+    task: Task,
+    model: Model,
+    output_dir: Path = Path("runs"),
+    config: ExperimentConfig | Sequence[Path] = (),
+    overrides: Sequence[str] = (),
+    on_update: Callable[[EpisodeResult], None] | None = None,
+    assess_first_implementation: bool = False,
+    opsd_run: "OPSDRun | None" = None,
+    resume_run_dir: Path | None = None,
+    resume_elapsed_seconds: float | None = None,
+) -> ExperimentResult:
+    """Prepare a Task, run its Episode, and grade only an explicit Submission.
+
+    Initial files and instruction are public; the grader and reference remain
+    host-only. Grading uses a read-only snapshot copy in fresh sandboxes. Function
+    results are compared on the host; test commands pass on exit code zero and
+    share a process with untrusted student code. The returned record and run
+    directory are operator-only and never become student observations.
+
+    ``opsd_run`` scores the original sampled tokens with a frozen initial teacher
+    and requests one guarded update after grading. Its result and failure state
+    are separate from task success. Each subsequent call uses ``opsd_run.student``.
+    """
+    if isinstance(config, ExperimentConfig):
+        if overrides:
+            raise ValueError("Apply overrides before passing a resolved config")
+        condition = config
+    else:
+        condition = load_config(config, overrides)
+    _validate_task(task, condition.environment.id)
+    if opsd_run is not None:
+        opsd_run.validate_request(task, model)
+    if resume_run_dir is not None and opsd_run is not None:
+        raise ValueError("Checkpoint continuation supports interaction evaluation only")
+    grading_protocol = (
+        "test-command-v1"
+        if isinstance(task.grader, CommandGrader)
+        else "json-function-v1"
+    )
+    task_json = serialize_task(task)
+    run_dir = (
+        resume_run_dir.resolve()
+        if resume_run_dir is not None
+        else output_dir.resolve() / uuid.uuid4().hex
+    )
+    if resume_run_dir is None:
+        run_dir.mkdir(parents=True, mode=0o700)
+    private = run_dir / "private"
+    if resume_run_dir is None:
+        private.mkdir(mode=0o700)
+        (private / "task.json").write_text(task_json)
+    elif (private / "task.json").read_text() != task_json:
+        raise ValueError("Episode checkpoint task changed")
+    workspace = run_dir / "workspace"
+    if resume_run_dir is None:
+        workspace.mkdir()
+        for path, content in task.initial_files.items():
+            target = workspace / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content)
+    metadata: dict[str, object] = {
+        "task_id": task.task_id,
+        "task_type": task.task_type,
+        "variant_id": task.variant_id,
+        "feedback_start_id": task.feedback_start_id,
+        "environment_variant_id": task.environment_variant_id,
+        "task_origin": asdict(task.origin) if task.origin else None,
+        "task_assignment": asdict(task.assignment) if task.assignment else None,
+        "task_sha256": hashlib.sha256(task_json.encode()).hexdigest(),
+        "environment_id": task.environment_id,
+        "grading_protocol": grading_protocol,
+        "candidates": [],
+        "repair_attempts": [],
+        "submission": None,
+        "grade": None,
+        "passed": False,
+    }
+
+    resume_from = None
+    if resume_run_dir is not None:
+        resume_from = run_dir / "run.json"
+        checkpoint_bytes = resume_from.read_bytes()
+        checkpoint = json.loads(checkpoint_bytes)
+        metadata["recovery"] = {
+            "resumed_at": datetime.now(UTC).isoformat(),
+            "checkpoint_sha256": hashlib.sha256(checkpoint_bytes).hexdigest(),
+            "saved_usage": checkpoint["usage"],
+            "charged_elapsed_seconds": resume_elapsed_seconds,
+            "replayed_actions": 0,
+        }
+        if not checkpoint["context_tokens"] and not checkpoint["trajectory"]:
+            if checkpoint["usage"]["steps"] or checkpoint["usage"]["generated_tokens"]:
+                raise ValueError("Initial checkpoint has unrecorded sampling usage")
+            current = capture_workspace(workspace, run_dir)
+            actual_files = {
+                path: entry.sha256
+                for path, entry in current.items()
+                if entry.kind == "file"
+            }
+            expected_files = {
+                path: hashlib.sha256(content.encode()).hexdigest()
+                for path, content in task.initial_files.items()
+            }
+            expected_dirs = {
+                str(parent)
+                for path in task.initial_files
+                for parent in Path(path).parents
+                if str(parent) != "."
+            }
+            if actual_files != expected_files or any(
+                entry.kind != "file"
+                and (entry.kind != "directory" or path not in expected_dirs)
+                for path, entry in current.items()
+            ):
+                raise ValueError("Initial checkpoint workspace differs from task files")
+            checkpoint["initial_workspace_manifest"] = {
+                path: asdict(entry) for path, entry in current.items()
+            }
+            checkpoint["context_tokens"] = model.encoding.prompt(
+                condition.protocol.system_prompt, task.prompt
+            )
+            resume_from = private / "resume-initial-checkpoint.json"
+            resume_from.write_text(json.dumps(checkpoint, indent=2))
+
+    if opsd_run is not None:
+        model = opsd_run.begin(task, model, condition)
+
+    def save_progress(episode: EpisodeResult) -> None:
+        save_record(episode, condition, metadata | {"episode_status": episode.status})
+        if on_update is not None:
+            on_update(episode)
+
+    episode = run_episode(
+        instruction=task.prompt,
+        workspace=workspace,
+        model=model,
+        config=condition,
+        run_dir=run_dir,
+        on_update=save_progress,
+        resume_from=resume_from,
+        resume_elapsed_seconds=resume_elapsed_seconds,
+    )
+    result = ExperimentResult(
+        **{field.name: getattr(episode, field.name) for field in fields(EpisodeResult)},
+        task_id=task.task_id,
+        task_sha256=str(metadata["task_sha256"]),
+        environment_id=task.environment_id,
+        episode_status=episode.status,
+    )
+    try:
+        if episode.status != "submitted":
+            return result
+        manifest = episode.trajectory[-1].workspace_manifest
+        try:
+            result.submission = snapshot_workspace(manifest, run_dir, result.limits)
+        except (OSError, ValueError) as error:
+            result.status, result.reason = "invalid_submission", str(error)
+            return result
+        result.grade = _grade(task.grader, Sandbox(condition.environment), run_dir)
+        result.reason = next(
+            (case.reason for case in result.grade.cases if case.reason), ""
+        )
+        result.status = (
+            "infrastructure_error"
+            if any(case.status == "infrastructure_error" for case in result.grade.cases)
+            else "completed"
+        )
+        return result
+    except OSError as error:
+        result.status, result.reason = "infrastructure_error", str(error)
+        return result
+    except KeyboardInterrupt:
+        result.status, result.reason = "interrupted", "Grading interrupted"
+        return result
+    finally:
+        feedback_materials = {
+            path: result.initial_workspace_manifest[path]
+            for path in task.initial_files
+            if path not in task.implementation_paths
+            and path in result.initial_workspace_manifest
+        }
+        analyze_episode(result, task, feedback_materials)
+        if assess_first_implementation:
+            result.first_implementation = _assess_first(result, task, condition)
+        final_metadata: dict[str, object] = {
+            "grading_protocol": grading_protocol,
+            "task_origin": asdict(task.origin) if task.origin else None,
+            "task_assignment": asdict(task.assignment) if task.assignment else None,
+            "task_type": task.task_type,
+            "variant_id": task.variant_id,
+            "feedback_start_id": task.feedback_start_id,
+            "environment_variant_id": task.environment_variant_id,
+            "passed": result.passed,
+        }
+        if "recovery" in metadata:
+            final_metadata["recovery"] = metadata["recovery"]
+        try:
+            if opsd_run is not None:
+                save_record(result, condition, final_metadata)
+                opsd_run.finish(result, task, model, condition)
+        finally:
+            save_record(result, condition, final_metadata)
+        if on_update is not None:
+            on_update(result)

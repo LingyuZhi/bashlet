@@ -9,14 +9,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ..config import DirectCodeConfig, ExperimentConfig, config_record, load_model
-from ..experiment import run_experiment, serialize_task, task_from_record
-from ..models import EpisodeResult, Model, ModelBackend, Task
-from ..monitoring import MonitorConfig, RunMonitor, code_revision, evaluation_metrics
-from ..protocol import fingerprints
-from ..spend import summarize_cost
-from ..tasks import task_family, task_path
-from ..vllm import VLLMModel, configured_request_policy
+from bashlet.backends.vllm import VLLMModel, configured_request_policy
+from bashlet.config import ExperimentConfig, config_record, load_model
+from bashlet.harness.experiment import run_experiment, serialize_task, task_from_record
+from bashlet.harness.models import EpisodeResult, Model, ModelBackend, Task
+from bashlet.harness.protocol import fingerprints
+from bashlet.monitoring import (
+    MonitorConfig,
+    RunMonitor,
+    code_revision,
+    evaluation_metrics,
+)
+from bashlet.spend import summarize_cost
+from bashlet.tasks import task_family, task_path
 
 VERSION = "development-evaluation-v1"
 RULES = {
@@ -52,13 +57,6 @@ def _write(path: Path, record: dict[str, Any]) -> None:
     pending = path.with_suffix(".tmp")
     pending.write_text(json.dumps(record, ensure_ascii=True, allow_nan=False, indent=2))
     pending.replace(path)
-
-
-def effective_comparison(record: dict[str, Any]) -> dict[str, Any]:
-    """Recover omitted legacy HTTP defaults from the saved constructor config."""
-    comparison: dict[str, Any] = dict(record["comparison"])
-    comparison["request_policy"] = configured_request_policy(record["config"]["model"])
-    return comparison
 
 
 def _tasks(plan_path: Path, *, split: str = "dev") -> tuple[dict[str, Any], list[Task]]:
@@ -257,87 +255,6 @@ def _episode_row(row: dict[str, Any], path: Path, episode: dict[str, Any]) -> No
     }
 
 
-def _import_results(
-    source: Path,
-    record: dict[str, Any],
-    source_snapshot: str,
-    *,
-    retry_infrastructure: bool,
-    expected_source_sha256: str | None,
-) -> None:
-    """Import terminal evidence explicitly; never rewrite or relabel its source."""
-    from ..snapshots import encoding_condition
-
-    raw = source.read_bytes()
-    source_digest = hashlib.sha256(raw).hexdigest()
-    if expected_source_sha256 is not None and source_digest != expected_source_sha256:
-        raise ValueError(
-            "Historical evaluation evidence differs from its saved receipt"
-        )
-    if record["evidence_kind"] == "experimental" and expected_source_sha256 is None:
-        raise ValueError(
-            "Historical experimental evaluation requires its saved receipt"
-        )
-    previous = json.loads(raw)
-    if previous["snapshot"] != source_snapshot or (
-        previous["plan"] != record["plan"]
-        or previous["evidence_kind"] != record["evidence_kind"]
-        or previous["comparison_sha256"] != _digest(previous["comparison"])
-    ):
-        raise ValueError("Historical evaluation snapshot, plan or evidence mismatch")
-    for key in ("protocol", "environment", "budget", "sampling", "track"):
-        if _digest(previous["comparison"].get(key)) != _digest(
-            record["comparison"].get(key)
-        ):
-            raise ValueError("Historical evaluation tasks and conditions must match")
-    old_encoding, new_encoding = (
-        previous["comparison"]["encoding"],
-        record["comparison"]["encoding"],
-    )
-    if "files_sha256" in old_encoding and "files_sha256" in new_encoding:
-        old_encoding, new_encoding = map(
-            encoding_condition, (old_encoding, new_encoding)
-        )
-    if _digest(old_encoding) != _digest(new_encoding):
-        raise ValueError("Historical evaluation encoding must match")
-    if record["evidence_kind"] == "experimental":
-        details = record["snapshot_details"]
-        checkpoint = (details.get("adapter") or {}).get("checkpoint", {}).get("path")
-        if details.get("backend") != "vllm" or (
-            source_snapshot != f"pytrio/{details.get('base_model')}@{checkpoint}"
-        ):
-            raise ValueError("Local snapshot must export the historical checkpoint")
-    imported = 0
-    for row, old in zip(record["tasks"], previous["tasks"], strict=True):
-        if row["task_id"] != old["task_id"] or row["task_sha256"] != old["task_sha256"]:
-            raise ValueError("Historical evaluation task identity changed")
-        outcome = old.get("outcome", "not_started")
-        if outcome == "not_started":
-            continue
-        missing = outcome in {"infrastructure_error", "interrupted", "running"} or (
-            old.get("budget_kind") == "spend"
-        )
-        if missing and retry_infrastructure:
-            continue
-        row.update(old)
-        if old.get("run"):
-            row["run"] = str((source.parent / old["run"]).resolve())
-        row.update(evaluation_snapshot=source_snapshot, historical=True)
-        imported += not missing
-    provenance = {
-        "path": str(source.resolve()),
-        "sha256": source_digest,
-        "snapshot": source_snapshot,
-        "imported_tasks": imported,
-        "retry_infrastructure": retry_infrastructure,
-        "cost": previous.get("cost"),
-    }
-    record.update(historical_source=provenance, mixed_inference=True)
-    record["comparison"]["historical_source"] = {
-        key: provenance[key] for key in ("path", "sha256", "snapshot")
-    }
-
-
 def evaluate(
     *,
     plan_path: Path,
@@ -347,7 +264,6 @@ def evaluate(
     output_dir: Path,
     monitoring: MonitorConfig | None = None,
     training_run: Path | None = None,
-    direct_code: DirectCodeConfig | None = None,
     run_dir: Path | None = None,
     model: Model | None = None,
     phase: str | None = None,
@@ -355,15 +271,11 @@ def evaluate(
     resume_running_episodes: bool = False,
     resume_elapsed_seconds: dict[str, float] | None = None,
     require_online: bool | None = None,
-    continue_from: Path | None = None,
-    source_snapshot: str | None = None,
-    retry_infrastructure: bool = False,
     plan_split: str = "dev",
-    expected_source_sha256: str | None = None,
 ) -> Path:
     """CLI orchestration; every planned attempt uses the existing experiment seam."""
     plan, tasks = _tasks(plan_path, split=plan_split)
-    track = "coding" if direct_code is not None else "harness"
+    track = "harness"
     model = model if model is not None else load_model(condition.model)
     if model.identity != snapshot:
         raise ValueError(
@@ -377,15 +289,9 @@ def evaluate(
         assert isinstance(model, VLLMModel)
         model.probe()
         details = model.describe()
-    if evidence_kind == "experimental" and not (
-        (
-            details.get("backend") == "pytrio"
-            and details.get("development_only") is False
-        )
-        or local
-    ):
+    if evidence_kind == "experimental" and not local:
         raise ValueError(
-            "Experimental evaluation requires PyTRIO or a verified local snapshot; "
+            "Experimental evaluation requires a verified local vLLM snapshot; "
             "use --evidence-kind test-double for development backends"
         )
     run_dir = (run_dir or output_dir.resolve() / uuid.uuid4().hex).resolve()
@@ -424,11 +330,8 @@ def evaluate(
         "track": track,
         "request_policy": configured_request_policy(configuration["model"]),
     }
-    if direct_code is not None:
-        comparison["direct_code"] = asdict(direct_code)
-        del comparison["protocol"]
     if local:
-        from ..snapshots import encoding_condition
+        from bashlet.snapshots import encoding_condition
 
         comparison["encoding"] = encoding_condition(model.encoding.describe())
         if resume:
@@ -450,22 +353,10 @@ def evaluate(
         "comparison_sha256": _digest(comparison),
         "tasks": rows,
     }
-    if continue_from is not None:
-        _import_results(
-            continue_from,
-            record,
-            source_snapshot or snapshot,
-            retry_infrastructure=retry_infrastructure,
-            expected_source_sha256=expected_source_sha256,
-        )
-    elif source_snapshot is not None or retry_infrastructure:
-        raise ValueError("Historical snapshot and retry policy require --continue-from")
     previous_requests: set[str] = set()
     resumed_episodes: dict[str, Path] = {}
     if resume and path.exists():
         previous = json.loads(path.read_text())
-        if previous.get("historical_source") != record.get("historical_source"):
-            raise ValueError("Evaluation resume must preserve historical provenance")
         expected = json.loads(json.dumps(record))
         if any(
             previous.get(key) != expected[key]
@@ -502,7 +393,6 @@ def evaluate(
                 and episode
                 and episode["policy"] == snapshot
                 and episode["status"] == "running"
-                and direct_code is None
             ):
                 assert episode_path is not None
                 resumed_episodes[row["task_id"]] = episode_path.parent
@@ -528,7 +418,7 @@ def evaluate(
             model.max_context_tokens if isinstance(model, ModelBackend) else None
         )
         if local and isinstance(model, VLLMModel):
-            from ..snapshots import encoding_condition
+            from bashlet.snapshots import encoding_condition
 
             runtime = model.describe()
             record["snapshot_details"] = runtime
@@ -555,8 +445,7 @@ def evaluate(
             monitor = RunMonitor(
                 run_dir,
                 monitoring,
-                phase=phase
-                or ("coding-eval" if direct_code is not None else "dev-eval"),
+                phase=phase or "dev-eval",
                 metadata={
                     "snapshot": snapshot,
                     "evidence_kind": evidence_kind,
@@ -594,8 +483,7 @@ def evaluate(
                 config=condition,
                 output_dir=run_dir / "episodes",
                 on_update=progress,
-                assess_first_implementation=direct_code is None,
-                direct_code=direct_code,
+                assess_first_implementation=True,
                 resume_run_dir=resumed_episodes.get(task.task_id),
                 resume_elapsed_seconds=(resume_elapsed_seconds or {}).get(task.task_id),
             )

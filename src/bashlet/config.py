@@ -3,7 +3,7 @@
 import importlib
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, fields, is_dataclass
+from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
 from pathlib import Path
 from types import UnionType
 from typing import Any, cast, get_args, get_origin, get_type_hints
@@ -11,12 +11,12 @@ from typing import Any, cast, get_args, get_origin, get_type_hints
 import yaml
 from jinja2 import Environment, StrictUndefined, TemplateError
 
-from .models import Encoding, InteractionBudget, Model, SamplingParams
-from .pytrio import PyTRIOModel
-from .replay import ReplayModel
-from .vllm import VLLMModel
+from bashlet.backends.pytrio import PyTRIOModel
+from bashlet.backends.replay import ReplayModel
+from bashlet.backends.vllm import VLLMModel
+from bashlet.harness.models import Encoding, InteractionBudget, Model, SamplingParams
 
-_DEFAULT_PATH = Path(__file__).with_name("configs") / "bash-block-v3.yaml"
+_DEFAULT_PATH = Path(__file__).with_name("configs") / "defaults.yaml"
 _SOURCE_DEFAULT = Path(__file__).resolve().parents[2] / "configs" / _DEFAULT_PATH.name
 if _SOURCE_DEFAULT.is_file():
     _DEFAULT_PATH = _SOURCE_DEFAULT
@@ -90,30 +90,6 @@ class ExperimentConfig:
     model: ModelConfig
 
 
-@dataclass(frozen=True)
-class DirectCodeConfig:
-    """Frozen single-generation instructions and mechanical extraction rule."""
-
-    version: str
-    system_prompt: str
-    user_prompt: str
-    extraction: str
-
-    def __post_init__(self) -> None:
-        if self.version != "direct-code-v1":
-            raise ValueError("Unknown direct coding version")
-        if self.extraction != "single-python-fence-v1":
-            raise ValueError("Unknown direct coding extraction rule")
-        if not self.system_prompt.strip() or not self.user_prompt.strip():
-            raise ValueError("Direct coding prompts must be nonempty")
-        try:
-            _JINJA.from_string(self.user_prompt).render(
-                instruction="", function_name=""
-            )
-        except TemplateError as error:
-            raise ValueError(f"Invalid direct coding template: {error}") from error
-
-
 def config_record(config: ExperimentConfig) -> dict[str, Any]:
     """Record the resolved condition using the same keys as its YAML input."""
     return asdict(config) | {
@@ -163,18 +139,26 @@ def load_config(
     Unknown keys and type errors are rejected before a run starts. Protocol
     strings are Jinja templates; an undefined variable is an error.
     """
-    merged = _read_yaml(_DEFAULT_PATH)
+    merged = read_yaml(_DEFAULT_PATH)
     for path in paths:
-        merged = _merge(merged, _read_yaml(path))
+        merged = _merge(merged, read_yaml(path))
     for override in overrides:
         _apply_override(merged, override)
-    config = _bind(ExperimentConfig, merged, "config")
+    config = bind_config(ExperimentConfig, merged, "config")
     protocol = _render_protocol(config.protocol)
     _require_positive_numbers(config)
     return ExperimentConfig(protocol, config.environment, config.budget, config.model)
 
 
-def _read_yaml(path: Path) -> dict[str, Any]:
+def read_yaml(path: Path, *, _parents: tuple[Path, ...] = ()) -> dict[str, Any]:
+    """Resolve YAML inheritance and paths relative to their declaring file.
+
+    Parents are merged in order, then the child. Lists replace earlier lists.
+    Cycles and malformed references fail before any experiment work starts.
+    """
+    path = path.resolve()
+    if path in _parents:
+        raise ValueError(f"Configuration reference cycle: {path}")
     try:
         text = path.read_text()
     except OSError:
@@ -185,12 +169,58 @@ def _read_yaml(path: Path) -> dict[str, Any]:
         raise ValueError(f"Invalid YAML in {path}: {error}") from error
     if not isinstance(loaded, dict):
         raise ValueError(f"{path} must contain a mapping")
+    parents = loaded.pop("extends", [])
+    if isinstance(parents, str):
+        parents = [parents]
+    if not isinstance(parents, list) or any(
+        not isinstance(item, str) or not item for item in parents
+    ):
+        raise ValueError(f"{path}: extends must contain configuration paths")
+    base: dict[str, Any] = {}
+    for parent in parents:
+        base = _merge(base, read_yaml(path.parent / parent, _parents=(*_parents, path)))
+    _resolve_paths(loaded, path.parent)
     environment = loaded.get("environment")
     if isinstance(environment, dict):
         python = environment.get("python")
         if isinstance(python, dict) and isinstance(python.get("source"), str):
             python["source"] = str((path.parent / python["source"]).resolve())
-    return cast(dict[str, Any], loaded)
+    return _merge(base, cast(dict[str, Any], loaded))
+
+
+def _resolve_paths(data: dict[str, Any], directory: Path) -> None:
+    scalar = {
+        "train_manifest",
+        "dev_plan",
+        "training_selection",
+        "preflight_evidence",
+        "ledger_path",
+        "spend_config",
+        "base_path",
+        "test_plan",
+        "template",
+        "output_dir",
+        "preflight",
+        "execution_limit",
+        "dotenv_path",
+        "tokenizer_cache_dir",
+        "snapshot_manifest",
+        "repository_root",
+    }
+    for key, value in data.items():
+        if isinstance(value, dict):
+            _resolve_paths(value, directory)
+        elif key in scalar and isinstance(value, str):
+            data[key] = str((directory / value).resolve())
+        elif key == "tokenizer" and isinstance(value, str) and value.startswith(
+            ("./", "../", "/")
+        ):
+            # Explicit local paths are distinct from Hub IDs such as Qwen/model.
+            data[key] = str((directory / value).resolve())
+        elif key == "condition" and isinstance(value, list):
+            if any(not isinstance(item, str) for item in value):
+                raise ValueError("condition must contain configuration paths")
+            data[key] = [str((directory / item).resolve()) for item in value]
 
 
 def _merge(base: dict[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
@@ -227,7 +257,7 @@ def _apply_override(config: dict[str, Any], expression: str) -> None:
     node[parts[-1]] = value
 
 
-def _bind(cls: type[Any], data: object, path: str) -> Any:
+def bind_config[T](cls: type[T], data: object, path: str = "config") -> T:
     if not isinstance(data, dict):
         raise ValueError(f"{path} must be a mapping")
     if cls is ModelConfig:
@@ -235,26 +265,35 @@ def _bind(cls: type[Any], data: object, path: str) -> Any:
         name = _convert(str, parameters.pop("class", None), "model.class")
         if not name.strip():
             raise ValueError("model.class must not be empty")
-        sampling = _bind(
+        sampling = bind_config(
             SamplingParams, parameters.pop("sampling", None), "model.sampling"
         )
         if "thinking" in parameters:
             _convert(bool, parameters["thinking"], "model.thinking")
-        return ModelConfig(name, sampling, parameters)
+        return cast(T, ModelConfig(name, sampling, parameters))
+    if not is_dataclass(cls):
+        raise ValueError("Configuration schema must be a dataclass")
     hints = get_type_hints(cls)
     known = set(hints)
     unknown = sorted(set(data) - known)
     if unknown:
         raise ValueError(f"Unknown configuration key {_join(path, unknown[0])!r}")
-    missing = sorted(known - set(data))
+    required = {
+        field.name
+        for field in fields(cls)
+        if field.default is MISSING and field.default_factory is MISSING
+    }
+    missing = sorted(required - set(data))
     if missing:
         raise ValueError(f"Missing configuration key {_join(path, missing[0])!r}")
     return cls(
-        **{name: _convert(hints[name], data[name], _join(path, name)) for name in hints}
+        **{name: _convert(hints[name], data[name], _join(path, name)) for name in data}
     )
 
 
 def _convert(hint: Any, value: object, path: str) -> Any:
+    if hint is Any:
+        return value
     origin = get_origin(hint)
     if origin is dict:
         if not isinstance(value, dict):
@@ -264,21 +303,22 @@ def _convert(hint: Any, value: object, path: str) -> Any:
             _convert(key_type, key, path): _convert(value_type, item, f"{path}.{key}")
             for key, item in value.items()
         }
-    if origin is tuple:
+    if origin in (tuple, list):
         if not isinstance(value, list):
             raise ValueError(f"{path} must be a list")
         inner = get_args(hint)[0]
-        return tuple(
+        result = [
             _convert(inner, item, f"{path}[{index}]")
             for index, item in enumerate(value)
-        )
+        ]
+        return tuple(result) if origin is tuple else result
     if origin in (UnionType,):
         if value is None and type(None) in get_args(hint):
             return None
         inner = next(arg for arg in get_args(hint) if arg is not type(None))
         return _convert(inner, value, path)
     if isinstance(hint, type) and is_dataclass(hint):
-        return _bind(hint, value, path)
+        return bind_config(hint, value, path)
     if hint is bool:
         if type(value) is not bool:
             raise ValueError(f"{path} must be a boolean")

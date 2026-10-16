@@ -363,25 +363,32 @@ def test_interrupted_update_with_durable_receipt_can_resume(tmp_path: Path) -> N
 
 
 def _reconciled_probe_history(
-    fixture: dict[str, Any], *, isolation_failure: bool = False,
+    fixture: dict[str, Any],
+    *,
+    isolation_failure: bool = False,
 ) -> None:
     root: Path = fixture["run_root"]
     formal = root / "formal"
     updates: list[dict[str, Any]] = [
-        {"optimizer_step": step, "student_policy": f"student-{step}"}
-        for step in (1, 2)
+        {"optimizer_step": step, "student_policy": f"student-{step}"} for step in (1, 2)
     ]
     batches: list[dict[str, Any]] = [
         {"index": index, "status": "completed", "update": update}
         for index, update in enumerate(updates)
     ]
     row: dict[str, Any] = {
-        "visit_id": "epoch-1/task-3", "task_id": "task-3", "status": "not_started",
+        "visit_id": "epoch-1/task-3",
+        "task_id": "task-3",
+        "status": "not_started",
         "attempts": [],
     }
     training = {
-        "status": "rejected", "pending_update": None, "optimizer_step": 2,
-        "student_policy": "student-2", "last_update": updates[-1], "batches": batches,
+        "status": "rejected",
+        "pending_update": None,
+        "optimizer_step": 2,
+        "student_policy": "student-2",
+        "last_update": updates[-1],
+        "batches": batches,
     }
     pilot = {"status": "incomplete", "training_tasks": [row]}
     for index in (2, 3):
@@ -392,25 +399,41 @@ def _reconciled_probe_history(
                 "infrastructure_error: bwrap: Can't mount proc on /newroot/proc: "
                 "Operation not permitted\n"
             )
-        _write_json(episode / "run.json", {
-            "task_id": "task-3",
-            "status": "infrastructure_error" if isolation_failure else "model_error",
-            "reason": reason,
-            "trajectory": [], "usage": {"steps": 0, "generated_tokens": 0},
-            **({
-                "context_tokens": [],
-                "isolation": {"passed": False, "reason": reason},
-            } if isolation_failure else {}),
-        })
+        _write_json(
+            episode / "run.json",
+            {
+                "task_id": "task-3",
+                "status": "infrastructure_error"
+                if isolation_failure
+                else "model_error",
+                "reason": reason,
+                "trajectory": [],
+                "usage": {"steps": 0, "generated_tokens": 0},
+                **(
+                    {
+                        "context_tokens": [],
+                        "isolation": {"passed": False, "reason": reason},
+                    }
+                    if isolation_failure
+                    else {}
+                ),
+            },
+        )
         batch = {
-            "index": index, "status": "rejected", "episode": str(episode),
-            "student_policy": "student-2", "interaction_steps": 0,
+            "index": index,
+            "status": "rejected",
+            "episode": str(episode),
+            "student_policy": "student-2",
+            "interaction_steps": 0,
             "supervised_tokens": 0,
         }
         batches.append(batch)
         attempt = {
-            "visit_id": row["visit_id"], "task_id": "task-3", "status": "rejected",
-            "batch_index": index, "episode": str(episode),
+            "visit_id": row["visit_id"],
+            "task_id": "task-3",
+            "status": "rejected",
+            "batch_index": index,
+            "episode": str(episode),
         }
         before_pilot = {"training_tasks": [attempt]}
         recovery = root / "recoveries" / f"probe-{index}"
@@ -429,17 +452,25 @@ def _reconciled_probe_history(
             _write_json(copy, value)
             archived[relative] = {"copy": str(copy), "sha256": _digest(copy)}
         receipt = recovery / "recovery.json"
-        _write_json(receipt, {
-            "action": (
-                "explicit user-authorized retry of a visit rejected before task rollout"
-            ),
-            "status": "reconciled; waiting for existing resume entrypoint",
-            "visit_id": row["visit_id"], "optimizer_step": 2,
-            "pending_requests": 0, "pending_update": None,
-            "rejected_batch_index": index, "rejected_episode": str(episode),
-            "rejected_episode_sha256": _digest(episode / "run.json"),
-            "reason": reason, "archived": archived,
-        })
+        _write_json(
+            receipt,
+            {
+                "action": (
+                    "explicit user-authorized retry of a visit "
+                    "rejected before task rollout"
+                ),
+                "status": "reconciled; waiting for existing resume entrypoint",
+                "visit_id": row["visit_id"],
+                "optimizer_step": 2,
+                "pending_requests": 0,
+                "pending_update": None,
+                "rejected_batch_index": index,
+                "rejected_episode": str(episode),
+                "rejected_episode_sha256": _digest(episode / "run.json"),
+                "reason": reason,
+                "archived": archived,
+            },
+        )
         attempt["retry_receipt"] = str(receipt)
         row["attempts"].append(attempt)
         row["retry_receipt"] = str(receipt)
@@ -447,10 +478,12 @@ def _reconciled_probe_history(
 
 
 @pytest.mark.parametrize(
-    "damage", [None, "context", "trajectory", "tokens", "isolation", "reason"],
+    "damage",
+    [None, "context", "trajectory", "tokens", "isolation", "reason"],
 )
 def test_isolation_failure_retry_requires_evidence_before_model_calls(
-    tmp_path: Path, damage: str | None,
+    tmp_path: Path,
+    damage: str | None,
 ) -> None:
     fixture = _fixture(tmp_path)
     _reconciled_probe_history(fixture, isolation_failure=True)
@@ -491,11 +524,14 @@ def test_isolation_failure_retry_requires_evidence_before_model_calls(
 
 
 @pytest.mark.parametrize(
-    "damage", [None, "pending", "update", "released_ceiling", "payload_mismatch"],
+    "damage",
+    [None, "pending", "update", "released_ceiling", "payload_mismatch"],
 )
 @pytest.mark.parametrize("operation", ["sampling", "capability_probe"])
 def test_sampling_transport_failure_requires_explicit_cost_preserving_reconciliation(
-    tmp_path: Path, damage: str | None, operation: str,
+    tmp_path: Path,
+    damage: str | None,
+    operation: str,
 ) -> None:
     fixture = _fixture(tmp_path)
     _reconciled_probe_history(fixture)
@@ -503,7 +539,9 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
     episode_path = root / "formal/rollouts/failed-3/run.json"
     episode = json.loads(episode_path.read_text())
     episode.update(
-        status="infrastructure_error", policy="student-2", context_tokens=[1, 2],
+        status="infrastructure_error",
+        policy="student-2",
+        context_tokens=[1, 2],
         reason="RuntimeError: PyTRIO actor.request_failed (HTTP 0, attempt 1)",
         trajectory=[{} for _ in range(5)],
         usage={"steps": 5, "generated_tokens": 1250},
@@ -511,7 +549,8 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
     probe = operation == "capability_probe"
     if probe:
         episode.update(
-            context_tokens=[], trajectory=[],
+            context_tokens=[],
+            trajectory=[],
             reason=(
                 "Capability probe failed: PyTRIO actor.request_failed "
                 "(HTTP 0, attempt 1)"
@@ -537,22 +576,36 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
         reason=episode["reason"],
         rejected_episode_sha256=_digest(episode_path),
         sampling_request={
-            "id": "discarded-sample", "request_id": "remote-sample",
-            "response_abandoned": True, "remote_outcome": "unknown",
-            "update_submitted": False, "full_ceiling_retained": True,
+            "id": "discarded-sample",
+            "request_id": "remote-sample",
+            "response_abandoned": True,
+            "remote_outcome": "unknown",
+            "update_submitted": False,
+            "full_ceiling_retained": True,
         },
     )
     pending: dict[str, Any] = {
-        "id": "discarded-sample", "operation": operation, "state": "pending",
-        "fingerprint": "original-sampling", "upper_micros": 40000,
+        "id": "discarded-sample",
+        "operation": operation,
+        "state": "pending",
+        "fingerprint": "original-sampling",
+        "upper_micros": 40000,
         "charged_micros": 0,
-        "evidence": json.dumps({
-            "request_id": "remote-sample", "payload": {
-                "run_id": "training-run", "model_path": "student-2",
-                "prompt_tokens": [1, 2],
-                **({"sampling": {"max_tokens": 1}, "scoring": False} if probe else {}),
-            },
-        }),
+        "evidence": json.dumps(
+            {
+                "request_id": "remote-sample",
+                "payload": {
+                    "run_id": "training-run",
+                    "model_path": "student-2",
+                    "prompt_tokens": [1, 2],
+                    **(
+                        {"sampling": {"max_tokens": 1}, "scoring": False}
+                        if probe
+                        else {}
+                    ),
+                },
+            }
+        ),
     }
     if damage == "payload_mismatch":
         evidence = json.loads(pending["evidence"])
@@ -572,23 +625,32 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
     _write_json(receipt_path, receipt)
     evidence = json.loads(pending["evidence"])
     evidence["sampling_abandoned"] = {
-        "recovery_receipt": str(receipt_path), "remote_outcome": "unknown",
+        "recovery_receipt": str(receipt_path),
+        "remote_outcome": "unknown",
         "response_will_not_be_used": True,
     }
     with sqlite3.connect(fixture["ledger"]) as connection:
         for column in (
-            "operation TEXT", "upper_micros INTEGER", "charged_micros INTEGER",
-            "billing_basis TEXT", "fingerprint TEXT", "evidence TEXT",
+            "operation TEXT",
+            "upper_micros INTEGER",
+            "charged_micros INTEGER",
+            "billing_basis TEXT",
+            "fingerprint TEXT",
+            "evidence TEXT",
         ):
             connection.execute("ALTER TABLE requests ADD COLUMN " + column)
         connection.execute(
             "INSERT INTO requests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                "discarded-sample", "opsd-expanded-train-v1",
+                "discarded-sample",
+                "opsd-expanded-train-v1",
                 "pending" if damage == "pending" else "failed",
-                "opsd_update" if damage == "update" else operation, 40000,
-                0 if damage == "released_ceiling" else 40000, "upper_bound",
-                "original-sampling", json.dumps(evidence),
+                "opsd_update" if damage == "update" else operation,
+                40000,
+                0 if damage == "released_ceiling" else 40000,
+                "upper_bound",
+                "original-sampling",
+                json.dumps(evidence),
             ),
         )
 
@@ -607,7 +669,8 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
 
 @pytest.mark.parametrize("advance", [False, True])
 def test_reconciled_zero_action_failures_do_not_count_as_updates(
-    tmp_path: Path, advance: bool,
+    tmp_path: Path,
+    advance: bool,
 ) -> None:
     fixture = _fixture(tmp_path)
     _reconciled_probe_history(fixture)
@@ -615,11 +678,17 @@ def test_reconciled_zero_action_failures_do_not_count_as_updates(
     if advance:
         training = json.loads(training_path.read_text())
         update = {"optimizer_step": 3, "student_policy": "student-3"}
-        training["batches"].append({
-            "index": 4, "status": "completed", "update": update,
-        })
+        training["batches"].append(
+            {
+                "index": 4,
+                "status": "completed",
+                "update": update,
+            }
+        )
         training.update(
-            status="ready", optimizer_step=3, student_policy="student-3",
+            status="ready",
+            optimizer_step=3,
+            student_policy="student-3",
             last_update=update,
         )
         _write_json(training_path, training)
@@ -635,7 +704,8 @@ def test_reconciled_zero_action_failures_do_not_count_as_updates(
 
 @pytest.mark.parametrize("damage", ["receipt", "episode", "archive", "new_failure"])
 def test_unreconciled_or_changed_failed_attempt_blocks_restart(
-    tmp_path: Path, damage: str,
+    tmp_path: Path,
+    damage: str,
 ) -> None:
     fixture = _fixture(tmp_path)
     _reconciled_probe_history(fixture)
@@ -653,10 +723,14 @@ def test_unreconciled_or_changed_failed_attempt_blocks_restart(
     else:
         path = root / "formal/training/opsd.json"
         training = json.loads(path.read_text())
-        training["batches"].append({
-            "index": 4, "status": "rejected", "interaction_steps": 0,
-            "supervised_tokens": 0,
-        })
+        training["batches"].append(
+            {
+                "index": 4,
+                "status": "rejected",
+                "interaction_steps": 0,
+                "supervised_tokens": 0,
+            }
+        )
         _write_json(path, training)
 
     result = _cli(fixture)
@@ -771,17 +845,22 @@ def test_known_wandb_startup_failure_can_resume_before_sampling(tmp_path: Path) 
 
 @pytest.mark.parametrize("failure", ["known", "unknown", "missing_formal", "preflight"])
 def test_failed_workflow_requires_a_known_stage_failure(
-    tmp_path: Path, failure: str,
+    tmp_path: Path,
+    failure: str,
 ) -> None:
     fixture = _fixture(tmp_path)
     _formal_interruption(
         fixture,
         {
-            "status": "failed", "error_type": "ValueError",
+            "status": "failed",
+            "error_type": "ValueError",
             "reason": "W&B startup failed; resume is safe",
             "training_tasks": [{"status": "not_started"}],
-        } if failure == "known" else {
-            "status": "incomplete", "training_tasks": [{"status": "not_started"}],
+        }
+        if failure == "known"
+        else {
+            "status": "incomplete",
+            "training_tasks": [{"status": "not_started"}],
         },
         {"pending_update": None, "batches": []},
     )
@@ -940,6 +1019,7 @@ def test_formal_endpoint_stops_monitor_only_after_four_epochs(tmp_path: Path) ->
         "status": "complete",
         "training_complete": True,
         "epochs_completed": 4,
+        "configuration": {"pilot": {"epochs": 4}},
         "training_tasks": [],
     }
     _write_json(run_root / "formal" / "pilot.json", formal_pilot)
@@ -953,6 +1033,6 @@ def test_formal_endpoint_stops_monitor_only_after_four_epochs(tmp_path: Path) ->
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout.splitlines()[-1]) == {"decision": "complete"}
     assert _events(fixture)[-1]["reason"] == (
-        "four-epoch formal run and development are complete"
+        "configured formal run and development are complete"
     )
     assert all(call[0] == "has-session" for call in _tmux_calls(fixture))

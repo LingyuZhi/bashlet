@@ -14,11 +14,9 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TextIO
 
-import yaml
-
-from ..config import ExperimentConfig
-from ..demonstrations import validate_history
-from ..models import (
+from bashlet.config import ExperimentConfig, read_yaml
+from bashlet.distillation.supervision import validate_history
+from bashlet.harness.models import (
     ContextExhausted,
     Encoding,
     ExperimentResult,
@@ -30,15 +28,15 @@ from ..models import (
     SamplingParams,
     Task,
 )
-from ..monitoring import (
+from bashlet.harness.protocol import fingerprints
+from bashlet.monitoring import (
     MonitorConfig,
     RunMonitor,
     code_revision,
     spend_metrics,
     write_document,
 )
-from ..protocol import fingerprints
-from ..spend import (
+from bashlet.spend import (
     DEFAULT_POLICY,
     BudgetRefused,
     RemoteFuture,
@@ -46,7 +44,7 @@ from ..spend import (
     TokenPricing,
     summarize_cost,
 )
-from ..tasks import validate_training_task
+from bashlet.tasks import validate_training_task
 
 if TYPE_CHECKING:
     import pytrio as trio
@@ -54,31 +52,26 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class InitialSnapshot:
-    """The selected original model or SFT weights, never an optimizer state."""
+    """The selected original model weights, never an optimizer state."""
 
     identity: str
     encoding: str
     evidence_kind: Literal["test-double", "experimental"]
-    stage: str = "sft"
+    stage: str = "base"
     kind: str = "sampler_weights"
 
     def __post_init__(self) -> None:
         if not self.identity or not self.encoding:
             raise ValueError("Initial snapshot and encoding identities are required")
         if (self.stage, self.kind) not in (
-            ("sft", "sampler_weights"),
             ("base", "base_model"),
             ("base", "sampler_weights"),
         ):
             raise ValueError(
-                "OPSD requires an original model or SFT weights, not training state"
+                "OPSD requires an original model weights, not training state"
             )
         if self.evidence_kind not in ("test-double", "experimental"):
             raise ValueError("Unknown initial snapshot evidence kind")
-
-
-# Existing schema-1 SFT records and imports remain valid without relabelling.
-SFTSnapshot = InitialSnapshot
 
 
 @dataclass(frozen=True)
@@ -92,7 +85,7 @@ class OPSDConfig:
 
     @classmethod
     def read(cls, path: Path) -> OPSDConfig:
-        return cls(**yaml.safe_load(path.read_text()))
+        return cls(**read_yaml(path))
 
     def __post_init__(self) -> None:
         for name in ("distillation_coefficient", "learning_rate", "timeout_seconds"):
@@ -202,7 +195,7 @@ class _Student:
     def sample(self, prompt: Sequence[int], sampling: SamplingParams) -> Generation:
         if self.model.identity != self.identity:
             raise ValueError("Student policy changed inside a rollout batch")
-        from ..pytrio import PyTRIOModel
+        from bashlet.backends.pytrio import PyTRIOModel
 
         if isinstance(self.model, PyTRIOModel):
             self.model.validate_spend_owner(
@@ -266,9 +259,7 @@ class OPSDRun:
         self._lockfile: TextIO | None = None
         self.snapshot, self.adapter, self.ledger = snapshot, adapter, ledger
         self.config, self.monitoring = config, monitoring
-        self.pricing = TokenPricing(
-            yaml.safe_load(Path(config.spend_config).read_text())
-        )
+        self.pricing = TokenPricing(read_yaml(Path(config.spend_config)))
         self.calls: list[tuple[tuple[int, ...], SamplingParams, Generation]] = []
         self.monitor: RunMonitor | None = None
         self.record: dict[str, Any] = {
@@ -611,7 +602,7 @@ class OPSDRun:
         model: Model,
         condition: ExperimentConfig,
     ) -> None:
-        from .supervision import build_supervision
+        from bashlet.distillation.supervision import build_supervision
 
         batch: dict[str, Any] = {
             "index": len(self.record["batches"]),

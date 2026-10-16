@@ -19,8 +19,8 @@ from huggingface_hub import snapshot_download
 from transformers import AutoTokenizer
 
 from bashlet import FunctionGrader, GradingCase, Task, run_experiment
-from bashlet.protocol import SYSTEM_PROMPT
-from bashlet.vllm import VLLMModel
+from bashlet.backends.vllm import VLLMModel
+from bashlet.harness.protocol import SYSTEM_PROMPT
 
 type HTTPReply = tuple[int, dict[str, Any]]
 

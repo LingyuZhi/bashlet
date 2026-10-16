@@ -10,9 +10,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from ..models import Task, TaskOrigin
-from ..protocol import fingerprint
-from . import _CONFIGS
+from bashlet.harness.models import Task, TaskOrigin
+from bashlet.harness.protocol import fingerprint
+from bashlet.tasks import _CONFIGS
 
 SOURCE_REGISTRY = _CONFIGS / "task-sources-v2.json"
 TASK_TYPES = ("short_program", "code_edit", "workspace")
@@ -218,7 +218,7 @@ def catalog_task_record(
 def _validate_native_task(
     record: dict[str, Any], row: dict[str, Any], origin: TaskOrigin
 ) -> None:
-    from ..mbpp import _convert
+    from bashlet.tasks.mbpp import _convert
 
     expected, _ = _convert(row, record["environment_id"], origin)
     native = record | {
@@ -244,7 +244,7 @@ def validate_registered_task(task: Task) -> None:
     )
     lock, family = registered_origin(task.origin, artifact_dir=artifact_dir)
     if family is None:
-        from .versions import source_bytes
+        from bashlet.tasks.versions import source_bytes
 
         row = next(
             (

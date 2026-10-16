@@ -64,6 +64,10 @@ def epoch_pilot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
                 },
                 "dev_plan": str(dev),
                 "condition": [str(condition)],
+                "evaluation": {
+                    "base_path": str(tokenizer),
+                    "model": {"base_url": "http://test-double"},
+                },
                 "ledger_path": str(tmp_path / "spend.sqlite3"),
                 "backend": {
                     "tokenizer_cache_dir": str(tokenizer.parents[2]),
@@ -73,7 +77,6 @@ def epoch_pilot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
                 "training": {"spend_config": str(policy_path), "group": "epoch-train"},
                 "monitoring": {"group": "epoch-fixture"},
                 "stop_on_training_budget": True,
-                "defer_decision": True,
             }
         )
     )
@@ -204,8 +207,14 @@ def test_execution_limit_finishes_epoch_development_without_promoting_endpoint(
     config.write_text(yaml.safe_dump(settings))
     limit = execution_limit(config, 4)
     result = cli(
-        "train-opsd", str(config), "--output-dir", str(root),
-        "--execution-limit", str(limit), cwd=tmp_path, timeout=90,
+        "train-opsd",
+        str(config),
+        "--output-dir",
+        str(root),
+        "--execution-limit",
+        str(limit),
+        cwd=tmp_path,
+        timeout=90,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     record = json.loads((root / "pilot.json").read_text())
@@ -222,13 +231,16 @@ def test_execution_limit_finishes_epoch_development_without_promoting_endpoint(
     assert record["development_curve"]["epoch-2"]["status"] == "complete"
     training = json.loads((root / "training/opsd.json").read_text())
     assert training["pending_update"] is None
-    assert training["last_update"]["training_state"] == (
-        record["epoch_checkpoints"]["2"]["training_state"]
+    assert (
+        training["last_update"]["training_state"]
+        == (record["epoch_checkpoints"]["2"]["training_state"])
     )
 
 
 def test_execution_limit_resume_finishes_interrupted_dev_without_another_update(
-    epoch_pilot: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    epoch_pilot: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config, root = epoch_pilot
     settings = yaml.safe_load(config.read_text())
@@ -239,8 +251,12 @@ def test_execution_limit_resume_finishes_interrupted_dev_without_another_update(
     monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL_PHASE", "epoch-2-eval")
     monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL_SEED", "5")
     arguments = (
-        "train-opsd", str(config), "--output-dir", str(root),
-        "--execution-limit", str(limit),
+        "train-opsd",
+        str(config),
+        "--output-dir",
+        str(root),
+        "--execution-limit",
+        str(limit),
     )
 
     interrupted = cli(*arguments, cwd=tmp_path, timeout=90)
@@ -276,105 +292,6 @@ def test_execution_limit_resume_finishes_interrupted_dev_without_another_update(
     assert len(training["batches"]) == training["optimizer_step"] == 4
     for path, digest in completed.items():
         assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == digest
-
-
-def test_background_dev_allows_next_epoch_but_blocks_endpoint_until_complete(
-    epoch_pilot: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config, root = epoch_pilot
-    settings = yaml.safe_load(config.read_text())
-    settings.update(epochs=4, require_complete_training=True)
-    config.write_text(yaml.safe_dump(settings))
-    limit = execution_limit(config, 4)
-    arguments = (
-        "train-opsd", str(config), "--output-dir", str(root),
-        "--execution-limit", str(limit),
-    )
-    monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL", "1")
-    monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL_PHASE", "epoch-1-eval")
-    interrupted = cli(*arguments, cwd=tmp_path, timeout=90)
-    assert interrupted.returncode == 2, interrupted.stdout + interrupted.stderr
-    before = json.loads((root / "pilot.json").read_text())
-    assert before["optimizer_step"] == 2
-    checkpoint = before["epoch_checkpoints"]["1"]
-    local_root = tmp_path / "local-development"
-    local_baseline = local_root / "baseline/stage.json"
-    local_baseline.parent.mkdir(parents=True)
-    local_config = tmp_path / "local-development.yaml"
-    local_config.write_text(yaml.safe_dump({"output_dir": str(local_root)}))
-    routing = {
-        "config": str(local_config),
-        "sha256": hashlib.sha256(local_config.read_bytes()).hexdigest(),
-    }
-    routing_path = root / "evaluation-routing.json"
-    routing_path.write_text(json.dumps(routing))
-    before["evaluations"]["baseline"]["routing_sha256"] = routing["sha256"]
-    local_baseline.write_text(json.dumps(before["evaluations"]["baseline"]))
-    (root / "pilot.json").write_text(json.dumps(before))
-    baseline_bytes = local_baseline.read_bytes()
-    stage_path = tmp_path / "background-stage.json"
-    stage_path.write_text(json.dumps(before["evaluations"]["epoch-1"]))
-    job_path = tmp_path / "background-job.json"
-    job = {
-        "schema_version": 1, "phase": "epoch-1", "session": "fixture-dev",
-        "snapshot": checkpoint["snapshot"], "optimizer_step": 2,
-        "stage": str(stage_path),
-    }
-    job_path.write_text(json.dumps(job))
-    background = tmp_path / "development.yaml"
-    background.write_text(yaml.safe_dump({
-        "schema_version": 1, "pilot_config": str(config), "pilot_run": str(root),
-        "pilot_config_sha256": hashlib.sha256(config.read_bytes()).hexdigest(),
-        "evaluation_routing_sha256": hashlib.sha256(
-            routing_path.read_bytes()
-        ).hexdigest(),
-        "job_receipts": {"epoch-1": str(job_path)},
-    }))
-    (root / "development-execution.json").write_text(json.dumps({
-        "config": str(background),
-        "sha256": hashlib.sha256(background.read_bytes()).hexdigest(),
-    }))
-    binaries = tmp_path / "bin"
-    binaries.mkdir()
-    tmux = binaries / "tmux"
-    tmux.write_text("#!/bin/sh\nexit 1\n")
-    tmux.chmod(0o700)
-    import os
-
-    monkeypatch.setenv("PATH", str(binaries) + os.pathsep + os.environ["PATH"])
-    monkeypatch.delenv("FAKE_OPSD_INTERRUPT_EVAL")
-    monkeypatch.setenv("FAKE_OPSD_INTERRUPT_TRAIN_STEP", "3")
-    resumed = cli(*arguments, "--resume", cwd=tmp_path, timeout=90)
-    assert resumed.returncode == 2, resumed.stdout + resumed.stderr
-    after = json.loads((root / "pilot.json").read_text())
-    assert after["optimizer_step"] == 3
-    assert after["epochs_completed"] == 1
-    assert after["evaluations"]["epoch-1"]["status"] == "incomplete"
-    assert after["development_curve"]["epoch-1"]["mean_accuracy"] is None
-    assert after["background_development"]["epoch-1"]["snapshot"] == job["snapshot"]
-    assert len(json.loads((tmp_path / "sdk-updates.json").read_text())) == 3
-
-    # A changed checkpoint receipt cannot authorize more optimizer requests.
-    job_path.write_text(json.dumps(job | {"snapshot": "trio://another/checkpoint"}))
-    rejected = cli(*arguments, "--resume", cwd=tmp_path, timeout=90)
-    assert rejected.returncode == 2, rejected.stdout + rejected.stderr
-    invalid = json.loads((root / "pilot.json").read_text())
-    assert "another checkpoint" in invalid["reason"]
-    assert len(json.loads((tmp_path / "sdk-updates.json").read_text())) == 3
-    job_path.write_text(json.dumps(job))
-    monkeypatch.delenv("FAKE_OPSD_INTERRUPT_TRAIN_STEP")
-    stopped = cli(*arguments, "--resume", cwd=tmp_path, timeout=90)
-    assert stopped.returncode == 2, stopped.stdout + stopped.stderr
-    final = json.loads((root / "pilot.json").read_text())
-    assert final["optimizer_step"] == 4
-    assert "Background development worker exited" in final["reason"]
-    assert final["execution_status"] != "complete"
-    assert final["training_complete"] is False
-    assert final["main_result"] is None
-    assert len(json.loads((tmp_path / "sdk-updates.json").read_text())) == 4
-    assert local_baseline.read_bytes() == baseline_bytes
-    assert final["training_tasks"][2]["recovered_completed_update"]
-    assert all(row["status"] == "not_started" for row in final["training_tasks"][4:])
 
 
 @pytest.mark.parametrize("interrupt_step", [3, 4])
@@ -834,29 +751,3 @@ def test_checkpoint_retry_preserves_failure_and_does_not_repeat_updates(
     )
     assert rejected.returncode == 2
     assert path.read_bytes() == complete
-
-
-def test_checkpoint_parameter_verification_rejects_sft_before_remote_loading(
-    epoch_pilot: tuple[Path, Path], tmp_path: Path
-) -> None:
-    config, root = epoch_pilot
-    settings = yaml.safe_load(config.read_text())
-    settings["backend"].update(
-        source="sft",
-        initial_sampler="trio://sft-test/sampler_weights/selected",
-        initial_state="trio://sft-test/selected-state",
-        initial_training_record=str(tmp_path / "sft-training.json"),
-        initial_selection=str(tmp_path / "sft-selection.json"),
-    )
-    config.write_text(yaml.safe_dump(settings))
-    result = cli(
-        "verify-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=30
-    )
-
-    assert result.returncode == 2
-    assert (
-        "Checkpoint parameters: only Base initialization is supported"
-    ) in result.stderr
-    assert not (root / "checkpoint-validation.json").exists()
-    assert not (root / "training").exists()
-    assert not (tmp_path / "sdk-updates.json").exists()

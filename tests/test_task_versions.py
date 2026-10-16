@@ -10,13 +10,11 @@ import pytest
 import yaml
 from adapters import bash, sample_text, submit, turn_number
 from test_cli import cli, replay_config, saved_run
-from test_monitoring import external_sdks
 from test_opsd import controlled_run
 from test_task_sets import prepared_tasks, small_cohort
-from test_training import training_config
 
 from bashlet import run_experiment
-from bashlet.experiment import task_from_record
+from bashlet.harness.experiment import task_from_record
 
 CONFIGS = Path(__file__).parents[1] / "configs"
 __all__ = ["prepared_tasks"]
@@ -419,73 +417,6 @@ def test_new_development_cli_records_current_roles_and_original_splits(
     assert record["summary"]["planned_tasks"] == 3
     assert all(row["task_origin"]["split"] == "unsplit" for row in record["tasks"])
     assert all(row["task_assignment"]["role"] == "dev" for row in record["tasks"])
-
-
-def test_old_dev_and_new_source_reach_the_existing_sft_training_cli(
-    tmp_path: Path,
-    prepared_version: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config = tmp_path / "encoding.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "model": {
-                    "class": "ReplayModel",
-                    "tokenizer": "Qwen/Qwen3.5-4B",
-                    "tokenizer_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
-                    "tokenizer_cache_dir": str(CONFIGS.parent / "runs/tokenizers"),
-                }
-            }
-        )
-    )
-    output = tmp_path / "demonstrations"
-    process = cli(
-        "prepare-sft",
-        str(prepared_version / "manifest.json"),
-        "--task-id",
-        "harness/nested-setting",
-        "--task-id",
-        "supplement/sign-runs",
-        "-c",
-        str(config),
-        "--output-dir",
-        str(output),
-        cwd=tmp_path,
-        timeout=90,
-    )
-    assert process.returncode == 0, process.stdout + process.stderr
-    examples = [
-        json.loads(line)
-        for line in (output / "examples.jsonl").read_text().splitlines()
-    ]
-    assert [e["metadata"]["origin"]["split"] for e in examples] == ["dev", "unsplit"]
-    assert all(
-        e["metadata"]["assignment"]["role"] == "train_candidate" for e in examples
-    )
-    external_sdks(tmp_path, monkeypatch)
-    with (tmp_path / "sitecustomize.py").open("a") as stream:
-        stream.write("import training_sdk\ntraining_sdk.install()\n")
-    monkeypatch.setenv("PYTRIO_API_KEY", "test-trio-key")
-    monkeypatch.setenv("FAKE_TRAINING_ROOT", str(tmp_path))
-    training = training_config(tmp_path, output / "manifest.json")
-    process = cli(
-        "train-sft",
-        str(training),
-        "--output-dir",
-        str(tmp_path / "training"),
-        cwd=tmp_path,
-        timeout=90,
-    )
-    assert process.returncode == 0, process.stdout + process.stderr
-    requests = [
-        json.loads(line)
-        for line in (tmp_path / "training-requests.jsonl").read_text().splitlines()
-    ]
-    assert len(requests) == 2
-    assert {json.dumps(request["data"][0], sort_keys=True) for request in requests} == {
-        json.dumps(example["datum"], sort_keys=True) for example in examples
-    }
 
 
 def test_old_dev_environment_variant_inherits_the_family_training_role(

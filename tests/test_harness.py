@@ -38,7 +38,7 @@ from bashlet import (
     Task,
     run_experiment,
 )
-from bashlet.protocol import SYSTEM_PROMPT
+from bashlet.harness.protocol import SYSTEM_PROMPT
 
 WRONG = "def solve(numbers):\n    return 3\n"
 FIXED = "def solve(numbers):\n    return sum(numbers)\n"
@@ -380,7 +380,7 @@ def test_cd_and_export_do_not_persist_into_the_next_step(tmp_path: Path) -> None
     assert observation is not None and observation.status == "ok"
     assert observation.output == "/workspace\nunset\n"
     assert (result.workspace / "sub/kept").is_file()
-    assert "fresh shell" in SYSTEM_PROMPT and "exported variables" in SYSTEM_PROMPT
+    assert "fresh shell" in SYSTEM_PROMPT and "shell state" in SYSTEM_PROMPT
 
 
 def test_observation_head_and_tail_lengths_follow_protocol_config(
@@ -569,11 +569,11 @@ def test_policy_repairs_after_real_feedback_and_submission_is_graded(
 
     record = json.loads((result.run_dir / "run.json").read_text())
     assert record["schema_version"] == 11
-    assert record["protocol"]["name"] == "bash-block-v3"
+    assert record["protocol"]["name"] == "bash-block-v6"
     assert (
         record["protocol"]["sha256"]
         == PROTOCOL_SHA256
-        == ("90720d09056f51501e9c5761577733296ecaf1c0f6792d8a7f00f1e0f070cb13")
+        == ("511a961cbe0398f6c58c23a802f1499155c6b681a8b149ceed74da71c96d4dc3")
     )
     assert record["trajectory"][0]["model_call"]["generation"]["tokens"] == list(
         model.generations[0].tokens

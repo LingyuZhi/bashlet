@@ -8,10 +8,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from ..mbpp import mbpp_task_path
-from ..mbpp import validate_origin as validate_mbpp_origin
-from ..models import Task, TaskAssignment, TaskOrigin
-from ..protocol import fingerprint
+from bashlet.harness.models import Task, TaskAssignment, TaskOrigin
+from bashlet.harness.protocol import fingerprint
+from bashlet.tasks.mbpp import mbpp_task_path
+from bashlet.tasks.mbpp import validate_origin as validate_mbpp_origin
 
 AUTHORED_DATASET = "bashlet/harness-authored"
 CONVERSION = "harness-task-families-v1"
@@ -63,7 +63,7 @@ def validate_origin(origin: TaskOrigin, *, artifact_dir: Path | None = None) -> 
         validate_mbpp_origin(origin)
         return
     if origin.dataset != AUTHORED_DATASET:
-        from .sources import registered_origin
+        from bashlet.tasks.sources import registered_origin
 
         registered_origin(origin, artifact_dir=artifact_dir)
         return
@@ -149,8 +149,8 @@ def validate_task(task: Task, *, harness: bool = False) -> None:
         if harness:
             validate_harness_origin(task.origin)
         return
-    from .sources import validate_registered_task
-    from .versions import validate_assignment
+    from bashlet.tasks.sources import validate_registered_task
+    from bashlet.tasks.versions import validate_assignment
 
     validate_registered_task(task)
     if (
@@ -281,7 +281,7 @@ def _versioned_roles(manifest_path: Path, manifest: dict[str, Any]) -> dict[str,
             "Task set differs from the whole frozen candidate/dev/test pool"
         )
     family_roles: dict[str, str] = {}
-    from .audit import validate_independence
+    from bashlet.tasks.audit import validate_independence
 
     validate_independence(cohort, [entries[i]["family_id"] for i in roles])
     for identity, role in roles.items():
@@ -294,7 +294,7 @@ def _versioned_roles(manifest_path: Path, manifest: dict[str, Any]) -> dict[str,
         if identity in roles or family not in family_roles:
             raise ValueError("Variant must inherit a frozen base family")
         roles[identity] = family_roles[family]
-    from .freeze import validate_selection
+    from bashlet.tasks.freeze import validate_selection
 
     validate_selection(manifest_path.parent, manifest)
     return roles
@@ -323,7 +323,7 @@ def task_path(manifest_path: Path, task_id: str, split: str) -> Path:
     tasks: dict[str, dict[str, Any]] = {}
     families: dict[str, str] = {}
     roles = _versioned_roles(manifest_path, manifest) if versioned else {}
-    from .sources import admitted_sources, validate_source_entry
+    from bashlet.tasks.sources import admitted_sources, validate_source_entry
 
     registrations = (
         admitted_sources(manifest_path.parent / "private/sources") if versioned else {}

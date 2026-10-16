@@ -23,8 +23,11 @@ def _digest(path: Path) -> str:
 
 
 def _sampling_request_reconciled(
-    path: Path, receipt: dict[str, Any], before: dict[str, Any],
-    record: dict[str, Any], batch: dict[str, Any],
+    path: Path,
+    receipt: dict[str, Any],
+    before: dict[str, Any],
+    record: dict[str, Any],
+    batch: dict[str, Any],
 ) -> bool:
     resolution = receipt["sampling_request"]
     entry = _read(Path(receipt["archived"]["pending-sampling-request.json"]["copy"]))
@@ -79,7 +82,8 @@ def _sampling_request_reconciled(
     evidence = json.loads(current["evidence"])
     abandoned = evidence.get("sampling_abandoned", {})
     return (
-        current["operation"] == operation and current["state"] == "failed"
+        current["operation"] == operation
+        and current["state"] == "failed"
         and current["fingerprint"] == entry["fingerprint"]
         and current["upper_micros"] == entry["upper_micros"]
         and current["charged_micros"] == current["upper_micros"]
@@ -93,7 +97,11 @@ def _sampling_request_reconciled(
 
 
 def _receipt_matches(
-    path: Path, batch: dict[str, Any], row: dict[str, Any], root: Path, step: int,
+    path: Path,
+    batch: dict[str, Any],
+    row: dict[str, Any],
+    root: Path,
+    step: int,
 ) -> bool:
     receipt = _read(path)
     episode = Path(batch["episode"])
@@ -105,7 +113,9 @@ def _receipt_matches(
         not path.resolve().is_relative_to(root.parent / "recoveries")
         or not episode.resolve().is_relative_to(root / "rollouts")
         or (
-            not sampling_failure and receipt.get("action") != (
+            not sampling_failure
+            and receipt.get("action")
+            != (
                 "explicit user-authorized retry of a visit rejected before task rollout"
             )
         )
@@ -156,8 +166,10 @@ def _receipt_matches(
     archived = receipt["archived"]
     prefix = root.name
     required = {
-        f"{prefix}/pilot.json", f"{prefix}/training/opsd.json",
-        f"{prefix}/training/backend.json", "workflow.json",
+        f"{prefix}/pilot.json",
+        f"{prefix}/training/opsd.json",
+        f"{prefix}/training/backend.json",
+        "workflow.json",
         f"{prefix}/rollouts/{episode.name}/run.json",
     }
     if not isinstance(archived, dict) or not required <= archived.keys():
@@ -173,7 +185,11 @@ def _receipt_matches(
     before = _read(Path(archived[f"{prefix}/training/opsd.json"]["copy"]))
     visits = _read(Path(archived[f"{prefix}/pilot.json"]["copy"]))
     if sampling_failure and not _sampling_request_reconciled(
-        path, receipt, before, record, batch,
+        path,
+        receipt,
+        before,
+        record,
+        batch,
     ):
         return False
     return (
@@ -193,7 +209,10 @@ def _receipt_matches(
 
 
 def reconciled_rejection(
-    batch: dict[str, Any], pilot: dict[str, Any], root: Path, optimizer_step: int,
+    batch: dict[str, Any],
+    pilot: dict[str, Any],
+    root: Path,
+    optimizer_step: int,
 ) -> bool:
     """Accept a rejected batch only with a preserved, explicit no-update retry proof.
 
@@ -201,7 +220,8 @@ def reconciled_rejection(
     do not invalidate it, and it cannot authorize a new failed attempt.
     """
     if (
-        batch.get("status") != "rejected" or "update" in batch
+        batch.get("status") != "rejected"
+        or "update" in batch
         or batch.get("supervised_tokens") != 0
     ):
         return False
@@ -210,11 +230,20 @@ def reconciled_rejection(
             for attempt in [row, *row.get("attempts", [])]:
                 path = attempt.get("retry_receipt")
                 if isinstance(path, str) and _receipt_matches(
-                    Path(path), batch, row, root.resolve(), optimizer_step,
+                    Path(path),
+                    batch,
+                    row,
+                    root.resolve(),
+                    optimizer_step,
                 ):
                     return True
     except (
-        OSError, ValueError, TypeError, KeyError, IndexError, AttributeError,
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        IndexError,
+        AttributeError,
         sqlite3.Error,
     ):
         return False

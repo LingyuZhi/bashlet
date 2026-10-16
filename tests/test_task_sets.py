@@ -8,23 +8,18 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 from adapters import bash, replay, submit
 from test_cli import cli, replay_config, saved_run
-from test_demonstrations import TrainingAdapter
-from test_encoding import QWEN, REVISION, official_tokenizer
+from test_encoding import official_tokenizer
 from test_mbpp import double_row, prepare
 
 from bashlet import (
     FunctionGrader,
     GradingCase,
-    QwenChatMLEncoding,
     Task,
     TaskOrigin,
     run_experiment,
 )
-from bashlet.config import load_config
-from bashlet.demonstrations import reference_demonstration
 
 __all__ = ["official_tokenizer"]
 
@@ -392,7 +387,7 @@ def test_workspace_policy_variant_needs_actual_local_policy(
     tmp_path: Path,
     prepared_tasks: Path,
 ) -> None:
-    from bashlet.experiment import task_from_record
+    from bashlet.harness.experiment import task_from_record
     from bashlet.tasks import task_path
 
     task = task_from_record(
@@ -458,83 +453,6 @@ def test_unexecuted_mutation_cannot_be_counted_as_successful_grader_validation(
     assert manifest["status"] == "incomplete"
 
 
-def test_authored_training_trajectory_keeps_family_and_task_type_at_export(
-    tmp_path: Path,
-    prepared_tasks: Path,
-    official_tokenizer: Any,
-) -> None:
-    from bashlet.experiment import task_from_record
-    from bashlet.tasks import task_path
-
-    task = task_from_record(
-        json.loads(
-            task_path(
-                prepared_tasks / "manifest.json", "harness/header-key", "train"
-            ).read_text()
-        )
-    )
-    encoding = QwenChatMLEncoding(QWEN, revision=REVISION)
-    adapter = TrainingAdapter(encoding.identity)
-    config = load_config()
-    result = run_experiment(
-        task=task,
-        model=reference_demonstration(task=task, encoding=encoding, config=config),
-        config=config,
-        output_dir=tmp_path,
-        sft_adapter=adapter,
-    )
-    assert result.passed and result.demonstration is not None
-    assert result.demonstration["status"] == "accepted"
-    _, metadata = adapter.requests[0]
-    assert metadata["origin"]["family_id"] == "harness/header-key"
-    assert metadata["origin"]["split"] == "train"
-    assert metadata["task_type"] == "code_edit"
-    assert metadata["feedback_start_id"] == task.feedback_start_id
-    assert metadata["on_policy_eligible"] is False
-
-
-def test_existing_sft_cli_consumes_authored_tasks_from_the_mixed_manifest(
-    tmp_path: Path,
-    prepared_tasks: Path,
-) -> None:
-    config = tmp_path / "sft.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "model": {
-                    "class": "ReplayModel",
-                    "tokenizer": QWEN,
-                    "tokenizer_revision": REVISION,
-                }
-            }
-        )
-    )
-    output = tmp_path / "demonstrations"
-    process = cli(
-        "prepare-sft",
-        str(prepared_tasks / "manifest.json"),
-        "--task-id",
-        "harness/header-key",
-        "--task-id",
-        "harness/stock-value",
-        "-c",
-        str(config),
-        "--output-dir",
-        str(output),
-        cwd=tmp_path,
-        timeout=60,
-    )
-    assert process.returncode == 0, process.stdout + process.stderr
-    manifest = json.loads((output / "manifest.json").read_text())
-    assert manifest["status"] == "complete" and manifest["counts"]["accepted"] == 2
-    examples = [
-        json.loads(line)
-        for line in (output / "examples.jsonl").read_text().splitlines()
-    ]
-    assert [e["metadata"]["task_type"] for e in examples] == ["code_edit", "workspace"]
-    assert all(e["metadata"]["origin"]["split"] == "train" for e in examples)
-
-
 def test_existing_evaluation_cli_keeps_each_type_and_the_fixed_denominator(
     tmp_path: Path,
     prepared_tasks: Path,
@@ -594,7 +512,7 @@ def test_correct_return_values_cannot_hide_forbidden_input_mutation(
     task_id: str,
     code: str,
 ) -> None:
-    from bashlet.experiment import task_from_record
+    from bashlet.harness.experiment import task_from_record
 
     source = Path(__file__).parents[1] / "configs/harness-authored-v1.json"
     catalog = json.loads(source.read_text())

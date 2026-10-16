@@ -8,9 +8,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..mbpp import _download, _split
-from ..protocol import fingerprint
-from .sources import TASK_TYPES, WORKSPACE_GRADING_DRIVER
+from bashlet.harness.protocol import fingerprint
+from bashlet.tasks.mbpp import _download, _split
+from bashlet.tasks.sources import TASK_TYPES, WORKSPACE_GRADING_DRIVER
 
 HEADER = "from typing import *\n"
 FUNCTION_RUNNER = """import ast, contextlib, importlib.util, io, random, sys

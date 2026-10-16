@@ -94,7 +94,7 @@ def test_prepared_task_runs_with_v3_and_keeps_independent_grading_private(
     process = cli("task", str(task_path), "-c", str(model), cwd=tmp_path)
     assert process.returncode == 1, process.stdout + process.stderr
     _, record = saved_run(tmp_path / "runs")
-    assert record["protocol"]["name"] == "bash-block-v3"
+    assert record["protocol"]["name"] == "bash-block-v6"
     assert record["trajectory"][1]["observation"]["exit_code"] == 0
     assert record["grade"]["passed"] is False
     assert record["grading_protocol"] == "json-function-v1"

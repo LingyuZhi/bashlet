@@ -1,0 +1,18 @@
+# One experiment entry point. New output directory; historical runs use the Git tag.
+extends: opsd-common.yaml
+output_dir: ../runs/opsd-current
+preflight: opsd-preflight.yaml
+group: opsd-expanded-train-v1
+training_selection: ../runs/issue31-expanded-freeze-v8-20261009/training-selection.json
+epochs: 4
+evaluation_seeds: [4, 17, 29, 41, 53]
+evaluate_each_epoch: true
+monitoring:
+  group: opsd-current
+monitor:
+  repository_root: ..
+  worker_session: bashlet-opsd
+  monitor_session: bashlet-opsd-monitor
+  poll_seconds: 30
+  backoff_min_seconds: 60
+  backoff_max_seconds: 600

@@ -19,7 +19,7 @@ from pytrio.errors.actor import ActorAPIError
 from pytrio.types.future.api_future import APIFuture
 
 from bashlet import FunctionGrader, GradingCase, Task, run_experiment
-from bashlet.pytrio import PyTRIOModel
+from bashlet.backends.pytrio import PyTRIOModel
 from bashlet.spend import SpendLedger, SpendPolicy
 
 MODEL = "Qwen/Qwen3.5-4B"

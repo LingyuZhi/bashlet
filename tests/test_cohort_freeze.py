@@ -531,14 +531,14 @@ def test_preparation_freezes_one_stratified_subset_and_four_visit_orders(
     assert run["task_assignment"]["role"] == "train_candidate"
 
 
-def test_training_cli_rejects_order_seed_drift_before_remote_work(
+def test_training_cli_rejects_changed_frozen_subset_before_remote_work(
     tmp_path: Path, frozen_cohort: Path
 ) -> None:
     selection = json.loads((frozen_cohort / "training-selection.json").read_text())
     configuration = {
         "train_manifest": str(frozen_cohort / "manifest.json"),
         "training_selection": str(frozen_cohort / "training-selection.json"),
-        "train_task_ids": selection["task_ids"],
+        "train_task_ids": selection["task_ids"][:-1],
         "dev_plan": str(frozen_cohort / "harness-dev.json"),
         "condition": [],
         "epochs": 4,

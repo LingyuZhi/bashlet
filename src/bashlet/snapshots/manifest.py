@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..models import Encoding
-from ..pytrio import MODEL
+from bashlet.backends.pytrio import MODEL
+from bashlet.harness.models import Encoding
 
 
 def _snapshot_identity(record: dict[str, Any]) -> str:

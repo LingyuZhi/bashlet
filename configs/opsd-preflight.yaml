@@ -1,0 +1,9 @@
+extends: opsd-common.yaml
+group: opsd-expanded-preflight-v1
+train_task_ids: [mbpp/602, harness/header-key, harness/stock-value]
+dev_plan: opsd-expanded-preflight-dev-v1.json
+epochs: 1
+evaluation_seeds: [4]
+evaluate_each_epoch: false
+monitoring:
+  group: opsd-preflight

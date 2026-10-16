@@ -22,7 +22,7 @@ from test_vllm import FakeVLLM, completion, double_task
 from test_vllm import service as service
 
 from bashlet import QwenChatMLEncoding, run_experiment
-from bashlet.vllm import VLLMModel
+from bashlet.backends.vllm import VLLMModel
 
 BASE = "Qwen/Qwen3.5-4B"
 REVISION = "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
@@ -58,23 +58,36 @@ def export_fixture(
                 tarred.addfile(member, io.BytesIO(content))
     training = tmp_path / "training"
     training.mkdir()
-    (training / "training.json").write_text(
+    encoding = {"format": "test-encoding", "thinking": False}
+    update = {
+        "optimizer_step": 12,
+        "student_policy": f"pytrio/{BASE}@{SAMPLER}",
+        "training_state": "trio://run-test/weights/state-0012",
+    }
+    (training / "opsd.json").write_text(
         json.dumps(
             {
-                "metadata": {
-                    "base_model": BASE,
-                    "server_model_revision": None,
-                    "encoding": "test-training-encoding",
-                },
-                "checkpoints": [
+                "snapshot": {"encoding": "test-training-encoding"},
+                "encoding_details": encoding,
+                "batches": [{"status": "completed", "update": update}],
+            }
+        )
+    )
+    (training / "backend.json").write_text(
+        json.dumps(
+            {
+                "sdk_version": "0.2.9",
+                "config": {"base_model": BASE},
+                "server_model_revision": None,
+                "initial_training_run_cuid": "run-before-resume",
+                "encoding": encoding,
+                "updates": [
                     {
                         "optimizer_step": 12,
-                        "sampler": {"kind": "sampler_weights", "path": SAMPLER},
-                        "training_state": {
-                            "kind": "training_state",
-                            "path": "trio://run-test/weights/state-0012",
-                        },
+                        "status": "completed",
                         "training_run_cuid": "run-test",
+                        "sampler": SAMPLER,
+                        "training_state": update["training_state"],
                     }
                 ],
             }
@@ -145,8 +158,8 @@ def test_export_preserves_the_existing_sampler_identity_and_download_hashes(
     assert archived == (
         training / "training-records" / f"{record['training_record_sha256']}.json"
     )
-    original = (training / "training.json").read_bytes()
-    (training / "training.json").write_text('{"status": "resumed"}')
+    original = (training / "opsd.json").read_bytes()
+    (training / "opsd.json").write_text('{"status": "resumed"}')
     assert archived.read_bytes() == original
     assert (
         hashlib.sha256(archived.read_bytes()).hexdigest()
@@ -160,51 +173,10 @@ def test_export_preserves_the_existing_sampler_identity_and_download_hashes(
     )
 
 
-def opsd_export_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    training = export_fixture(tmp_path, monkeypatch)
-    (training / "training.json").unlink()
-    encoding = {"format": "test-encoding", "thinking": False}
-    update = {
-        "optimizer_step": 12,
-        "student_policy": f"pytrio/{BASE}@{SAMPLER}",
-        "training_state": "trio://run-test/weights/state-0012",
-    }
-    (training / "opsd.json").write_text(
-        json.dumps(
-            {
-                "snapshot": {"encoding": "test-training-encoding"},
-                "encoding_details": encoding,
-                "batches": [{"status": "completed", "update": update}],
-            }
-        )
-    )
-    (training / "backend.json").write_text(
-        json.dumps(
-            {
-                "sdk_version": "0.2.9",
-                "config": {"base_model": BASE},
-                "server_model_revision": None,
-                "initial_training_run_cuid": "run-before-resume",
-                "encoding": encoding,
-                "updates": [
-                    {
-                        "optimizer_step": 12,
-                        "status": "completed",
-                        "training_run_cuid": "run-test",
-                        "sampler": SAMPLER,
-                        "training_state": update["training_state"],
-                    }
-                ],
-            }
-        )
-    )
-    return training
-
-
 def test_export_opsd_initial_teacher_uses_the_original_saved_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    training = opsd_export_fixture(tmp_path, monkeypatch)
+    training = export_fixture(tmp_path, monkeypatch)
     backend_path = training / "backend.json"
     backend = json.loads(backend_path.read_text())
     backend.update(
@@ -236,7 +208,7 @@ def test_export_opsd_initial_teacher_uses_the_original_saved_snapshot(
 def test_export_opsd_uses_the_resumed_run_and_preserves_both_source_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    training = opsd_export_fixture(tmp_path, monkeypatch)
+    training = export_fixture(tmp_path, monkeypatch)
     output = tmp_path / "export"
     process = cli(
         "export-snapshot",
@@ -267,7 +239,7 @@ def test_export_opsd_uses_the_resumed_run_and_preserves_both_source_records(
 def test_export_opsd_rejects_unconfirmed_checkpoint_provenance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, problem: str
 ) -> None:
-    training = opsd_export_fixture(tmp_path, monkeypatch)
+    training = export_fixture(tmp_path, monkeypatch)
     backend_path = training / "backend.json"
     backend = json.loads(backend_path.read_text())
     if problem == "encoding":
@@ -478,9 +450,10 @@ def test_exported_split_projections_load_as_the_selected_local_lora(
     training = export_fixture(tmp_path, monkeypatch)
     manifest = tmp_path / "data.json"
     manifest.write_text(json.dumps({"encoding_details": encoding.describe()}))
-    training_data = json.loads((training / "training.json").read_text())
-    training_data["config"] = {"dataset": str(manifest)}
-    (training / "training.json").write_text(json.dumps(training_data))
+    for name, key in (("opsd.json", "encoding_details"), ("backend.json", "encoding")):
+        document = json.loads((training / name).read_text())
+        document[key] = encoding.describe()
+        (training / name).write_text(json.dumps(document))
     tensors: dict[str, Any] = {}
     a_values = [
         [[1, 0, 0, 0], [0, 1, 0, 0]],
@@ -679,9 +652,10 @@ def test_local_evaluations_require_loaded_identity_and_matching_runtime_conditio
     training = export_fixture(tmp_path, monkeypatch)
     data = tmp_path / "training-data.json"
     data.write_text(json.dumps({"encoding_details": encoding.describe()}))
-    training_record = json.loads((training / "training.json").read_text())
-    training_record["config"] = {"dataset": str(data)}
-    (training / "training.json").write_text(json.dumps(training_record))
+    for name, key in (("opsd.json", "encoding_details"), ("backend.json", "encoding")):
+        document = json.loads((training / name).read_text())
+        document[key] = encoding.describe()
+        (training / name).write_text(json.dumps(document))
     weights = tmp_path / "weights.safetensors"
     prefix = "model.language_model.layers.0.self_attn.q_proj"
     save_file(
@@ -719,7 +693,7 @@ def test_local_evaluations_require_loaded_identity_and_matching_runtime_conditio
     manifests = []
     for name, extra in [
         ("base-snapshot", []),
-        ("sft-snapshot", ["--export", str(exported / "export.json")]),
+        ("trained-snapshot", ["--export", str(exported / "export.json")]),
     ]:
         output = tmp_path / name
         process = cli(
@@ -785,7 +759,7 @@ def test_local_evaluations_require_loaded_identity_and_matching_runtime_conditio
             yaml.safe_dump(
                 {
                     "model": {
-                        "class": "bashlet.vllm.VLLMModel",
+                        "class": "bashlet.backends.vllm.VLLMModel",
                         "base_url": service.base_url,
                         "model": alias,
                         "model_revision": REVISION,
@@ -819,42 +793,6 @@ def test_local_evaluations_require_loaded_identity_and_matching_runtime_conditio
     assert loaded[0]["comparison_sha256"] == loaded[1]["comparison_sha256"]
     assert loaded[1]["comparison_sha256"] != loaded[2]["comparison_sha256"]
     assert loaded[1]["comparison_sha256"] != loaded[3]["comparison_sha256"]
-    for changed in records[2:]:
-        mismatch = cli(
-            "select-sft",
-            str(training),
-            "--baseline",
-            str(records[0]),
-            "--evaluation",
-            str(changed),
-            cwd=tmp_path,
-        )
-        assert mismatch.returncode == 2 and "comparison conditions" in mismatch.stderr
-    valid = cli(
-        "select-sft",
-        str(training),
-        "--baseline",
-        str(records[0]),
-        "--evaluation",
-        str(records[1]),
-        cwd=tmp_path,
-    )
-    assert valid.returncode == 2 and "dual-track" in valid.stderr
-    assert not (training / "selection.json").exists()
-    relabeled = loaded[1]
-    relabeled["snapshot_details"]["identity_verified"] = False
-    forged = tmp_path / "relabeled.json"
-    forged.write_text(json.dumps(relabeled))
-    refused = cli(
-        "select-sft",
-        str(training),
-        "--baseline",
-        str(records[0]),
-        "--evaluation",
-        str(forged),
-        cwd=tmp_path,
-    )
-    assert refused.returncode == 2 and "verified" in refused.stderr
     legacy = yaml.safe_load(config.read_text())
     del legacy["model"]["snapshot_manifest"]
     config.write_text(yaml.safe_dump(legacy))

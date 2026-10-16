@@ -8,9 +8,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .sources import TASK_TYPES
+from bashlet.tasks.sources import TASK_TYPES
 
-# The two 30% categories tie at half a family in the 268/536 allocation.
+# Stable remainder tie order, recorded in every frozen selection.
 TYPE_REMAINDER_ORDER = ("workspace", "code_edit", "short_program")
 DIFFICULTIES = ("easy", "medium", "hard")
 
@@ -32,13 +32,15 @@ def validate_plan(cohort: dict[str, Any]) -> None:
     }
     if not isinstance(rules, dict) or set(rules) != required:
         raise ValueError("Incomplete or unknown cohort freeze settings")
-    if rules["version"] != "opsd-cohort-freeze-v1" or rules["epochs"] != 4:
-        raise ValueError("Cohort freeze requires version v1 and four epochs")
+    if rules["version"] != "opsd-cohort-freeze-v1":
+        raise ValueError("Cohort freeze requires version v1")
+    if type(rules["epochs"]) is not int or rules["epochs"] < 1:
+        raise ValueError("Cohort epochs must be a positive integer")
     seeds = [rules[k] for k in ("sampling_seed", "training_seed", "epoch_shuffle_seed")]
     evaluation = rules["evaluation_seeds"]
     if (
         not isinstance(evaluation, list)
-        or len(evaluation) != 5
+        or not evaluation
         or any(type(seed) is not int or seed < 0 for seed in seeds + evaluation)
         or len(set(seeds + evaluation)) != len(seeds + evaluation)
         or not isinstance(rules["difficulty_basis"], str)
@@ -110,7 +112,7 @@ def selection(cohort: dict[str, Any], entries: list[dict[str, Any]]) -> dict[str
             )
     selected.sort()
     epochs = []
-    for epoch in range(4):
+    for epoch in range(rules["epochs"]):
         order = list(selected)
         random.Random(rules["epoch_shuffle_seed"] + epoch).shuffle(order)
         epochs.append(order)
@@ -123,7 +125,7 @@ def selection(cohort: dict[str, Any], entries: list[dict[str, Any]]) -> dict[str
         "per_type": quotas,
         "strata": strata,
         "epochs": epochs,
-        "planned_visits": 4 * len(selected),
+        "planned_visits": rules["epochs"] * len(selected),
         "seeds": {
             "sampling": seeds[0],
             "training": seeds[1],
@@ -351,8 +353,7 @@ def expanded_cohort(
         for member in group["members"]
     }
     quality_exclusions = {
-        row["family_id"]: row["reason"]
-        for row in review.get("quality_exclusions", [])
+        row["family_id"]: row["reason"] for row in review.get("quality_exclusions", [])
     }
     groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for entry in inventory["tasks"]:

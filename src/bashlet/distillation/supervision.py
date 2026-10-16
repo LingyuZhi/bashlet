@@ -4,17 +4,28 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..config import ExperimentConfig
-from ..models import Encoding, ExperimentResult, Task
+from bashlet.config import ExperimentConfig, ProtocolConfig
+from bashlet.harness import protocol
+from bashlet.harness.models import (
+    Encoding,
+    ExperimentResult,
+    Generation,
+    InvalidAction,
+    ModelResponseError,
+    Observation,
+    SamplingParams,
+    Task,
+)
 
 if TYPE_CHECKING:
     import pytrio as trio
 
-    from . import OPSDConfig, TeacherScores
+    from bashlet.distillation import OPSDConfig, TeacherScores
 
 
 def build_supervision(
@@ -117,3 +128,81 @@ def build_supervision(
         "sampled_token_reverse_kl": math.fsum(differences) / len(differences),
         "kl_denominator": "supervised sampled student tokens",
     }
+
+
+def validate_history(
+    record: dict[str, Any],
+    task: Task,
+    encoding: Encoding,
+    config: ProtocolConfig,
+) -> None:
+    """Reconstruct only framing; sampled generations remain their raw token IDs."""
+    if (
+        record["encoding"] != encoding.identity
+        or record["encoding_details"] != encoding.describe()
+    ):
+        raise ValueError("Trajectory encoding identity differs")
+    context = encoding.prompt(config.system_prompt, task.prompt)
+    for index, step in enumerate(record["trajectory"]):
+        call = step["model_call"]
+        if call is None or call["context_offset"] != len(context):
+            raise ValueError("Trajectory has missing calls or invalid context offsets")
+        raw = call["generation"]
+        generation = Generation(
+            tokens=tuple(raw["tokens"]),
+            stop_reason=raw["stop_reason"],
+            logprobs=tuple(raw["logprobs"]) if raw["logprobs"] is not None else None,
+            request_id=raw["request_id"],
+            source=raw["source"],
+        )
+        try:
+            generation.validate(SamplingParams(**call["sampling"]))
+        except ModelResponseError as error:
+            raise ValueError(
+                f"Invalid trajectory sampling evidence: {error}"
+            ) from error
+        reply = encoding.reply(generation.tokens)
+        if call["text"] != encoding.decode(generation.tokens) or call[
+            "reply"
+        ] != asdict(reply):
+            raise ValueError("Trajectory text differs from its raw generation")
+        action = (
+            protocol.parse_action(reply.action_text, generation.stop_reason == "length")
+            if reply.thinking_complete
+            else InvalidAction("Native thinking did not reach its end marker")
+        )
+        if step["action"] != asdict(action):
+            raise ValueError("Trajectory action differs from the protocol")
+        context.extend(generation.tokens)
+        feedback: str | None
+        if isinstance(action, InvalidAction):
+            if step["observation"] is not None:
+                raise ValueError(
+                    "An invalid action cannot have an executed observation"
+                )
+            feedback = protocol.render_invalid(action, config.invalid_action_format)
+        else:
+            if step["observation"] is None:
+                raise ValueError("Executable action has no observation")
+            observation = Observation(**step["observation"])
+            submitted = protocol.submission_text(observation, config.submission_marker)
+            if submitted is not None and index != len(record["trajectory"]) - 1:
+                raise ValueError("Trajectory continued after an explicit submission")
+            feedback = (
+                None
+                if submitted is not None
+                else protocol.render_observation(observation, config)
+            )
+        if step["feedback"] != feedback:
+            raise ValueError("Trajectory feedback differs from its observation")
+        if feedback is not None:
+            if not (
+                index == len(record["trajectory"]) - 1
+                and record["status"] not in ("completed", "submitted")
+                and context == record["context_tokens"]
+            ):
+                context.extend(encoding.continuation(generation.tokens, feedback))
+    if context != record["context_tokens"]:
+        raise ValueError(
+            "Trajectory context does not preserve the complete causal history"
+        )
