@@ -196,15 +196,17 @@ class Service:
                     if "Reference implementation (teacher only)" in context
                     else -0.25
                 )
-                if os.environ.get("FAKE_FROZEN_SCORE_VARIATION"):
-                    probability -= 0.2
-                if os.environ.get("FAKE_FROZEN_SCORE_INVALID"):
-                    probability = 0.1
                 return APIFuture.completed(
                     [None, *([probability] * (prompt.length - 1))]
                 )
 
             sampler.compute_logprobs = privileged  # type: ignore[method-assign]
+        if os.environ.get("FAKE_CHECKPOINT_SCORING_FORBIDDEN"):
+
+            def forbidden(prompt: Any) -> Any:
+                raise AssertionError("Checkpoint verification must not rescore tokens")
+
+            sampler.compute_logprobs = forbidden  # type: ignore[method-assign]
         self.clients[sampler.sampling_run_cuid] = sampler, model_path
         return sampler
 
@@ -248,7 +250,13 @@ class Service:
                 from safetensors.numpy import save_file
 
                 step = int(checkpoint.removeprefix("ckpt-"))
-                value = float(step > 0)
+                if os.environ.get("FAKE_CHECKPOINT_DOWNLOAD_FAILURE") and step > 0:
+                    raise TimeoutError("Checkpoint download temporarily unavailable")
+                value = (
+                    float(os.environ.get("FAKE_STUDENT_PARAMETER_DELTA", "1.0"))
+                    if step > 0
+                    else 0.0
+                )
                 if os.environ.get("FAKE_TEACHER_WEIGHTS_CHANGED") and step == 0:
                     value = 1.0
                 if os.environ.get("FAKE_STUDENT_WEIGHTS_UNCHANGED"):
@@ -328,9 +336,13 @@ def install() -> None:
             train_marker.touch()
             raise KeyboardInterrupt
         marker = Path(os.environ["FAKE_TRAINING_ROOT"]) / "eval-interrupted"
+        eval_phase = os.environ.get("FAKE_OPSD_INTERRUPT_EVAL_PHASE")
+        eval_seed = os.environ.get("FAKE_OPSD_INTERRUPT_EVAL_SEED")
         if (
             os.environ.get("FAKE_OPSD_INTERRUPT_EVAL")
             and data.get("eval/completed_tasks") == 1
+            and (eval_phase is None or self.config.get("phase") == eval_phase)
+            and (eval_seed is None or self.root.name == f"seed-{eval_seed}")
             and not marker.exists()
         ):
             marker.touch()

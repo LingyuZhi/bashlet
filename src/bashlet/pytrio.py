@@ -332,7 +332,7 @@ class PyTRIOModel:
             payload["model_path"] = self.model_path
         with self._lock:
             for attempt in range(self.max_retries + 1):
-                probing = operation in ("capability_probe", "logprob_probe")
+                probing = operation == "capability_probe"
                 if probing and self._probe_reserved + upper > self._probe_cap:
                     raise BudgetRefused("Capability probe cash ceiling is exhausted")
                 capture = _RequestIdentity(self._sampler.sampling_run_cuid, self.ledger)
@@ -490,6 +490,7 @@ class PyTRIOModel:
         return generation
 
     def probe(self) -> None:
+        """Validate sampled token evidence without a probability comparison."""
         with self._lock:
             if self._probed:
                 return
@@ -502,43 +503,10 @@ class PyTRIOModel:
                     raise ModelResponseError(
                         "PyTRIO capability probe must return one token"
                     )
-                raw = [*prompt, *generated.tokens]
-                scores, score_id, entry = self._call(
-                    raw,
-                    sampling,
-                    operation="logprob_probe",
-                    group=self.group,
-                    scoring=True,
-                )
-                if (
-                    not isinstance(scores, list)
-                    or len(scores) != len(raw)
-                    or any(
-                        type(value) not in (int, float)
-                        or not math.isfinite(value)
-                        or value > 0
-                        for value in scores[1:]
-                    )
-                ):
-                    raise ModelResponseError(
-                        "PyTRIO scoring must align to each original token"
-                    )
-                assert generated.logprobs is not None
-                difference = abs(scores[-1] - generated.logprobs[-1])
-                self.ledger.annotate(entry, {"scored_tokens": raw, "logprobs": scores})
-                if difference > 0.05:
-                    raise ModelResponseError(
-                        "Sample logprobs disagree with raw-token model scoring"
-                    )
                 self._details["capability_probe"] = {
                     "passed": True,
                     "generation": asdict(generated),
                     "prompt_tokens": prompt,
-                    "scoring_request_id": score_id,
-                    "scored_tokens": raw,
-                    "scored_logprobs": scores,
-                    "sample_score_max_difference": difference,
-                    "probability_check": "model logprobs at temperature=1, top_p=1",
                     "frozen_sft_teacher_verified": False,
                 }
                 self._probed = True

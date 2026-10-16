@@ -52,7 +52,8 @@ class FakeSampling:
         self.sampling_run_cuid = f"sampling-{id(self)}"
         self.replies = deque(replies)
         self.requests: list[dict[str, Any]] = []
-        self.score_barrier: Barrier | None = None
+        self.score_requests: list[list[int]] = []
+        self.probe_barrier: Barrier | None = None
         self.episode_started: Event | None = None
         self.fail_before_identity = False
 
@@ -102,10 +103,13 @@ class FakeSampling:
                 len(value.sequences),
                 "actor-test",
             )
+            if self.probe_barrier is not None and len(self.requests) == 1:
+                self.probe_barrier.wait(timeout=20)
         return APIFuture(future)
 
     def compute_logprobs(self, prompt: Any) -> APIFuture[list[float | None]]:
         # SDK 0.2.9 scores via a one-token sample. Preserve its request identity.
+        self.score_requests.append(prompt.to_ints())
         request_id = f"scoring-{self.sampling_run_cuid}"
         SDK_LOG.debug(
             "Sending Actor sample request task=%s request=%s actor=%s",
@@ -120,8 +124,6 @@ class FakeSampling:
             1,
             "actor-test",
         )
-        if self.score_barrier is not None:
-            self.score_barrier.wait(timeout=20)
         return APIFuture.completed([None, *([-0.25] * (prompt.length - 1))])
 
 
@@ -274,7 +276,6 @@ def test_paid_episode_keeps_raw_tokens_service_identity_and_probe_spend(
     entries = details["spend"]["entries"]
     assert [item["operation"] for item in entries] == [
         "capability_probe",
-        "logprob_probe",
         "sampling",
     ]
     assert all(item["charged_cny"] > 0 for item in entries)
@@ -282,10 +283,57 @@ def test_paid_episode_keeps_raw_tokens_service_identity_and_probe_spend(
     assert details["spend"]["pending_cny"] == 0
 
 
+@pytest.mark.parametrize(
+    ("sampled_logprob", "rescored_logprob"),
+    [
+        (-0.3061845600605011, -0.3722420334815979),
+        (-0.30621740221977234, -0.3722420334815979),
+    ],
+)
+def test_probe_accepts_recorded_sampling_logprobs_without_student_rescoring(
+    tmp_path: Path, sampled_logprob: float, rescored_logprob: float
+) -> None:
+    class MismatchingScores(FakeSampling):
+        def compute_logprobs(self, prompt: Any) -> APIFuture[list[float | None]]:
+            super().compute_logprobs(prompt)
+            return APIFuture.completed(
+                [None, *([rescored_logprob] * (prompt.length - 1))]
+            )
+
+    probe = response([90700])
+    probe.sequences[0].logprobs = [sampled_logprob]
+    tokens = list(
+        b"```bash\nprintf 'def solve(n): return n * 2\\n' > solution.py\n"
+        b"printf 'COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\\n'\n```"
+    )
+    completion = response(tokens)
+    old_logprobs = [-0.2 - 0.01 * (index % 7) for index in range(len(tokens))]
+    completion.sequences[0].logprobs = old_logprobs
+    sdk = MismatchingScores([probe, completion])
+    ledger = SpendLedger(tmp_path / "spend.sqlite3", policy=SpendPolicy(funded_cny=10))
+    result = run_experiment(
+        task=double_task(), model=model_for(sdk, ledger), output_dir=tmp_path
+    )
+
+    assert result.passed, result.reason
+    assert sdk.score_requests == []
+    assert len(sdk.requests) == 2
+    capability = result.policy_details["capability_probe"]
+    assert isinstance(capability, dict)
+    evidence = capability["generation"]
+    assert isinstance(evidence, dict)
+    assert evidence["tokens"] == [90700]
+    assert evidence["logprobs"] == [sampled_logprob]
+    call = result.trajectory[0].model_call
+    assert call is not None
+    assert call.generation.tokens == tuple(tokens)
+    assert call.generation.logprobs == tuple(old_logprobs)
+
+
 def test_exhausted_cash_budget_stops_before_an_episode_request(tmp_path: Path) -> None:
     sdk = FakeSampling([response([65])])
     ledger = SpendLedger(
-        tmp_path / "spend.sqlite3", policy=SpendPolicy(funded_cny=0.08)
+        tmp_path / "spend.sqlite3", policy=SpendPolicy(funded_cny=0.04)
     )
     result = run_experiment(
         task=double_task(), model=model_for(sdk, ledger), output_dir=tmp_path
@@ -295,9 +343,9 @@ def test_exhausted_cash_budget_stops_before_an_episode_request(tmp_path: Path) -
     assert "funded" in result.reason
     assert not result.trajectory and result.grade is None
     assert len(sdk.requests) == 1  # Only the one-token sampling probe.
-    # The live price catalog stores fen and rounds upward. Reserve each phase
-    # to one fen, then apply the configured 2x ceiling: two probes cost <= ¥0.08.
-    assert ledger.snapshot()["charged_cny"] == 0.08
+    # Each prefill/generation phase rounds to one fen before the 2x ceiling.
+    # The one remaining sampling probe therefore reserves ¥0.04.
+    assert ledger.snapshot()["charged_cny"] == 0.04
     assert ledger.snapshot()["pending_cny"] == 0
 
 
@@ -312,7 +360,7 @@ def test_billed_failure_and_retry_both_consume_the_available_cash(
         ]
     )
     ledger = SpendLedger(
-        tmp_path / "spend.sqlite3", policy=SpendPolicy(funded_cny=0.12)
+        tmp_path / "spend.sqlite3", policy=SpendPolicy(funded_cny=0.08)
     )
     result = run_experiment(
         task=double_task(), model=model_for(sdk, ledger), output_dir=tmp_path
@@ -321,8 +369,8 @@ def test_billed_failure_and_retry_both_consume_the_available_cash(
     assert result.status == "budget_exhausted", result.reason
     assert len(sdk.requests) == 2  # The retry was refused before reaching the SDK.
     entries = ledger.snapshot()["entries"]
-    assert [item["state"] for item in entries] == ["completed", "completed", "failed"]
-    assert ledger.snapshot()["charged_cny"] == 0.12
+    assert [item["state"] for item in entries] == ["completed", "failed"]
+    assert ledger.snapshot()["charged_cny"] == 0.08
     assert not result.trajectory and result.grade is None
 
 
@@ -356,7 +404,7 @@ def test_invalid_paid_evidence_is_charged_but_never_executed(
     assert result.status == "model_error", result.reason
     assert result.grade is None and not result.trajectory
     assert list(result.workspace.iterdir()) == []
-    assert ledger.snapshot()["charged_cny"] == (0.04 if stage == "probe" else 0.12)
+    assert ledger.snapshot()["charged_cny"] == (0.04 if stage == "probe" else 0.08)
     assert ledger.snapshot()["pending_cny"] == 0
 
 
@@ -463,7 +511,7 @@ def test_cli_inspects_and_reconciles_a_timed_out_request_without_resubmission(
     )
     assert status.returncode == 0, status.stderr
     data = json.loads(status.stdout)
-    assert data["pending_cny"] == 0.04 and data["charged_cny"] == 0.08
+    assert data["pending_cny"] == 0.04 and data["charged_cny"] == 0.04
     pending = data["entries"][-1]
     assert pending["evidence"]["request_id"] == f"remote-{sdk.sampling_run_cuid}-2"
     bill = tmp_path / "bill.json"
@@ -501,7 +549,7 @@ def test_cli_inspects_and_reconciles_a_timed_out_request_without_resubmission(
     )
     assert reconciled.returncode == 0, reconciled.stderr
     confirmed = json.loads(reconciled.stdout)
-    assert confirmed["pending_cny"] == 0 and confirmed["charged_cny"] == 0.10
+    assert confirmed["pending_cny"] == 0 and confirmed["charged_cny"] == 0.06
     assert confirmed["entries"][-1]["billing_basis"] == "confirmed"
     assert len(sdk.requests) == 2
 
@@ -528,21 +576,21 @@ def test_restart_preserves_pending_cost_and_refuses_duplicate_work(
     assert "still pending" in second.reason
     assert len(resumed.requests) == 1
     assert ledger.snapshot()["pending_cny"] == 0.04
-    assert ledger.snapshot()["charged_cny"] == 0.16
-    assert ledger.snapshot()["funded_remaining_cny"] == 9.80
+    assert ledger.snapshot()["charged_cny"] == 0.08
+    assert ledger.snapshot()["funded_remaining_cny"] == 9.88
 
 
 def test_concurrent_episodes_cannot_spend_an_in_flight_reservation(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "spend.sqlite3"
-    policy = SpendPolicy(funded_cny=0.20)
+    policy = SpendPolicy(funded_cny=0.12)
     suspended: Future[Any] = Future()
     started = Event()
     barrier = Barrier(2)
     services = [FakeSampling([response([65]), suspended]) for _ in range(2)]
     for sdk in services:
-        sdk.score_barrier, sdk.episode_started = barrier, started
+        sdk.probe_barrier, sdk.episode_started = barrier, started
 
     def episode(index: int) -> Any:
         class ProbeEncoding(ByteEncoding):
@@ -573,7 +621,7 @@ def test_concurrent_episodes_cannot_spend_an_in_flight_reservation(
             denied = next(iter(done)).result()
             assert denied.status == "budget_exhausted", denied.reason
             ledger = SpendLedger(path, policy=policy)
-            assert ledger.snapshot()["charged_cny"] == 0.16
+            assert ledger.snapshot()["charged_cny"] == 0.08
             assert ledger.snapshot()["pending_cny"] == 0.04
         finally:
             suspended.set_result(
@@ -588,7 +636,7 @@ def test_concurrent_episodes_cannot_spend_an_in_flight_reservation(
         results = [future.result(timeout=20) for future in futures]
     assert sorted(result.passed for result in results) == [False, True]
     assert sum(len(sdk.requests) for sdk in services) == 3
-    assert SpendLedger(path, policy=policy).snapshot()["charged_cny"] == 0.20
+    assert SpendLedger(path, policy=policy).snapshot()["charged_cny"] == 0.12
 
 
 def test_capability_probes_also_consume_the_pilot_sub_budget(tmp_path: Path) -> None:
@@ -662,14 +710,14 @@ def test_gateway_failure_keeps_its_reservation_and_is_not_retried(
     assert result.status == "infrastructure_error", result.reason
     assert len(sdk.requests) == 2
     assert ledger.snapshot()["pending_cny"] == 0.04
-    assert ledger.snapshot()["charged_cny"] == 0.08
+    assert ledger.snapshot()["charged_cny"] == 0.04
 
 
 def test_named_sub_budget_cannot_replace_the_funded_limit(tmp_path: Path) -> None:
     sdk = FakeSampling([response([65]), response([65])])
     ledger = SpendLedger(
         tmp_path / "spend.sqlite3",
-        policy=SpendPolicy(funded_cny=0.08, groups={"funded": 0.50}),
+        policy=SpendPolicy(funded_cny=0.04, groups={"funded": 0.50}),
     )
     result = run_experiment(
         task=double_task(),
@@ -678,7 +726,7 @@ def test_named_sub_budget_cannot_replace_the_funded_limit(tmp_path: Path) -> Non
     )
     assert result.status == "budget_exhausted", result.reason
     assert len(sdk.requests) == 1
-    assert ledger.snapshot()["charged_cny"] == 0.08
+    assert ledger.snapshot()["charged_cny"] == 0.04
 
 
 @pytest.mark.parametrize("stage", ["probe", "episode"])
@@ -697,4 +745,4 @@ def test_sdk_invalid_response_maps_to_model_error_and_retains_cost(
     assert not result.trajectory and result.grade is None
     assert len(sdk.requests) == (1 if stage == "probe" else 2)
     assert ledger.snapshot()["pending_cny"] == 0.04
-    assert ledger.snapshot()["charged_cny"] == (0 if stage == "probe" else 0.08)
+    assert ledger.snapshot()["charged_cny"] == (0 if stage == "probe" else 0.04)

@@ -325,9 +325,9 @@ def test_evaluation_spend_failures_keep_missing_tasks_and_all_commitments(
     assert record["tasks"][1]["budget_kind"] == "spend"
     assert record["tasks"][2]["outcome"] == "not_started"
     assert record["cost"]["ledger"] == str(ledger)
-    assert record["cost"]["charged_upper_bound_cny"] == 0.16
+    assert record["cost"]["charged_upper_bound_cny"] == 0.12
     assert record["cost"]["actual_cny"] is None
-    assert len(record["cost"]["request_ids"]) == 4
+    assert len(record["cost"]["request_ids"]) == 3
 
 
 @pytest.mark.parametrize("source", ["", "def solve(:\n"])

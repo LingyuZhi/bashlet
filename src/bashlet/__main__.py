@@ -298,6 +298,7 @@ def main() -> None:
     opsd.add_argument("--output-dir", type=Path, required=True)
     opsd.add_argument("--resume", action="store_true")
     opsd.add_argument("--preflight-config", type=Path)
+    opsd.add_argument("--execution-limit", type=Path)
     verify_opsd = commands.add_parser(
         "verify-opsd", help="Verify saved OPSD state and probabilities"
     )
@@ -438,14 +439,20 @@ def main() -> None:
                     options.preflight_config,
                     options.output_dir,
                     resume=options.resume,
+                    execution_limit=options.execution_limit,
                 )
             else:
                 path = run_opsd_pilot(
-                    options.pilot_config, options.output_dir, resume=options.resume
+                    options.pilot_config, options.output_dir, resume=options.resume,
+                    execution_limit=options.execution_limit,
                 )
             record = json.loads(path.read_text())
             print(f"{record['status']}\n{path}")
-            raise SystemExit(0 if record["status"] == "complete" else 2)
+            raise SystemExit(
+                0 if record["status"] == "complete"
+                or (record["status"] == "incomplete"
+                    and record.get("execution_status") == "complete") else 2
+            )
         if options.command == "report-collection-pilot":
             from .curation.pilot import report_collection_pilot
 

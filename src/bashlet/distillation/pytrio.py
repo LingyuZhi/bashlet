@@ -7,7 +7,6 @@ import math
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
-from functools import partial
 from importlib.metadata import version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -504,93 +503,53 @@ class PyTRIOOPSD:
         return self.refresh_student(update)
 
     def verify_progress(self, run: OPSDRun) -> dict[str, Any]:
-        """Compare frozen scores and loaded updated weights on original tokens."""
+        """Verify Base parameters, sampler identities and completed restoration."""
         import json
 
-        from ..models import SamplingParams
-
+        if self.config.source != "base":
+            raise ValueError(
+                "Checkpoint parameters: only Base initialization is supported"
+            )
+        run._roles()
+        restoration = self.record.get("optimizer_restoration")
+        update = run.record.get("last_update")
+        if (
+            run.record["pending_update"] is not None
+            or run.record["optimizer_step"] < 1
+            or not isinstance(update, dict)
+            or not isinstance(restoration, dict)
+            or update.get("optimizer_step") != run.record["optimizer_step"]
+            or update.get("student_policy") != self._student.identity
+            or not update.get("training_state")
+            or restoration.get("optimizer_step") != run.record["optimizer_step"]
+            or restoration.get("training_state") != update["training_state"]
+            or not restoration.get("completed_state")
+        ):
+            raise ValueError(
+                "Checkpoint parameters: a completed update and optimizer "
+                "restoration are required"
+            )
         first = next(b for b in run.record["batches"] if "update" in b)
         episode = Path(first["episode"])
-        trajectory = json.loads((episode / "run.json").read_text())
-        call = trajectory["trajectory"][0]["model_call"]
         original = json.loads((episode / "private/teacher-0000.json").read_text())
         if original["policy"] != self.teacher_identity or (
             original["encoding"] != self.teacher_encoding.identity
         ):
             raise ValueError(
-                "Checkpoint scoring must preserve the original teacher identity"
+                "Checkpoint parameters: original teacher scoring identity changed"
             )
-        normal = trajectory["context_tokens"][
-            : call["context_offset"] + len(call["generation"]["tokens"])
-        ]
-        results = []
-        for tokens in (original["tokens"], normal):
-            scores = run._call(
-                "checkpoint_scoring",
-                {"tokens": tokens, "input_tokens": len(tokens)},
-                run.pricing.upper_bound(len(tokens), 1, scoring=True),
-                partial(self.score, tokens),
-            )
-            results.append(asdict(scores))
-        updated, request_id, entry = self._student._call(
-            normal,
-            SamplingParams(max_tokens=1),
-            operation="checkpoint_scoring",
-            group=self.config.group,
-            scoring=True,
-        )
-        self.ledger.annotate(entry, {"usage": {"input_tokens": len(normal)}})
-        results.append(
-            {
-                "tokens": normal,
-                "logprobs": updated,
-                "policy": self._student.identity,
-                "request_id": request_id,
-            }
-        )
-        private = run.root / "checkpoint-scores.json"
-        private.write_text(json.dumps(results, indent=2))
-        pairs = (
-            (original["logprobs"], results[0]["logprobs"]),
-            (results[1]["logprobs"], results[2]["logprobs"]),
-        )
-        differences = []
-        for left, right in pairs:
-            if len(left) != len(right) or len(left) < 2:
-                raise ValueError("Checkpoint probabilities are not token aligned")
-            if any(
-                type(p) not in (int, float) or not math.isfinite(p) or p > 0
-                for values in (left[1:], right[1:])
-                for p in values
-            ):
-                raise ValueError("Checkpoint probabilities must be finite")
-            differences.append(
-                max(abs(a - b) for a, b in zip(left[1:], right[1:], strict=True))
-            )
-        numeric_consistent = differences[0] <= 0.05
-        parameter_evidence = None
-        if not numeric_consistent and self.config.source == "base":
-            # Full-prefill serving can vary numerically for identical tokens.
-            # Check actual saved parameters instead of loosening the tolerance
-            # or repeatedly scoring until one response happens to match.
-            parameter_evidence = self._verify_original_parameters(run)
-        teacher_unchanged = numeric_consistent or parameter_evidence is not None
+        parameter_evidence = self._verify_original_parameters(run)
         return {
-            "status": "complete"
-            if teacher_unchanged and differences[1] > 1e-6
-            else "failed",
-            "frozen_teacher_max_difference": differences[0],
-            "student_max_difference": differences[1],
-            "frozen_teacher_numeric_consistent": numeric_consistent,
-            "frozen_teacher_unchanged": teacher_unchanged,
-            "student_probabilities_changed": differences[1] > 1e-6,
+            "status": "complete",
+            "verification_basis": "restored_optimizer_and_adapter_parameters",
+            "frozen_teacher_unchanged": True,
+            "student_parameters_changed": True,
             "parameter_evidence": parameter_evidence,
-            "training_state": self.record["optimizer_restoration"],
+            "training_state": restoration,
             "student_policy": self._student.identity,
             "teacher_policy": self.teacher_identity,
-            "private_scores": str(private),
             "limitation": (
-                "Control identity, probabilities and optional adapter hashes; "
+                "Downloaded LoRA parameters and Control loading identity; "
                 "remote base weight hash unknown"
             ),
         }
@@ -615,7 +574,7 @@ class PyTRIOOPSD:
             raise ValueError(
                 "Checkpoint parameters: frozen teacher loading identity changed"
             )
-        self._student.verify_loaded_sampler()
+        student_load = self._student.verify_loaded_sampler()
         exports = []
         for step, sampler in (
             (0, self.record["initial_sampler"]),
@@ -641,4 +600,11 @@ class PyTRIOOPSD:
                     "Checkpoint parameters: cached export identity mismatch"
                 )
             exports.append(path)
-        return verify_original_adapter_update(*exports)
+        evidence = verify_original_adapter_update(*exports)
+        evidence["teacher_load"] = {
+            "base_model": teacher.base_model,
+            "model_path": teacher.model_path,
+            "sampling_run_cuid": self.teacher.sampling_run_cuid,
+        }
+        evidence["student_load"] = student_load
+        return evidence

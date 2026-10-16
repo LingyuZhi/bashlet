@@ -109,6 +109,10 @@ def test_checkpoint_cli_exports_weights_and_continues_only_the_missing_task(
     assert source.read_bytes() == source_bytes
     assert len(list((output / "baseline/seed-4/episodes").iterdir())) == 1
     assert not (tmp_path / "sdk-updates.json").exists()
+    report_path = output / "baseline/report.json"
+    # A cached report can have a different JSON key order from this process.
+    report_path.write_text(json.dumps(report, indent=4, sort_keys=True) + "\n")
+    report_bytes = report_path.read_bytes()
 
     # The training controller imports the local stage before its next resume.
     pilot_path = formal / "pilot.json"
@@ -121,6 +125,7 @@ def test_checkpoint_cli_exports_weights_and_continues_only_the_missing_task(
         "evaluate-checkpoint", str(local), "--phase", "baseline", cwd=tmp_path
     )
     assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+    assert report_path.read_bytes() == report_bytes
     assert len(list((output / "baseline/seed-4/episodes").iterdir())) == 1
     assert not (tmp_path / "sdk-updates.json").exists()
 
@@ -189,6 +194,7 @@ def test_checkpoint_cli_exports_weights_and_continues_only_the_missing_task(
     assert len(json.loads((tmp_path / "sdk-updates.json").read_text())) == 1
     assert len(list((output / "baseline/seed-4/episodes").iterdir())) == 1
     assert source.read_bytes() == source_bytes
+    assert report_path.read_bytes() == report_bytes
 
 
 def test_local_final_test_rejects_an_incomplete_training_endpoint(

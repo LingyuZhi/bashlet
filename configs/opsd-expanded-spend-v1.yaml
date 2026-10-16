@@ -28,7 +28,7 @@ prices_cny_per_million:
   train: 4.54
 price_source: https://pytrio.cn/home/pricing
 price_recorded: '2026-10-06'
-price_catalog_url: https://pytrio.cn/api/model-prices
+price_catalog_url: https://pytrio.com/api/model-prices
 price_version: '2026-08-21'
 billing_quantum_cny: 0.01
 ceiling_multiplier: 2

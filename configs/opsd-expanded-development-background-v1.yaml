@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "pilot_config": "/data/home/zdhs0148/opd/bashlet/configs/opsd-expanded-v1.yaml",
+  "pilot_config_sha256": "20a0552a05b8e5785120ed33e980b414efbb31b4bbd858052d27a33bd5958470",
+  "pilot_run": "/data/home/zdhs0148/opd/bashlet/runs/issue32-four-epoch-20261009/formal",
+  "evaluation_routing_sha256": "42a40aab1b5ab9c5a006c9952a91719ad6b7f5ffa2635b5eccb6c521cf8682ad",
+  "job_receipts": {
+    "epoch-1": "/data/home/zdhs0148/opd/bashlet/runs/issue32-local-eval-20261011/epoch-1/background-job-20261013.json"
+  }
+}

@@ -194,7 +194,8 @@ def verify_native_preflight(
 
 
 def _run_with_preflight(
-    config_path: Path, preflight_config: Path, output_dir: Path
+    config_path: Path, preflight_config: Path, output_dir: Path,
+    execution_limit: Path | None,
 ) -> Path:
     """Gate the existing training workflow; never mix preflight parameters."""
     from .pilot import run_opsd_pilot, verify_opsd_checkpoints
@@ -247,7 +248,8 @@ def _run_with_preflight(
     write_document(path, record)
     formal_root = root / "formal"
     formal = run_opsd_pilot(
-        config_path, formal_root, resume=(formal_root / "pilot.json").exists()
+        config_path, formal_root, resume=(formal_root / "pilot.json").exists(),
+        execution_limit=execution_limit,
     )
     record.update(status=json.loads(formal.read_text())["status"], formal=str(formal))
     write_document(path, record)
@@ -260,6 +262,7 @@ def run_with_preflight(
     output_dir: Path,
     *,
     resume: bool = False,
+    execution_limit: Path | None = None,
 ) -> Path:
     root = output_dir.resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -271,7 +274,7 @@ def run_with_preflight(
         if (root / "workflow.json").exists() and not resume:
             raise ValueError("OPSD workflow exists; use --resume")
         try:
-            return _run_with_preflight(config_path, preflight_config, root)
+            return _run_with_preflight(config_path, preflight_config, root, execution_limit)
         except BaseException as error:
             path = root / "workflow.json"
             if path.exists():

@@ -420,7 +420,11 @@ def _stage(config_path: Path, phase: str, *, heldout: bool = False) -> Path:
         if all(counts.values())
         else None,
     }
-    write_document(root / "report.json", report)
+    report_path = root / "report.json"
+    # Dictionary iteration order can differ after a process restart. Reuse the
+    # original bytes when the cached report still describes the same results.
+    if not report_path.exists() or _read(report_path) != report:
+        write_document(report_path, report)
     return destination
 
 

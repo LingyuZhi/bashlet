@@ -362,6 +362,310 @@ def test_interrupted_update_with_durable_receipt_can_resume(tmp_path: Path) -> N
     assert any(call[0] == "new-session" for call in _tmux_calls(fixture))
 
 
+def _reconciled_probe_history(
+    fixture: dict[str, Any], *, isolation_failure: bool = False,
+) -> None:
+    root: Path = fixture["run_root"]
+    formal = root / "formal"
+    updates: list[dict[str, Any]] = [
+        {"optimizer_step": step, "student_policy": f"student-{step}"}
+        for step in (1, 2)
+    ]
+    batches: list[dict[str, Any]] = [
+        {"index": index, "status": "completed", "update": update}
+        for index, update in enumerate(updates)
+    ]
+    row: dict[str, Any] = {
+        "visit_id": "epoch-1/task-3", "task_id": "task-3", "status": "not_started",
+        "attempts": [],
+    }
+    training = {
+        "status": "rejected", "pending_update": None, "optimizer_step": 2,
+        "student_policy": "student-2", "last_update": updates[-1], "batches": batches,
+    }
+    pilot = {"status": "incomplete", "training_tasks": [row]}
+    for index in (2, 3):
+        episode = formal / "rollouts" / f"failed-{index}"
+        reason = "Sample logprobs disagree with raw-token model scoring"
+        if isolation_failure:
+            reason = (
+                "infrastructure_error: bwrap: Can't mount proc on /newroot/proc: "
+                "Operation not permitted\n"
+            )
+        _write_json(episode / "run.json", {
+            "task_id": "task-3",
+            "status": "infrastructure_error" if isolation_failure else "model_error",
+            "reason": reason,
+            "trajectory": [], "usage": {"steps": 0, "generated_tokens": 0},
+            **({
+                "context_tokens": [],
+                "isolation": {"passed": False, "reason": reason},
+            } if isolation_failure else {}),
+        })
+        batch = {
+            "index": index, "status": "rejected", "episode": str(episode),
+            "student_policy": "student-2", "interaction_steps": 0,
+            "supervised_tokens": 0,
+        }
+        batches.append(batch)
+        attempt = {
+            "visit_id": row["visit_id"], "task_id": "task-3", "status": "rejected",
+            "batch_index": index, "episode": str(episode),
+        }
+        before_pilot = {"training_tasks": [attempt]}
+        recovery = root / "recoveries" / f"probe-{index}"
+        originals = {
+            "formal/pilot.json": before_pilot,
+            "formal/training/opsd.json": training,
+            "formal/training/backend.json": {"optimizer_step": 2},
+            "workflow.json": {"status": "failed", "stage": "formal"},
+            f"formal/rollouts/failed-{index}/run.json": json.loads(
+                (episode / "run.json").read_text()
+            ),
+        }
+        archived = {}
+        for relative, value in originals.items():
+            copy = recovery / "before" / relative
+            _write_json(copy, value)
+            archived[relative] = {"copy": str(copy), "sha256": _digest(copy)}
+        receipt = recovery / "recovery.json"
+        _write_json(receipt, {
+            "action": (
+                "explicit user-authorized retry of a visit rejected before task rollout"
+            ),
+            "status": "reconciled; waiting for existing resume entrypoint",
+            "visit_id": row["visit_id"], "optimizer_step": 2,
+            "pending_requests": 0, "pending_update": None,
+            "rejected_batch_index": index, "rejected_episode": str(episode),
+            "rejected_episode_sha256": _digest(episode / "run.json"),
+            "reason": reason, "archived": archived,
+        })
+        attempt["retry_receipt"] = str(receipt)
+        row["attempts"].append(attempt)
+        row["retry_receipt"] = str(receipt)
+    _formal_interruption(fixture, pilot, training)
+
+
+@pytest.mark.parametrize(
+    "damage", [None, "context", "trajectory", "tokens", "isolation", "reason"],
+)
+def test_isolation_failure_retry_requires_evidence_before_model_calls(
+    tmp_path: Path, damage: str | None,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _reconciled_probe_history(fixture, isolation_failure=True)
+    root: Path = fixture["run_root"]
+    episode_path = root / "formal/rollouts/failed-3/run.json"
+    episode = json.loads(episode_path.read_text())
+    if damage == "context":
+        episode["context_tokens"] = [1]
+    elif damage == "trajectory":
+        episode["trajectory"] = [{}]
+    elif damage == "tokens":
+        episode["usage"]["generated_tokens"] = 1
+    elif damage == "isolation":
+        episode["isolation"]["passed"] = True
+    elif damage == "reason":
+        episode["isolation"]["reason"] = "another failure"
+    _write_json(episode_path, episode)
+    receipt_path = root / "recoveries/probe-3/recovery.json"
+    receipt = json.loads(receipt_path.read_text())
+    relative = "formal/rollouts/failed-3/run.json"
+    archive = Path(receipt["archived"][relative]["copy"])
+    _write_json(archive, episode)
+    receipt["archived"][relative]["sha256"] = _digest(archive)
+    receipt["rejected_episode_sha256"] = _digest(episode_path)
+    _write_json(receipt_path, receipt)
+    training_path = root / "formal/training/opsd.json"
+    frozen = training_path.read_bytes()
+
+    result = _cli(fixture)
+
+    assert result.returncode == 0, result.stderr
+    assert _events(fixture)[-1]["decision"] == (
+        "restart_started" if damage is None else "blocked"
+    )
+    assert training_path.read_bytes() == frozen
+    if damage is not None:
+        assert all(call[0] != "new-session" for call in _tmux_calls(fixture))
+
+
+@pytest.mark.parametrize(
+    "damage", [None, "pending", "update", "released_ceiling", "payload_mismatch"],
+)
+@pytest.mark.parametrize("operation", ["sampling", "capability_probe"])
+def test_sampling_transport_failure_requires_explicit_cost_preserving_reconciliation(
+    tmp_path: Path, damage: str | None, operation: str,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _reconciled_probe_history(fixture)
+    root: Path = fixture["run_root"]
+    episode_path = root / "formal/rollouts/failed-3/run.json"
+    episode = json.loads(episode_path.read_text())
+    episode.update(
+        status="infrastructure_error", policy="student-2", context_tokens=[1, 2],
+        reason="RuntimeError: PyTRIO actor.request_failed (HTTP 0, attempt 1)",
+        trajectory=[{} for _ in range(5)],
+        usage={"steps": 5, "generated_tokens": 1250},
+    )
+    probe = operation == "capability_probe"
+    if probe:
+        episode.update(
+            context_tokens=[], trajectory=[],
+            reason=(
+                "Capability probe failed: PyTRIO actor.request_failed "
+                "(HTTP 0, attempt 1)"
+            ),
+            usage={"steps": 0, "generated_tokens": 0},
+        )
+    _write_json(episode_path, episode)
+    training_path = root / "formal/training/opsd.json"
+    training = json.loads(training_path.read_text())
+    training.update(ledger=str(fixture["ledger"]), run_id="training-run")
+    training["batches"][3].update(
+        interaction_steps=0 if probe else 5,
+        reason="Episode cannot supply valid supervision: infrastructure_error",
+    )
+    _write_json(training_path, training)
+    receipt_path = root / "recoveries/probe-3/recovery.json"
+    receipt = json.loads(receipt_path.read_text())
+    receipt.update(
+        action=(
+            "explicit user-authorized retry after sampling transport failure "
+            "without update"
+        ),
+        reason=episode["reason"],
+        rejected_episode_sha256=_digest(episode_path),
+        sampling_request={
+            "id": "discarded-sample", "request_id": "remote-sample",
+            "response_abandoned": True, "remote_outcome": "unknown",
+            "update_submitted": False, "full_ceiling_retained": True,
+        },
+    )
+    pending: dict[str, Any] = {
+        "id": "discarded-sample", "operation": operation, "state": "pending",
+        "fingerprint": "original-sampling", "upper_micros": 40000,
+        "charged_micros": 0,
+        "evidence": json.dumps({
+            "request_id": "remote-sample", "payload": {
+                "run_id": "training-run", "model_path": "student-2",
+                "prompt_tokens": [1, 2],
+                **({"sampling": {"max_tokens": 1}, "scoring": False} if probe else {}),
+            },
+        }),
+    }
+    if damage == "payload_mismatch":
+        evidence = json.loads(pending["evidence"])
+        if probe:
+            evidence["payload"]["sampling"]["max_tokens"] = 2
+        else:
+            evidence["payload"]["prompt_tokens"] = [9, 9]
+        pending["evidence"] = json.dumps(evidence)
+    for relative, value in {
+        "formal/training/opsd.json": training,
+        "formal/rollouts/failed-3/run.json": episode,
+        "pending-sampling-request.json": pending,
+    }.items():
+        path = receipt_path.parent / "before" / relative
+        _write_json(path, value)
+        receipt["archived"][relative] = {"copy": str(path), "sha256": _digest(path)}
+    _write_json(receipt_path, receipt)
+    evidence = json.loads(pending["evidence"])
+    evidence["sampling_abandoned"] = {
+        "recovery_receipt": str(receipt_path), "remote_outcome": "unknown",
+        "response_will_not_be_used": True,
+    }
+    with sqlite3.connect(fixture["ledger"]) as connection:
+        for column in (
+            "operation TEXT", "upper_micros INTEGER", "charged_micros INTEGER",
+            "billing_basis TEXT", "fingerprint TEXT", "evidence TEXT",
+        ):
+            connection.execute("ALTER TABLE requests ADD COLUMN " + column)
+        connection.execute(
+            "INSERT INTO requests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "discarded-sample", "opsd-expanded-train-v1",
+                "pending" if damage == "pending" else "failed",
+                "opsd_update" if damage == "update" else operation, 40000,
+                0 if damage == "released_ceiling" else 40000, "upper_bound",
+                "original-sampling", json.dumps(evidence),
+            ),
+        )
+
+    result = _cli(fixture)
+
+    assert result.returncode == 0, result.stderr
+    expected = "restart_started" if damage is None else "blocked"
+    assert _events(fixture)[-1]["decision"] == expected
+    assert json.loads(training_path.read_text())["optimizer_step"] == 2
+    assert json.loads(episode_path.read_text())["trajectory"] == (
+        [] if probe else [{} for _ in range(5)]
+    )
+    if damage is not None:
+        assert all(call[0] != "new-session" for call in _tmux_calls(fixture))
+
+
+@pytest.mark.parametrize("advance", [False, True])
+def test_reconciled_zero_action_failures_do_not_count_as_updates(
+    tmp_path: Path, advance: bool,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _reconciled_probe_history(fixture)
+    training_path = fixture["run_root"] / "formal/training/opsd.json"
+    if advance:
+        training = json.loads(training_path.read_text())
+        update = {"optimizer_step": 3, "student_policy": "student-3"}
+        training["batches"].append({
+            "index": 4, "status": "completed", "update": update,
+        })
+        training.update(
+            status="ready", optimizer_step=3, student_policy="student-3",
+            last_update=update,
+        )
+        _write_json(training_path, training)
+    frozen = training_path.read_bytes()
+
+    result = _cli(fixture)
+
+    assert result.returncode == 0, result.stderr
+    assert _events(fixture)[-1]["decision"] == "restart_started"
+    assert training_path.read_bytes() == frozen
+    assert any(call[0] == "new-session" for call in _tmux_calls(fixture))
+
+
+@pytest.mark.parametrize("damage", ["receipt", "episode", "archive", "new_failure"])
+def test_unreconciled_or_changed_failed_attempt_blocks_restart(
+    tmp_path: Path, damage: str,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _reconciled_probe_history(fixture)
+    root: Path = fixture["run_root"]
+    if damage == "receipt":
+        (root / "recoveries/probe-3/recovery.json").unlink()
+    elif damage == "episode":
+        path = root / "formal/rollouts/failed-3/run.json"
+        episode = json.loads(path.read_text())
+        episode["trajectory"] = [{"action": "unexpected"}]
+        _write_json(path, episode)
+    elif damage == "archive":
+        path = root / "recoveries/probe-3/before/formal/training/opsd.json"
+        path.write_text("{}\n")
+    else:
+        path = root / "formal/training/opsd.json"
+        training = json.loads(path.read_text())
+        training["batches"].append({
+            "index": 4, "status": "rejected", "interaction_steps": 0,
+            "supervised_tokens": 0,
+        })
+        _write_json(path, training)
+
+    result = _cli(fixture)
+
+    assert result.returncode == 0, result.stderr
+    assert _events(fixture)[-1]["decision"] == "blocked"
+    assert all(call[0] != "new-session" for call in _tmux_calls(fixture))
+
+
 def test_real_monitor_interrupt_receipt_stays_resumable_after_new_batch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -463,6 +767,40 @@ def test_known_wandb_startup_failure_can_resume_before_sampling(tmp_path: Path) 
 
     assert result.returncode == 0, result.stderr
     assert _events(fixture)[-1]["decision"] == "restart_started"
+
+
+@pytest.mark.parametrize("failure", ["known", "unknown", "missing_formal", "preflight"])
+def test_failed_workflow_requires_a_known_stage_failure(
+    tmp_path: Path, failure: str,
+) -> None:
+    fixture = _fixture(tmp_path)
+    _formal_interruption(
+        fixture,
+        {
+            "status": "failed", "error_type": "ValueError",
+            "reason": "W&B startup failed; resume is safe",
+            "training_tasks": [{"status": "not_started"}],
+        } if failure == "known" else {
+            "status": "incomplete", "training_tasks": [{"status": "not_started"}],
+        },
+        {"pending_update": None, "batches": []},
+    )
+    path = fixture["run_root"] / "workflow.json"
+    workflow = json.loads(path.read_text())
+    workflow["status"] = "failed"
+    if failure == "missing_formal":
+        (fixture["run_root"] / "formal/pilot.json").unlink()
+    if failure == "preflight":
+        workflow["stage"] = "preflight-verification"
+    _write_json(path, workflow)
+
+    result = _cli(fixture)
+
+    assert result.returncode == 0, result.stderr
+    decision = "restart_started" if failure == "known" else "blocked"
+    assert _events(fixture)[-1]["decision"] == decision
+    if failure != "known":
+        assert all(call[0] != "new-session" for call in _tmux_calls(fixture))
 
 
 def test_unrecognized_validation_failure_stays_blocked(tmp_path: Path) -> None:

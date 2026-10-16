@@ -18,6 +18,8 @@ from typing import Any
 
 import yaml
 
+from .recovery import reconciled_rejection
+
 
 class WatchdogError(ValueError):
     """The watchdog cannot safely inspect or control the configured run."""
@@ -322,7 +324,7 @@ def _ledger_state(config: WatchConfig) -> tuple[dict[str, int], dict[str, int]]:
 
 
 def _training_gate(
-    pilot: dict[str, Any], training: dict[str, Any] | None
+    pilot: dict[str, Any], training: dict[str, Any] | None, root: Path,
 ) -> str | None:
     if training is None:
         return "training state record is missing"
@@ -330,27 +332,33 @@ def _training_gate(
         return "training record does not declare pending-update state"
     if training.get("pending_update") is not None:
         return "training record has an unresolved remote update"
-    if training.get("status") in {"failed", "rejected"}:
+    if training.get("status") == "failed":
         return "training record has an explicit failure"
     if pilot.get("training_stop"):
         return "training stopped at a budget or policy gate"
     batches = training.get("batches", [])
     if not isinstance(batches, list):
         return "training batch record is malformed"
+    updates: list[dict[str, Any]] = []
     for position, batch in enumerate(batches):
-        if not isinstance(batch, dict) or not isinstance(batch.get("update"), dict):
+        if not isinstance(batch, dict):
             return "training history contains an unresolved batch"
         if type(batch.get("index")) is not int or batch.get("index") != position:
             return "training history contains an unresolved batch"
-        update = batch["update"]
+        update = batch.get("update")
+        if not isinstance(update, dict):
+            if reconciled_rejection(batch, pilot, root, len(updates)):
+                continue
+            return "training history contains an unreconciled rejected batch"
         if type(update.get("optimizer_step")) is not int or update.get(
             "optimizer_step"
-        ) != position + 1:
+        ) != len(updates) + 1:
             return "training history contains an unresolved batch"
         if not isinstance(update.get("student_policy"), str) or not update.get(
             "student_policy"
         ):
             return "training history contains an unresolved batch"
+        updates.append(update)
         if batch.get("status") == "completed":
             continue
         if (
@@ -358,14 +366,22 @@ def _training_gate(
             or batch.get("reason") != "monitor_interrupted"
         ):
             return "training history contains an unresolved batch"
-    if batches:
+    if training.get("status") == "rejected" and (
+        not batches or isinstance(batches[-1].get("update"), dict)
+    ):
+        return "training record has an explicit failure"
+    if batches and not updates and (
+        training.get("optimizer_step") != 0 or training.get("last_update") is not None
+    ):
+        return "training state does not match its final durable optimizer receipt"
+    if updates:
         last_update = training.get("last_update")
         optimizer_step = training.get("optimizer_step")
-        final_update = batches[-1]["update"]
+        final_update = updates[-1]
         if (
             not isinstance(last_update, dict)
             or type(optimizer_step) is not int
-            or optimizer_step != len(batches)
+            or optimizer_step != len(updates)
             or final_update != last_update
             or final_update.get("optimizer_step") != optimizer_step
             or training.get("student_policy") != final_update.get("student_policy")
@@ -476,6 +492,7 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
         "interrupted",
         "formal",
         "complete",
+        "failed",
     }:
         return result("blocked", "workflow status is not recognized")
     if workflow_status in {"formal", "complete"} and workflow_stage != "formal":
@@ -507,7 +524,9 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
         if _has_blocking_failure(preflight):
             return result("blocked", "preflight has an explicit failure")
         if preflight_training is not None:
-            problem = _training_gate(preflight, preflight_training)
+            problem = _training_gate(
+                preflight, preflight_training, config.preflight_pilot.parent,
+            )
             if problem is not None:
                 return result("blocked", problem)
         elif preflight.get("status") == "complete" or counts.get(
@@ -523,6 +542,12 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
         return result("blocked", "workflow advanced without a complete preflight")
 
     if workflow_stage in {"preflight-training", "preflight-verification"}:
+        if workflow_status == "failed" and (
+            preflight is None or not _recoverable_record_failure(preflight)
+        ):
+            return result(
+                "blocked", "workflow failure requires explicit reconciliation"
+            )
         if workflow_status == "complete":
             return result("blocked", "workflow ended before formal training")
         return result(
@@ -532,6 +557,10 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
     formal = _read_object(config.formal_pilot)
     formal_training = _read_object(config.formal_training)
     if formal is None:
+        if workflow_status == "failed":
+            return result(
+                "blocked", "workflow failure requires explicit reconciliation"
+            )
         if counts.get("opsd-expanded-train-v1", 0) or counts.get(
             "opsd-expanded-dev-v1", 0
         ):
@@ -543,8 +572,19 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
         )
     if _has_blocking_failure(formal):
         return result("blocked", "formal run has an explicit failure")
+    development = formal.get("development_execution")
+    if development is not None and _sha256(Path(development["config"])) != development[
+        "sha256"
+    ]:
+        return result("blocked", "background development configuration changed")
+    if workflow_status == "failed" and not _recoverable_record_failure(formal):
+        return result("blocked", "workflow failure requires explicit reconciliation")
+    execution = formal.get("execution_limit")
+    if execution is not None:
+        if _sha256(Path(execution["config"])) != execution["sha256"]:
+            return result("blocked", "frozen execution limit changed")
     if formal_training is not None:
-        problem = _training_gate(formal, formal_training)
+        problem = _training_gate(formal, formal_training, config.formal_pilot.parent)
         if problem is not None:
             return result("blocked", problem)
     elif formal.get("status") == "complete":
@@ -566,6 +606,24 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             )
         return result(
             "resume", "formal endpoint is complete; resume can finalize workflow state"
+        )
+    if formal.get("execution_status") == "complete":
+        if (
+            not isinstance(execution, dict)
+            or formal_training is None
+            or formal.get("optimizer_step") != execution["max_updates"]
+            or formal_training.get("optimizer_step") != execution["max_updates"]
+            or formal.get("training_complete") is not False
+            or formal.get("main_result") is not None
+            or formal.get("evaluations", {}).get(
+                f"epoch-{formal.get('epochs_completed')}", {}
+            ).get("status") != "complete"
+        ):
+            return result(
+                "blocked", "execution limit endpoint evidence is inconsistent"
+            )
+        return result(
+            "complete", "execution limit and dev complete; full plan incomplete"
         )
     if workflow_status == "complete":
         return result(

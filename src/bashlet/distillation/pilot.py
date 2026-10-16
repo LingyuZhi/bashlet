@@ -201,7 +201,65 @@ def _training_budget_stop(
     )
 
 
-def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
+def _execution_limit(
+    source: Path | None, config_path: Path, config: PilotConfig,
+    root: Path, record: dict[str, Any],
+) -> int | None:
+    """Freeze a temporary execution prefix without changing the research plan."""
+    previous = record.get("execution_limit")
+    if source is None:
+        if previous is not None:
+            raise ValueError("Resume must retain the frozen execution limit")
+        return None
+    raw = source.read_bytes()
+    settings = yaml.safe_load(raw)
+    maximum = settings.get("max_updates") if isinstance(settings, dict) else None
+    planned = len(config.train_task_ids) * config.epochs
+    if (
+        not isinstance(settings, dict)
+        or settings.get("schema_version") != 1
+        or type(maximum) is not int
+        or not 0 < maximum < planned
+        or maximum % len(config.train_task_ids)
+        or not config.evaluate_each_epoch
+        or not isinstance(settings.get("reason"), str)
+        or not settings["reason"]
+    ):
+        raise ValueError("Execution limit requires a complete epoch prefix and dev")
+    config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    if settings.get("pilot_config_sha256") != config_hash:
+        raise ValueError("Execution limit belongs to another frozen configuration")
+    expected = {
+        "config": str(source.resolve()),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "pilot_config_sha256": config_hash,
+        "max_updates": maximum,
+        "planned_updates": planned,
+        "reason": settings["reason"],
+    }
+    if previous is not None and previous != expected:
+        raise ValueError("Resume must retain the frozen execution limit")
+    if previous is None:
+        training_path = root / "training/opsd.json"
+        training = (
+            json.loads(training_path.read_text()) if training_path.exists() else {}
+        )
+        if (
+            record["optimizer_step"] != 0
+            or any(row["status"] != "not_started" for row in record["training_tasks"])
+            or training.get("optimizer_step", 0) != 0
+            or training.get("batches")
+            or training.get("pending_update") is not None
+        ):
+            raise ValueError("Execution limit must be frozen before formal training")
+        record["execution_limit"] = expected
+        record["execution_status"] = "incomplete"
+    return maximum
+
+
+def _pilot(
+    config_path: Path, root: Path, resume: bool, execution_limit: Path | None
+) -> Path:
     config = PilotConfig.read(config_path)
     condition, backend_config = resolve_condition(config)
     training = OPSDConfig(**config.training)
@@ -312,8 +370,6 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
             raise ValueError(
                 "Pilot resume must preserve tasks, conditions and configuration"
             )
-        if record["status"] == "complete":
-            return path
         if len(record["training_tasks"]) != len(planned_visits):
             raise ValueError("Pilot resume must retain every epoch visit")
         for row, planned in zip(record["training_tasks"], planned_visits, strict=True):
@@ -345,6 +401,9 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
             "cost": _cost(ledger, training.group, evaluation_group, *extra_groups),
         }
         write_document(path, record)
+    maximum = _execution_limit(execution_limit, config_path, config, root, record)
+    if record["status"] == "complete":
+        return path
     for row in record["training_tasks"]:
         task = tasks_by_id[row["task_id"]]
         assert task.origin is not None
@@ -383,6 +442,20 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
             resume=(root / "training/opsd.json").exists(),
         )
         adapter.bind_run(run.record["run_id"])
+        if record.get("execution_status") == "complete":
+            from .development import development_curve
+
+            epoch = record["epochs_completed"]
+            checkpoint = record["epoch_checkpoints"][str(epoch)]
+            if (
+                run.record["optimizer_step"] != maximum
+                or run.student.identity != checkpoint["snapshot"]
+                or run.record["last_update"]["training_state"]
+                != checkpoint["training_state"]
+                or development_curve(record)[f"epoch-{epoch}"]["status"] != "complete"
+            ):
+                raise ValueError("Completed execution limit has inconsistent evidence")
+            return path
         record["initial_snapshot"] = asdict(adapter.snapshot)
         record["training_run"] = str(run.path)
         record.pop("error_type", None)
@@ -468,6 +541,8 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
                     raise ValueError(
                         "Interrupted training visit requires reconciliation"
                     )
+                if maximum is not None and run.record["optimizer_step"] >= maximum:
+                    break
                 row.update(
                     status="running",
                     batch_index=len(run.record["batches"]),
@@ -509,6 +584,8 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
                     )
             if record.get("training_stop"):
                 break
+            if any(row["status"] != "completed" for row in epoch_rows):
+                break
             record["epochs_completed"] = epoch
             last = epoch_rows[-1]
             record.setdefault("epoch_checkpoints", {})[str(epoch)] = {
@@ -532,7 +609,9 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
                     snapshot=last["updated_policy"],
                     optimizer_step=last["optimizer_step"],
                 )
-                if stage["status"] != "complete":
+                if stage["status"] != "complete" and f"epoch-{epoch}" not in record.get(
+                    "background_development", {}
+                ):
                     last_evaluation = json.loads(
                         Path(next(reversed(stage["runs"].values()))["path"]).read_text()
                     )
@@ -552,6 +631,8 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
                         write_document(path, record)
                         break
                     raise ValueError("Intermediate checkpoint evaluation is incomplete")
+            if maximum is not None and epoch * len(config.train_task_ids) >= maximum:
+                break
         run._roles()
         record["student_policy"] = run.student.identity
         record["teacher_policy"] = adapter.teacher_identity
@@ -561,7 +642,21 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
             and all(row.get("updated_policy") for row in record["training_tasks"])
         )
         record["main_result"] = None
-        if config.require_complete_training and not record["training_complete"]:
+        if maximum is not None:
+            epoch = maximum // len(config.train_task_ids)
+            record["execution_status"] = (
+                "complete"
+                if run.record["optimizer_step"] == maximum
+                and record["epochs_completed"] == epoch
+                and record.get("evaluations", {}).get(f"epoch-{epoch}", {}).get(
+                    "status"
+                )
+                == "complete"
+                else "incomplete"
+            )
+        if (maximum is not None or config.require_complete_training) and not record[
+            "training_complete"
+        ]:
             record["status"] = "incomplete"
             return path
         if record["training_complete"]:
@@ -622,6 +717,7 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
             status="interrupted" if isinstance(error, KeyboardInterrupt) else "failed",
             error_type=type(error).__name__,
         )
+        record.pop("reason", None)
         # Exception messages from external providers can contain private request data.
         if isinstance(error, ValueError):
             record["reason"] = str(error)
@@ -648,7 +744,9 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
                 {
                     "eval/phase": phase,
                     "train/optimizer_step": point["optimizer_step"],
-                    "eval/mean_accuracy": point["mean_accuracy"],
+                    **({"eval/mean_accuracy": point["mean_accuracy"]}
+                       if point["mean_accuracy"] is not None else {}),
+                    "eval/status": point["status"],
                     "eval/planned_families": point["planned_families"],
                     "eval/planned_episodes": point["planned_episodes"],
                     "eval/missing_episodes": len(point["missing"]),
@@ -659,7 +757,8 @@ def _pilot(config_path: Path, root: Path, resume: bool) -> Path:
 
 
 def run_opsd_pilot(
-    config_path: Path, output_dir: Path, *, resume: bool = False
+    config_path: Path, output_dir: Path, *, resume: bool = False,
+    execution_limit: Path | None = None,
 ) -> Path:
     root = output_dir.resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -668,7 +767,7 @@ def run_opsd_pilot(
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError("Pilot is already active") from None
-        return _pilot(config_path, root, resume)
+        return _pilot(config_path, root, resume, execution_limit)
 
 
 def verify_opsd_checkpoints(
@@ -677,6 +776,11 @@ def verify_opsd_checkpoints(
     """Verify the saved training state without another optimizer update."""
     root = output_dir.resolve()
     config = PilotConfig.read(config_path)
+    _, backend_config = resolve_condition(config)
+    if backend_config.source != "base":
+        raise ValueError(
+            "Checkpoint parameters: only Base initialization is supported"
+        )
     training = OPSDConfig(**config.training)
     ledger = SpendLedger(
         Path(config.ledger_path), policy=SpendPolicy.read(Path(training.spend_config))
@@ -730,7 +834,6 @@ def verify_opsd_checkpoints(
         record.update(verification_attempt=attempt, previous_attempts=history)
         write_document(path, record)
         try:
-            _, backend_config = resolve_condition(config)
             adapter = PyTRIOOPSD(
                 backend_config,
                 ledger=ledger,

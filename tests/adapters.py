@@ -261,7 +261,8 @@ class PaidEvaluationModel(PyTRIOModel):
 
         from bashlet import SpendLedger, SpendPolicy
 
-        ledger = SpendLedger(Path(ledger_path), policy=SpendPolicy(funded_cny=0.16))
+        # Exhaust cash after one sampling probe and two episode samples.
+        ledger = SpendLedger(Path(ledger_path), policy=SpendPolicy(funded_cny=0.12))
         sdk = FakeSampling(
             [
                 response([65]),

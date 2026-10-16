@@ -6,8 +6,9 @@ import hashlib
 import json
 import shlex
 import subprocess
+import time
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,110 @@ from .pytrio import PyTRIOOPSD
 
 if TYPE_CHECKING:
     from .pilot import PilotConfig
+
+
+def _background_stage(
+    root: Path, record: dict[str, Any], phase: str, snapshot: str, step: int,
+) -> dict[str, Any] | None:
+    """Admit an explicitly configured independent checkpoint evaluation job."""
+    binding_path = root / "development-execution.json"
+    previous = record.get("development_execution")
+    if not binding_path.exists():
+        if previous is not None:
+            raise ValueError("Background development execution binding is missing")
+        return None
+    from .pilot import PilotConfig
+
+    binding = json.loads(binding_path.read_text())
+    config_path = Path(binding["config"])
+    if (
+        hashlib.sha256(config_path.read_bytes()).hexdigest() != binding["sha256"]
+        or previous is not None and previous != binding
+    ):
+        raise ValueError("Background development configuration changed")
+    import yaml
+
+    settings = yaml.safe_load(config_path.read_text())
+    pilot_path = Path(settings["pilot_config"])
+    if (
+        settings.get("schema_version") != 1
+        or Path(settings["pilot_run"]).resolve() != root.resolve()
+        or hashlib.sha256(pilot_path.read_bytes()).hexdigest()
+        != settings["pilot_config_sha256"]
+        or json.loads(json.dumps(asdict(PilotConfig.read(pilot_path))))
+        != record["configuration"]["pilot"]
+    ):
+        raise ValueError("Background development belongs to another pilot")
+    routing = root / "evaluation-routing.json"
+    if "evaluation_routing_sha256" in settings:
+        if hashlib.sha256(routing.read_bytes()).hexdigest() != settings[
+            "evaluation_routing_sha256"
+        ]:
+            raise ValueError("Background development evaluation routing changed")
+        route = json.loads(routing.read_text())
+        if hashlib.sha256(Path(route["config"]).read_bytes()).hexdigest() != route[
+            "sha256"
+        ]:
+            raise ValueError("Local evaluation configuration changed")
+    record["development_execution"] = binding
+    receipt_path = settings["job_receipts"].get(phase)
+    if receipt_path is None:
+        return None
+    if not phase.startswith("epoch-"):
+        raise ValueError("Only saved epoch checkpoints can run in the background")
+    receipt = json.loads(Path(receipt_path).read_text())
+    if (
+        receipt.get("schema_version") != 1 or receipt.get("phase") != phase
+        or receipt.get("snapshot") != snapshot or receipt.get("optimizer_step") != step
+        or not isinstance(receipt.get("session"), str) or not receipt["session"]
+    ):
+        raise ValueError("Background development job has another checkpoint")
+    job = {
+        "receipt": str(receipt_path), "session": receipt["session"],
+        "stage": receipt["stage"], "snapshot": snapshot, "optimizer_step": step,
+    }
+    known = record.setdefault("background_development", {}).setdefault(phase, job)
+    if known != job:
+        raise ValueError("Background development job identity changed")
+    destination = Path(job["stage"])
+    stage: dict[str, Any] = (
+        json.loads(destination.read_text()) if destination.exists()
+        else {
+            "snapshot": snapshot, "optimizer_step": step,
+            "status": "running", "runs": {},
+        }
+    )
+    if stage["snapshot"] != snapshot or stage["optimizer_step"] != step:
+        raise ValueError("Background development stage has another checkpoint")
+    return stage
+
+
+def _wait_for_background(
+    root: Path, path: Path, record: dict[str, Any],
+) -> None:
+    """Finish independent jobs before switching the service or reporting results."""
+    for phase, job in record.get("background_development", {}).items():
+        while True:
+            stage = _background_stage(
+                root, record, phase, job["snapshot"], job["optimizer_step"],
+            )
+            if stage is None:
+                raise ValueError("Background development configuration is missing")
+            record.setdefault("evaluations", {})[phase] = stage
+            record["development_curve"] = development_curve(record)
+            write_document(path, record)
+            if stage["status"] == "complete":
+                break
+            result = subprocess.run(
+                ["tmux", "list-panes", "-t", job["session"], "-F", "#{pane_dead}"],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            if result.returncode or result.stdout.strip() != "0":
+                raise ValueError(
+                    "Background development worker exited "
+                    "before completing its checkpoint"
+                )
+            time.sleep(15)
 
 
 def _evaluate_checkpoint(
@@ -37,6 +142,14 @@ def _evaluate_checkpoint(
 ) -> dict[str, Any]:
     from ..evaluation.harness import _digest, _tasks
 
+    background = _background_stage(root, record, phase, snapshot, optimizer_step)
+    if background is not None:
+        record.setdefault("evaluations", {})[phase] = background
+        record["development_curve"] = development_curve(record)
+        write_document(path, record)
+        return background
+    if phase != "baseline":
+        _wait_for_background(root, path, record)
     routing = root / "evaluation-routing.json"
     if routing.exists():
         from ..snapshots.manifest import file_sha256
@@ -48,6 +161,25 @@ def _evaluate_checkpoint(
         import yaml
 
         settings = yaml.safe_load(local_config.read_text())
+        destination = Path(settings["output_dir"]).resolve() / phase / "stage.json"
+        if phase == "baseline" and record.get("development_execution"):
+            cached: dict[str, Any] = json.loads(destination.read_text())
+            if (
+                cached != record.get("evaluations", {}).get(phase)
+                or cached.get("snapshot") != snapshot
+                or cached.get("optimizer_step") != optimizer_step
+                or cached.get("routing_sha256") != receipt["sha256"]
+                or cached.get("status") != "complete"
+                or set(cached.get("runs", {}))
+                != {str(seed) for seed in config.evaluation_seeds}
+            ):
+                raise ValueError("Cached baseline differs from its completed receipt")
+            # Verify every pinned report without taking the local evaluator's lock.
+            record["development_curve"] = development_curve(record)
+            if record["development_curve"][phase]["status"] != "complete":
+                raise ValueError("Background development requires a complete baseline")
+            write_document(path, record)
+            return cached
         command = [
             "uv",
             "run",
@@ -63,7 +195,6 @@ def _evaluate_checkpoint(
             remote = "cd " + shlex.quote(str(Path.cwd())) + " && " + shlex.join(command)
             command = [*executor, "bash -lc " + shlex.quote(remote)]
         completed = subprocess.run(command, check=False)
-        destination = Path(settings["output_dir"]).resolve() / phase / "stage.json"
         if not destination.exists():
             raise ValueError("Local checkpoint evaluation did not produce evidence")
         stage: dict[str, Any] = json.loads(destination.read_text())

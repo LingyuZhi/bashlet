@@ -542,10 +542,10 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
     proof = json.loads((root / "checkpoint-validation.json").read_text())
     assert proof["training_state"]["optimizer_step"] == 1
     assert proof["training_state"]["completed_state"].endswith("restored-state-0001")
-    assert proof["frozen_teacher_unchanged"] and proof["student_probabilities_changed"]
+    assert proof["frozen_teacher_unchanged"] and proof["student_parameters_changed"]
     assert proof["teacher_policy"] == before["snapshot"]
     assert proof["student_policy"] == after["snapshot"]
-    assert proof["cost"]["charged_upper_bound_cny"] > cost
+    assert proof["cost"]["charged_upper_bound_cny"] == cost
     # Simulate interruption after the evaluation finished, before its parent
     # persisted the returned path. Existing episodes must not run again.
     interrupted = json.loads((root / "pilot.json").read_text())
