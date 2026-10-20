@@ -2,8 +2,11 @@
 
 # ruff: noqa: F811
 import json
+import subprocess
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 import yaml
 from test_cli import cli
@@ -12,6 +15,48 @@ from test_opsd_epochs import epoch_pilot  # noqa: F401
 from test_vllm import FakeVLLM, completion, service  # noqa: F401
 
 from bashlet.backends.encoding import QwenChatMLEncoding
+from bashlet.evaluation.checkpoints import _server
+
+
+@pytest.mark.parametrize("cuda_module", [None, "cuda/custom"])
+def test_managed_vllm_can_start_without_environment_modules(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cuda_module: str | None
+) -> None:
+    manifest = tmp_path / "snapshot.json"
+    manifest.write_text(
+        json.dumps({"base_path": "base", "adapter": {"merged": {"path": "merged"}}})
+    )
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(
+            command, 1 if command[1] == "has-session" else 0
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: httpx.Response(200))
+    _server(
+        {
+            "output_dir": str(tmp_path),
+            "model": {"base_url": "http://local-vllm"},
+            "server": {
+                "session": "test-vllm",
+                "options": {"port": 8004},
+                **({"cuda_module": cuda_module} if cuda_module else {}),
+            },
+        },
+        manifest,
+    )
+    command = next(command[-1] for command in commands if command[1] == "new-session")
+    assert "exec bash scripts/serve-local-vllm.sh" in command
+    assert ("module load" in command) == (cuda_module is not None)
+    if cuda_module:
+        assert cuda_module in command
+    settings = yaml.safe_load(
+        next((tmp_path / "service").glob("serve-*.yaml")).read_text()
+    )
+    assert settings == {"model": "merged", "tokenizer": "base", "port": 8004}
 
 
 def test_checkpoint_cli_resumes_local_evaluation_and_training_from_one_config(
@@ -45,7 +90,7 @@ def test_checkpoint_cli_resumes_local_evaluation_and_training_from_one_config(
         },
     )
     config.write_text(yaml.safe_dump(settings))
-    # Create step-zero state; the SDK is in memory and never makes paid calls.
+    # Create step-zero state; the SDK is in memory and never makes remote calls.
     monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL", "1")
     failed = cli("train-opsd", str(config), cwd=tmp_path, timeout=90)
     assert failed.returncode == 2, failed.stdout + failed.stderr

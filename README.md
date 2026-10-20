@@ -102,24 +102,22 @@ uv run --locked bashlet agent "创建 result.txt，然后提交" \
 
 ## 🔌 接入真实模型
 
-将 `PYTRIO_API_KEY=你的密钥` 写入仓库根目录的 `.env`。正式训练使用 [configs/opsd.yaml](configs/opsd.yaml) 中的 PyTRIO 设置，采样和训练共用 `runs/spend.sqlite3` 账本及其中的 `spend` 费用策略。
+将 `PYTRIO_API_KEY=你的密钥` 写入仓库根目录的 `.env`。训练参数在 [configs/opsd.yaml](configs/opsd.yaml) 中设置。
 
-本地 vLLM 的依赖锁位于 [environments/local-vllm/](environments/local-vllm/)。准备模型权重后，调整 `opsd.yaml` 的 `evaluation.base_path`、服务地址和 `evaluation.server.options`，再启动服务：
+本地 vLLM 的依赖位于 [environments/local-vllm/](environments/local-vllm/)。准备模型权重后，调整 `opsd.yaml` 的 `evaluation.base_path`、服务地址和 `evaluation.server.options`，再启动服务：
 
 ```bash
 uv sync --project environments/local-vllm --python 3.12 --locked
 bash scripts/serve-local-vllm.sh
 ```
 
-服务脚本将当前参数写入 `runs/local-vllm/serve.yaml`。在计算节点上运行前，先加载该节点可用的 CUDA module。
-
 <a id="training"></a>
 
 ## 🧬 训练与评测入口
 
-OPSD 从原始指令模型开始，学生更新，特权教师冻结。训练使用 PyTRIO，评测使用本地 vLLM。
+OPSD 从原始指令模型开始，学生更新，教师模型冻结。训练使用 PyTRIO，评测兼容使用本地 vLLM。
 
-`configs/` 只包含两份默认配置：[defaults.yaml](configs/defaults.yaml) 定义 Harness、协议和沙箱；[opsd.yaml](configs/opsd.yaml) 汇总训练、评测、数据质量检查与费用策略。配置中的路径相对声明它的 YAML 文件解析。本地 tokenizer 路径使用 `./` 或 `../` 前缀，Hub 模型名保持原样。先准备数据、模型权重与服务环境，再按实际资源调整该配置。
+agent 和沙箱设置见 [configs/defaults.yaml](configs/defaults.yaml)；训练和评测参数在 [configs/opsd.yaml](configs/opsd.yaml) 中修改。
 
 ```bash
 uv run --locked bashlet train-opsd configs/opsd.yaml
@@ -128,7 +126,7 @@ uv run --locked bashlet evaluate-checkpoint configs/opsd.yaml --phase final
 uv run --locked bashlet watch-opsd --config configs/opsd.yaml
 ```
 
-`train-opsd` 直接运行正式训练。每轮评测共享训练的 Harness、预算和采样条件，模型权重由保存的 checkpoint 确定。更改新实验的轮数、种子或预算只需改配置；同一运行恢复时必须保持其冻结条件。`--phase test` 仅允许在完整训练结束后访问最终测试集。
+训练中断后，添加 `--resume` 继续运行。继续同一次训练时保持原配置。训练完成后，可用 `--phase test` 评测最终测试集。
 
 | 用途 | CLI 命令 | 配置或说明 |
 | --- | --- | --- |
@@ -151,5 +149,3 @@ uv run --locked ruff check .
 uv run --locked ruff format --check .
 uv run --locked pytest
 ```
-
-测试需要可用的 Bubblewrap namespaces，以及测试所用的 Qwen tokenizer 本地缓存。

@@ -246,28 +246,29 @@ class AcceptanceModel(ScriptedModel):
         )
 
 
-class PaidEvaluationModel(PyTRIOModel):
+class RemoteEvaluationModel(PyTRIOModel):
     """Construct the production adapter against the controllable SDK boundary."""
 
     def __init__(
         self,
-        ledger_path: str,
+        journal_path: str,
         thinking: bool = False,
         fail_before_identity: bool = False,
     ) -> None:
         from pathlib import Path
 
+        from pytrio.errors.actor import ActorAPIError
         from test_pytrio import MODEL, REVISION, FakeSampling, FakeService, response
 
-        from bashlet import SpendLedger, SpendPolicy
+        from bashlet import RequestJournal
 
-        # Exhaust cash after one sampling probe and two episode samples.
-        ledger = SpendLedger(Path(ledger_path), policy=SpendPolicy(funded_cny=0.12))
+        journal = RequestJournal(Path(journal_path))
         sdk = FakeSampling(
             [
                 response([65]),
                 response(list(write_file("def double(n): return n * 2\n").encode())),
                 response(list(submit().encode())),
+                ActorAPIError("unavailable", code="unavailable", status_code=503),
             ]
         )
         sdk.fail_before_identity = fail_before_identity
@@ -276,7 +277,7 @@ class PaidEvaluationModel(PyTRIOModel):
             model_revision=REVISION,
             encoding=ByteEncoding(),
             service_client=FakeService(sdk),
-            ledger=ledger,
+            journal=journal,
             group="development-baseline",
             operation="evaluation",
             retry_delay_seconds=0,

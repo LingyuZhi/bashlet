@@ -22,7 +22,6 @@ from bashlet.distillation.config import (
     resolve_condition,
     validate_training_selection,
 )
-from bashlet.spend import SpendPolicy, read_spend_config
 
 
 def test_references_resolve_at_their_source_and_unknown_keys_still_fail(
@@ -94,7 +93,6 @@ def test_new_run_changes_epochs_seeds_and_budget_without_changing_frozen_data(
                 "evaluation_seeds": [11, 23],
                 "backend": {"seed": 57},
                 "group": "new-experiment",
-                "spend_config": "spend.yaml",
             }
         )
     )
@@ -106,7 +104,6 @@ def test_new_run_changes_epochs_seeds_and_budget_without_changing_frozen_data(
     assert resolved.budget.max_steps == 7
     assert resolved.model.sampling.seed == backend.seed == 57
     assert config.backend["group"] == config.training["group"] == "new-experiment"
-    assert config.backend["spend_config"] == str(root / "spend.yaml")
     assert selection.read_bytes() == original
 
 
@@ -124,7 +121,6 @@ def test_inline_sections_share_paths_and_keep_preparation_separate(
             "model": {"thinking": True},
         },
         "preparation": {"budget": {"max_steps": 2}},
-        "spend": {"limits": asdict(SpendPolicy(groups={"train": 1}))},
         "group": "train",
     }
     source.write_text(yaml.safe_dump(settings))
@@ -133,9 +129,6 @@ def test_inline_sections_share_paths_and_keep_preparation_separate(
     assert condition.budget.max_steps == 7
     assert condition.environment.python.source == str(tmp_path / "python")
     assert load_config([source], section="preparation").budget.max_steps == 2
-    assert run.backend["spend_config"] == str(source)
-    assert SpendPolicy.read(source).groups == {"train": 1}
-    assert read_spend_config(source) == settings["spend"]
     settings["backend"] = {"thinking": False}
     source.write_text(yaml.safe_dump(settings))
     with pytest.raises(ValueError, match="thinking settings must match"):
@@ -146,7 +139,10 @@ def test_inline_sections_share_paths_and_keep_preparation_separate(
         load_config([source])
 
 
-def test_service_config_cli_needs_no_training_artifacts(tmp_path: Path) -> None:
+@pytest.mark.parametrize("cuda_module", [None, "cuda/custom"])
+def test_service_config_cli_needs_no_training_artifacts(
+    tmp_path: Path, cuda_module: str | None
+) -> None:
     source = tmp_path / "run.yaml"
     source.write_text(
         yaml.safe_dump(
@@ -157,7 +153,7 @@ def test_service_config_cli_needs_no_training_artifacts(tmp_path: Path) -> None:
                     "model": {"base_url": "http://127.0.0.1:8004"},
                     "server": {
                         "session": "test-service",
-                        "cuda_module": "cuda/12.8",
+                        **({"cuda_module": cuda_module} if cuda_module else {}),
                         "options": {"port": 8004, "max-model-len": 32768},
                     },
                 },
@@ -192,7 +188,7 @@ def test_direct_run_monitor_preserves_recovery_gates(
         "train_task_ids": ["task/1"],
         "condition": {},
         "group": "train",
-        "ledger_path": str(fixture["ledger"]),
+        "journal_path": str(fixture["journal"]),
         "output_dir": str(root),
         "monitor": {
             "repository_root": str(fixture["root"]),
@@ -230,7 +226,7 @@ def test_direct_run_monitor_preserves_recovery_gates(
     elif change == "data":
         (root / "manifest.json").write_text('{"changed": true}')
     elif change == "pending":
-        with sqlite3.connect(fixture["ledger"]) as connection:
+        with sqlite3.connect(fixture["journal"]) as connection:
             connection.execute(
                 "INSERT INTO requests VALUES ('in-flight', 'train', 'pending')"
             )
@@ -241,7 +237,7 @@ def test_direct_run_monitor_preserves_recovery_gates(
     monitor = WatchConfig.read(source)
     assert monitor.preflight_required is False
     assert monitor.formal_pilot == root / "pilot.json"
-    assert monitor.ledger_groups == ("train",)
+    assert monitor.journal_groups == ("train",)
     result = _cli(fixture)
     assert result.returncode == 0, result.stdout + result.stderr
     decision = _events(fixture)[-1]["decision"]

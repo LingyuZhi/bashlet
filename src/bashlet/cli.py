@@ -11,6 +11,7 @@ from types import FrameType
 
 from rich.console import Console
 
+from bashlet.backends.journal import RequestJournal
 from bashlet.config import load_config, load_model
 from bashlet.evaluation import evaluate
 from bashlet.harness.episode import run_episode, save_record
@@ -24,7 +25,6 @@ from bashlet.harness.models import (
 from bashlet.harness.sandbox import Sandbox
 from bashlet.harness.view import RunView
 from bashlet.harness.workspace import capture_workspace
-from bashlet.spend import DEFAULT_POLICY, BudgetRefused, SpendLedger, SpendPolicy
 from bashlet.tasks import task_path as select_task_path
 from bashlet.tasks.mbpp import prepare_mbpp
 from bashlet.tasks.preparation import DEFAULT_COHORT, prepare_harness
@@ -299,46 +299,17 @@ def _parser() -> argparse.ArgumentParser:
     show = commands.add_parser("show", help="Replay a saved run without executing it")
     show.add_argument("run_dir", type=Path)
     _view_options(show)
-    spend = commands.add_parser(
-        "spend", help="Inspect or reconcile the shared cash ledger"
+    requests = commands.add_parser(
+        "requests", help="Inspect or resolve remote requests"
     )
-    spend_commands = spend.add_subparsers(dest="spend_command", required=True)
-    status = spend_commands.add_parser(
-        "status", help="Show charges and pending ceilings"
-    )
-    reconcile = spend_commands.add_parser(
-        "reconcile", help="Record verified completion and billing"
-    )
-    total = spend_commands.add_parser(
-        "reconcile-total", help="Confirm cumulative spend; retain unknown request fees"
-    )
-    authorization = spend_commands.add_parser(
-        "authorize-policy", help="Apply evidenced cash limits without resetting spend"
-    )
-    authorization.add_argument("new_policy", type=Path)
-    authorization.add_argument("--evidence", type=Path, required=True)
-    authorization.add_argument(
-        "--allow-project-increase",
-        action="store_true",
-        help="Allow a project-cap increase explicitly listed in the evidence",
-    )
-    for command in (status, reconcile, total, authorization):
-        command.add_argument("--ledger", type=Path, default=Path("runs/spend.sqlite3"))
-        command.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
-    reconcile.add_argument("request_id")
-    reconcile.add_argument("--actual-cny", required=True)
-    reconcile.add_argument("--outcome", choices=("completed", "failed"), required=True)
-    reconcile.add_argument(
-        "--evidence",
-        type=Path,
-        required=True,
-        help="JSON completion and billing evidence",
-    )
-    total.add_argument("--actual-cny", required=True)
-    total.add_argument("--evidence", type=Path, required=True)
-    total.add_argument(
-        "--group-actual-cny", action="append", default=[], metavar="GROUP=CNY"
-    )
+    request_commands = requests.add_subparsers(dest="request_command", required=True)
+    status = request_commands.add_parser("status", help="Show remote request outcomes")
+    resolve = request_commands.add_parser("resolve", help="Record a confirmed outcome")
+    for command in (status, resolve):
+        command.add_argument("--journal", type=Path, required=True)
+    resolve.add_argument("request_id")
+    resolve.add_argument("--outcome", choices=("completed", "failed"), required=True)
+    resolve.add_argument("--evidence", type=Path, required=True)
     return parser
 
 
@@ -524,37 +495,15 @@ def main() -> None:
             )
             print(manifest)
             return
-        if options.command == "spend":
-            ledger = SpendLedger(
-                options.ledger, policy=SpendPolicy.read(options.policy)
-            )
-            if options.spend_command == "authorize-policy":
-                evidence = json.loads(options.evidence.read_text())
-                ledger.authorize_policy(
-                    SpendPolicy.read(options.new_policy),
-                    evidence=evidence,
-                    allow_project_increase=options.allow_project_increase,
+        if options.command == "requests":
+            journal = RequestJournal(options.journal)
+            if options.request_command == "resolve":
+                journal.resolve(
+                    options.request_id,
+                    evidence=json.loads(options.evidence.read_text()),
+                    outcome=options.outcome,
                 )
-            if options.spend_command in ("reconcile", "reconcile-total"):
-                evidence = json.loads(options.evidence.read_text())
-                if not isinstance(evidence, dict):
-                    raise ValueError("Billing evidence must be a JSON object")
-                if options.spend_command == "reconcile-total":
-                    ledger.reconcile_total(
-                        actual_cny=options.actual_cny,
-                        evidence=evidence,
-                        group_actual_cny=dict(
-                            item.split("=", 1) for item in options.group_actual_cny
-                        ),
-                    )
-                else:
-                    ledger.reconcile(
-                        options.request_id,
-                        actual_cny=options.actual_cny,
-                        evidence=evidence,
-                        outcome=options.outcome,
-                    )
-            print(json.dumps(ledger.snapshot(), indent=2, ensure_ascii=True))
+            print(json.dumps(journal.snapshot(), indent=2, ensure_ascii=True))
             return
         if options.command == "show":
             record = json.loads((options.run_dir / "run.json").read_text())
@@ -567,7 +516,7 @@ def main() -> None:
             if options.command == "agent"
             else _run_task(options, view)
         )
-    except (OSError, ValueError, TypeError, KeyError, BudgetRefused) as error:
+    except (OSError, ValueError, TypeError, KeyError) as error:
         parser.error(str(error))
     except KeyboardInterrupt:
         raise SystemExit(130) from None

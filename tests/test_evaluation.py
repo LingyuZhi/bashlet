@@ -124,7 +124,7 @@ def test_evaluation_preserves_the_planned_denominator_and_failure_categories(
 
 
 @pytest.mark.parametrize("fail_before_identity", [False, True])
-def test_evaluation_spend_failures_keep_missing_tasks_and_all_commitments(
+def test_evaluation_remote_failures_keep_missing_tasks_and_all_requests(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fail_before_identity: bool,
@@ -135,21 +135,21 @@ def test_evaluation_spend_failures_keep_missing_tasks_and_all_commitments(
         json.dumps(
             {
                 "version": "development-evaluation-v1",
-                "name": "cash-limit",
+                "name": "remote-failure",
                 "manifest": str(prepared / "manifest.json"),
                 "split": "dev",
                 "task_ids": ["mbpp/511", "mbpp/512", "mbpp/513"],
             }
         )
     )
-    ledger = tmp_path / "spend.sqlite3"
-    config = tmp_path / "paid.yaml"
+    journal = tmp_path / "requests.sqlite3"
+    config = tmp_path / "remote.yaml"
     config.write_text(
         yaml.safe_dump(
             {
                 "model": {
-                    "class": "adapters.PaidEvaluationModel",
-                    "ledger_path": str(ledger),
+                    "class": "adapters.RemoteEvaluationModel",
+                    "journal_path": str(journal),
                     "fail_before_identity": fail_before_identity,
                 }
             }
@@ -182,18 +182,16 @@ def test_evaluation_spend_failures_keep_missing_tasks_and_all_commitments(
             "mbpp/513",
         ]
         assert record["tasks"][0]["outcome"] == "infrastructure_error"
-        assert record["cost"]["pending_upper_bound_cny"] == 0.04
-        assert record["cost"]["charged_upper_bound_cny"] == 0
-        assert len(record["cost"]["request_ids"]) == 1
+        assert record["requests"]["pending_count"] == 1
+        assert len(record["requests"]["request_ids"]) == 1
         return
     assert record["summary"]["final_pass_rate"] == 1 / 3
     assert record["summary"]["missing_task_ids"] == ["mbpp/512", "mbpp/513"]
-    assert record["tasks"][1]["budget_kind"] == "spend"
+    assert record["tasks"][1]["outcome"] == "infrastructure_error"
     assert record["tasks"][2]["outcome"] == "not_started"
-    assert record["cost"]["ledger"] == str(ledger)
-    assert record["cost"]["charged_upper_bound_cny"] == 0.12
-    assert record["cost"]["actual_cny"] is None
-    assert len(record["cost"]["request_ids"]) == 3
+    assert record["requests"]["journal"] == str(journal)
+    assert record["requests"]["pending_count"] == 1
+    assert len(record["requests"]["request_ids"]) == 4
 
 
 @pytest.mark.parametrize("source", ["", "def solve(:\n"])

@@ -14,8 +14,7 @@ from adapters import ByteEncoding, ControlledOPSD
 from bashlet import (
     FunctionGrader,
     GradingCase,
-    SpendLedger,
-    SpendPolicy,
+    RequestJournal,
     Task,
     run_experiment,
 )
@@ -71,24 +70,20 @@ def controlled_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     adapter: ControlledOPSD | None = None,
-    *,
-    funded_cny: float = 10,
 ) -> tuple[OPSDRun, ControlledOPSD]:
     import sys
 
     monkeypatch.setitem(sys.modules, "wandb", monitoring_sdk)
     monkeypatch.setenv("WANDB_API_KEY", "secret-opsd-key")
     adapter = adapter or ControlledOPSD()
-    ledger = SpendLedger(
-        tmp_path / "spend.sqlite3", policy=SpendPolicy(funded_cny=funded_cny)
-    )
+    journal = RequestJournal(tmp_path / "requests.sqlite3")
     run = OPSDRun(
         tmp_path / "training",
         snapshot=InitialSnapshot(
             "test/base@initial", ByteEncoding().identity, "test-double"
         ),
         adapter=adapter,
-        ledger=ledger,
+        journal=journal,
         config=OPSDConfig(distillation_coefficient=0.5, timeout_seconds=30),
         monitoring=MonitorConfig(group="controlled-opsd"),
     )
@@ -207,7 +202,7 @@ def test_frozen_teacher_drift_after_scoring_is_detected_before_updating(
     assert not adapter.updates and not adapter.refreshed
 
 
-def test_update_metrics_use_supervised_denominator_and_keep_unknown_bills_distinct(
+def test_update_metrics_use_supervised_denominator_and_record_request_counts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -238,9 +233,8 @@ def test_update_metrics_use_supervised_denominator_and_keep_unknown_bills_distin
     assert row["train/generated_tokens"] == count
     assert row["train/teacher_input_tokens"] == sum(map(len, adapter.scoring))
     assert row["train/training_input_tokens"] == len(result.context_tokens) - 1
-    assert row["spend/run_actual_known"] is False
-    assert "spend/run_actual_cny" not in row
-    assert row["spend/run_upper_cny"] > 0
+    assert row["requests/count"] > 0
+    assert row["requests/pending_count"] == 0
     assert row["checkpoint/sampler"] == "test/student@opsd-1"
     assert row["checkpoint/training_state"] == "test/training-state@opsd-1"
     assert remote["config"]["data_source"] == {
@@ -276,7 +270,7 @@ def test_update_metrics_use_supervised_denominator_and_keep_unknown_bills_distin
         "latest-student",
     ],
 )
-def test_invalid_teacher_supervision_keeps_paid_calls_and_never_updates(
+def test_invalid_teacher_supervision_keeps_remote_calls_and_never_updates(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     problem: str,
@@ -325,13 +319,13 @@ def test_invalid_teacher_supervision_keeps_paid_calls_and_never_updates(
     assert (result.run_dir / "private/teacher-0000.json").is_file()
     saved = json.loads((result.run_dir / "run.json").read_text())
     assert len(saved["trajectory"]) == 6
-    ledger = run.ledger.snapshot()
-    assert any(entry["operation"] == "teacher_scoring" for entry in ledger["entries"])
-    assert ledger["charged_cny"] > 0
+    journal = run.journal.snapshot()
+    assert any(entry["operation"] == "teacher_scoring" for entry in journal["entries"])
+    assert journal["entries"] and journal["pending_count"] == 0
     metrics = json.loads((run.root / "remote.json").read_text())["rows"][-1]
     assert metrics["train/optimizer_step"] == 0
     assert metrics["train/rejected_batches"] == 1
-    assert metrics["spend/run_actual_known"] is False
+    assert metrics["requests/count"] > 0
     assert "train/loss" not in metrics
 
 
@@ -362,7 +356,7 @@ def test_monitor_disconnect_and_training_state_resume_preserve_progress_and_even
         run.root,
         snapshot=run.snapshot,
         adapter=adapter,
-        ledger=run.ledger,
+        journal=run.journal,
         config=run.config,
         monitoring=run.monitoring,
         resume=True,
@@ -397,10 +391,10 @@ def test_monitor_disconnect_and_training_state_resume_preserve_progress_and_even
     assert record["optimizer_step"] == 2
     assert record["student_policy"] == "test/student@opsd-2"
     assert record["teacher_policy"] == "test/base@initial"
-    assert record["batches"][-1]["cost"]["charged_upper_bound_cny"] > 1
+    assert record["batches"][-1]["requests"]["count"] > 1
 
 
-def test_rejected_remote_update_keeps_its_charge_and_allows_a_safe_new_batch(
+def test_rejected_remote_update_keeps_its_record_and_allows_a_safe_new_batch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -420,7 +414,7 @@ def test_rejected_remote_update_keeps_its_charge_and_allows_a_safe_new_batch(
     )
     assert rejected.opsd is not None and rejected.opsd["status"] == "rejected"
     assert adapter.completed == 0 and not adapter.refreshed
-    first_entries = run.ledger.snapshot()["entries"]
+    first_entries = run.journal.snapshot()["entries"]
     assert first_entries[-1]["operation"] == "opsd_update"
     assert first_entries[-1]["state"] == "failed"
     first_journal = (run.root / "metrics.jsonl").read_bytes()
@@ -437,7 +431,7 @@ def test_rejected_remote_update_keeps_its_charge_and_allows_a_safe_new_batch(
     assert [row["train/optimizer_step"] for row in metrics] == [0, 1]
     assert metrics[-1]["train/rejected_batches"] == 1
     assert metrics[-1]["train/valid_batches"] == 1
-    assert metrics[-1]["spend/run_upper_cny"] > metrics[0]["spend/run_upper_cny"]
+    assert metrics[-1]["requests/count"] > metrics[0]["requests/count"]
     assert metrics[0]["run/reason"] == "remote_update_rejected:transient"
     assert metrics[0]["train/training_submitted_input_tokens"] == len(
         adapter.updates[0]["batch"][0].model_input.to_ints()
@@ -509,7 +503,7 @@ def test_invalid_student_evidence_cannot_become_an_on_policy_update(
     )
     assert result.opsd is not None and result.opsd["status"] == "rejected"
     assert not adapter.updates and not adapter.refreshed
-    assert run.ledger.snapshot()["charged_cny"] > 0
+    assert run.journal.snapshot()["entries"]
     assert json.loads((run.root / "opsd.json").read_text())["optimizer_step"] == 0
     metrics = json.loads((run.root / "remote.json").read_text())["rows"][-1]
     assert metrics["train/generated_tokens"] > 0
@@ -517,7 +511,7 @@ def test_invalid_student_evidence_cannot_become_an_on_policy_update(
 
 
 @pytest.mark.parametrize("stage", ["score", "update", "refresh"])
-def test_remote_failure_preserves_pending_cost_and_never_uploads_exception_contents(
+def test_remote_failure_preserves_pending_requests_and_never_uploads_exception_contents(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     stage: str,
@@ -558,9 +552,9 @@ def test_remote_failure_preserves_pending_cost_and_never_uploads_exception_conte
     assert "TEACHER_ONLY_REFERENCE" not in json.dumps(metrics)
     assert "HIDDEN_TEST" not in json.dumps(metrics)
     if stage != "refresh":
-        assert metrics["spend/run_pending_cny"] > 0
+        assert metrics["requests/pending_count"] > 0
     if stage == "update":
-        entries = run.ledger.snapshot()["entries"]
+        entries = run.journal.snapshot()["entries"]
         with pytest.raises(ValueError, match="uncertain remote update"):
             run_experiment(
                 task=repair_task(),
@@ -568,7 +562,7 @@ def test_remote_failure_preserves_pending_cost_and_never_uploads_exception_conte
                 opsd_run=run,
                 output_dir=tmp_path / "episodes",
             )
-        assert run.ledger.snapshot()["entries"] == entries
+        assert run.journal.snapshot()["entries"] == entries
 
 
 @pytest.mark.parametrize("stage", ["sampling", "update"])
@@ -605,7 +599,7 @@ def test_in_flight_batch_prevents_new_rollout_and_refresh_until_completion(
         )
         try:
             assert entered.wait(10)
-            before = run.ledger.snapshot()["entries"]
+            before = run.journal.snapshot()["entries"]
             record = json.loads((run.root / "opsd.json").read_text())
             assert record["optimizer_step"] == 0
             assert run.student.identity == "test/base@initial"
@@ -619,7 +613,7 @@ def test_in_flight_batch_prevents_new_rollout_and_refresh_until_completion(
                         run.root,
                         snapshot=run.snapshot,
                         adapter=other_adapter,
-                        ledger=run.ledger,
+                        journal=run.journal,
                         config=run.config,
                         monitoring=run.monitoring,
                         resume=True,
@@ -634,7 +628,7 @@ def test_in_flight_batch_prevents_new_rollout_and_refresh_until_completion(
                     opsd_run=run,
                     output_dir=tmp_path / "episodes",
                 )
-            assert run.ledger.snapshot()["entries"] == before
+            assert run.journal.snapshot()["entries"] == before
         finally:
             release.set()
         first = running.result(timeout=10)
@@ -650,16 +644,13 @@ def test_in_flight_batch_prevents_new_rollout_and_refresh_until_completion(
     assert adapter.teacher_identity == "test/base@initial"
 
 
-def test_monitor_outage_and_pending_spend_cannot_bypass_the_update_budget(
+def test_unrelated_pending_request_does_not_block_training_during_monitor_outage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run, adapter = controlled_run(tmp_path, monkeypatch, funded_cny=1.0)
-    pending = run.ledger.reserve(
-        operation="evaluation",
-        group="opsd-pilot",
-        payload={"other_run": "pending"},
-        upper_cny=0.48,
+    run, adapter = controlled_run(tmp_path, monkeypatch)
+    pending = run.journal.begin(
+        operation="evaluation", group="other-run", payload={"other_run": "pending"}
     )
     monkeypatch.setenv("FAKE_WANDB_LOG_FAIL", "1")
     result = run_experiment(
@@ -669,23 +660,14 @@ def test_monitor_outage_and_pending_spend_cannot_bypass_the_update_budget(
         output_dir=tmp_path / "episodes",
     )
     assert result.passed
-    assert result.opsd is not None and result.opsd["status"] == "rejected"
-    assert result.opsd["reason"] == "budget_refused"
-    assert not adapter.updates and not adapter.refreshed
-    entries = run.ledger.snapshot()["entries"]
+    assert result.opsd is not None and result.opsd["status"] == "completed"
+    assert adapter.updates and adapter.refreshed
+    entries = run.journal.snapshot()["entries"]
     assert entries[0]["id"] == pending and entries[0]["state"] == "pending"
-    assert not any(entry["operation"] == "opsd_update" for entry in entries)
-    record = json.loads((run.root / "opsd.json").read_text())
-    assert record["optimizer_step"] == 0 and record["pending_update"] is None
-    metrics = [
-        json.loads(line)
-        for line in (run.root / "metrics.jsonl").read_text().splitlines()
-    ]
-    assert metrics[-1]["metrics"]["spend/project_pending_cny"] == 0.48
-    assert metrics[-1]["metrics"]["train/optimizer_step"] == 0
-    assert (
-        json.loads((run.root / "monitor.json").read_text())["sync_status"] == "pending"
-    )
+    assert entries[-1]["operation"] == "opsd_update"
+    assert run.record["optimizer_step"] == 1
+    assert run.record["pending_update"] is None
+    assert run.record["batches"][-1]["requests"]["pending_count"] == 0
 
 
 @pytest.mark.parametrize("stage", ["sampling", "update"])
@@ -718,8 +700,7 @@ def test_interruption_keeps_progress_and_blocks_uncertain_optimizer_resume(
     record = json.loads((run.root / "opsd.json").read_text())
     assert record["optimizer_step"] == 0
     assert not adapter.refreshed
-    assert record["batches"][-1]["cost"]["actual_cny"] is None
-    assert record["batches"][-1]["cost"]["pending_upper_bound_cny"] > 0
+    assert record["batches"][-1]["requests"]["pending_count"] > 0
     original_journal = (run.root / "metrics.jsonl").read_bytes()
     if stage == "update":
         with pytest.raises(ValueError, match="uncertain remote update"):
@@ -727,24 +708,23 @@ def test_interruption_keeps_progress_and_blocks_uncertain_optimizer_resume(
                 run.root,
                 snapshot=run.snapshot,
                 adapter=ControlledOPSD(),
-                ledger=run.ledger,
+                journal=run.journal,
                 config=run.config,
                 monitoring=run.monitoring,
                 resume=True,
             )
     else:
-        pending = run.ledger.snapshot()["entries"][-1]
-        run.ledger.reconcile(
+        pending = run.journal.snapshot()["entries"][-1]
+        run.journal.resolve(
             pending["id"],
-            actual_cny=0,
             outcome="failed",
-            evidence={"controlled_bill": "interrupted-read-only-sample"},
+            evidence={"remote_outcome": "interrupted-read-only-sample"},
         )
         resumed = OPSDRun(
             run.root,
             snapshot=run.snapshot,
             adapter=ControlledOPSD(),
-            ledger=run.ledger,
+            journal=run.journal,
             config=run.config,
             monitoring=run.monitoring,
             resume=True,
@@ -791,34 +771,6 @@ def test_failed_independent_grade_does_not_change_the_distillation_objective(
         assert datum.loss_fn_inputs["advantages"].tolist()[start] == 0.375
 
 
-def test_confirmed_zero_bill_is_reported_as_known_zero(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    run, adapter = controlled_run(tmp_path, monkeypatch)
-
-    def reconcile_controlled_bills() -> None:
-        for entry in run.ledger.snapshot()["entries"]:
-            run.ledger.reconcile(
-                entry["id"],
-                actual_cny=0,
-                outcome="completed",
-                evidence={"controlled_bill": "zero-charge"},
-            )
-
-    adapter.update_completion = reconcile_controlled_bills
-    result = run_experiment(
-        task=repair_task(),
-        model=run.student,
-        opsd_run=run,
-        output_dir=tmp_path / "episodes",
-    )
-    assert result.opsd is not None and result.opsd["status"] == "completed"
-    metrics = json.loads((run.root / "remote.json").read_text())["rows"][-1]
-    assert metrics["spend/run_actual_known"] is True
-    assert metrics["spend/run_actual_cny"] == 0
-
-
 @pytest.mark.parametrize(
     "role", ["base-teacher", "latest-teacher", "base-student", "encoding"]
 )
@@ -844,7 +796,7 @@ def test_incorrect_initial_roles_are_refused_before_any_sampling(
             opsd_run=run,
             output_dir=tmp_path / "episodes",
         )
-    assert not run.ledger.snapshot()["entries"]
+    assert not run.journal.snapshot()["entries"]
     assert not adapter.student.prompts and not adapter.scoring and not adapter.updates
 
 
@@ -878,7 +830,7 @@ def test_monitor_interrupt_after_completed_update_can_resume_without_duplicate_e
         run.root,
         snapshot=run.snapshot,
         adapter=ControlledOPSD(),
-        ledger=run.ledger,
+        journal=run.journal,
         config=run.config,
         monitoring=run.monitoring,
         resume=True,

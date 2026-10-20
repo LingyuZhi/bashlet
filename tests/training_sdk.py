@@ -101,39 +101,6 @@ class Service:
 
 
 def install() -> None:
-    import httpx
     import pytrio
 
     pytrio.ServiceClient = Service
-    original = httpx.get
-
-    def prices(url: str, **kwargs: Any) -> Any:
-        if not url.endswith("/api/model-prices"):
-            return original(url, **kwargs)
-        return SimpleNamespace(
-            raise_for_status=lambda: None,
-            json=lambda: {
-                "currency": "CNY",
-                "token_unit": "per_1m_tokens",
-                "rounding": "ceil",
-                "version": "test",
-                "items": [
-                    {
-                        "display_name": Training.model_id,
-                        "prices": {
-                            name: {"billing_unit": "per_1m_tokens", "unit_price": price}
-                            for name, price in [
-                                ("prefill", 149),
-                                ("cached_prefill", 30),
-                                ("sample", 454),
-                                ("train", 454),
-                            ]
-                        },
-                    }
-                ],
-            },
-        )
-
-    import pytest
-
-    pytest.MonkeyPatch().setattr(httpx, "get", prices)

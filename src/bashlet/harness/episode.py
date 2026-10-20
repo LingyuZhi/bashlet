@@ -10,6 +10,7 @@ from collections.abc import Callable
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from bashlet.backends.journal import RequestConflict
 from bashlet.config import ExperimentConfig, config_record, load_config
 from bashlet.harness import protocol
 from bashlet.harness.models import (
@@ -34,7 +35,6 @@ from bashlet.harness.models import (
 )
 from bashlet.harness.sandbox import Sandbox
 from bashlet.harness.workspace import capture_workspace
-from bashlet.spend import BudgetRefused
 
 _PROBE_OUTPUT_BYTES = 16_384
 
@@ -153,7 +153,7 @@ def _sample(model: Model, context: list[int], sampling: SamplingParams) -> Model
     started = time.monotonic()
     try:
         generation = model.sample(tuple(context), sampling)
-    except (ModelResponseError, ContextExhausted, BudgetRefused):
+    except (ModelResponseError, ContextExhausted, RequestConflict):
         raise
     except Exception as error:
         # The call itself failed (service, network, Adapter): not model output.
@@ -400,7 +400,7 @@ def run_episode(
         if backend is not None:
             try:
                 backend.probe()
-            except (ModelResponseError, ContextExhausted, BudgetRefused):
+            except (ModelResponseError, ContextExhausted, RequestConflict):
                 raise
             except Exception as error:
                 raise _SamplerError(f"Capability probe failed: {error}") from error
@@ -508,9 +508,8 @@ def run_episode(
                 model.encoding.continuation(call.generation.tokens, feedback)
             )
             save()
-    except BudgetRefused as error:
-        result.status, result.reason = "budget_exhausted", str(error)
-        result.budget_kind = "spend"
+    except RequestConflict as error:
+        result.status, result.reason = "infrastructure_error", str(error)
         return result
     except ContextExhausted as error:
         result.status, result.reason = "context_exhausted", str(error)

@@ -34,7 +34,7 @@ class EvidenceState:
     workflow_status: str | None
     workflow_stage: str | None
     pending_requests: int
-    ledger_requests: dict[str, int]
+    journal_requests: dict[str, int]
 
 
 def _read_object(path: Path) -> dict[str, Any] | None:
@@ -166,23 +166,23 @@ def _worker_state(config: WatchConfig) -> WorkerState:
     return WorkerState("unknown", "worker session state is unavailable")
 
 
-def _ledger_state(config: WatchConfig) -> tuple[dict[str, int], dict[str, int]]:
-    groups = config.ledger_groups
-    if not config.ledger.is_file():
-        raise WatchdogError("the shared spend ledger is unavailable")
+def _journal_state(config: WatchConfig) -> tuple[dict[str, int], dict[str, int]]:
+    groups = config.journal_groups
+    if not config.journal.is_file():
+        raise WatchdogError("the shared request journal is unavailable")
     try:
         connection = sqlite3.connect(
-            config.ledger.as_uri() + "?mode=ro", uri=True, timeout=2
+            config.journal.as_uri() + "?mode=ro", uri=True, timeout=2
         )
         connection.execute("PRAGMA query_only = ON")
         placeholders = ", ".join("?" for _ in groups)
         rows = connection.execute(
-            "SELECT budget_group, state, COUNT(*) FROM requests "
-            f"WHERE budget_group IN ({placeholders}) GROUP BY budget_group, state",
+            "SELECT request_group, state, COUNT(*) FROM requests "
+            f"WHERE request_group IN ({placeholders}) GROUP BY request_group, state",
             groups,
         ).fetchall()
     except sqlite3.Error:
-        raise WatchdogError("the shared spend ledger cannot be checked") from None
+        raise WatchdogError("the shared request journal cannot be checked") from None
     finally:
         if "connection" in locals():
             connection.close()
@@ -209,8 +209,6 @@ def _training_gate(
         return "training record has an unresolved remote update"
     if training.get("status") == "failed":
         return "training record has an explicit failure"
-    if pilot.get("training_stop"):
-        return "training stopped at a budget or policy gate"
     batches = training.get("batches", [])
     if not isinstance(batches, list):
         return "training batch record is malformed"
@@ -389,10 +387,10 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
     if declared_hashes != actual_hashes:
         return result("blocked", "frozen configuration changed")
 
-    counts, pending = _ledger_state(config)
+    counts, pending = _journal_state(config)
     pending_count = sum(pending.values())
     if pending_count:
-        return result("blocked", "a related spend-ledger request is pending")
+        return result("blocked", "a related journal request is pending")
 
     if workflow_stage not in {"preflight-training", "preflight-verification", "formal"}:
         return result("blocked", "workflow stage is not a known resumable stage")
@@ -401,7 +399,7 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
     preflight_training = _read_object(config.preflight_training)
     if preflight is None:
         if workflow_stage != "preflight-training" or counts.get(
-            config.ledger_groups[0], 0
+            config.journal_groups[0], 0
         ):
             return result(
                 "blocked", "preflight record is missing after related work started"
@@ -418,7 +416,7 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             if problem is not None:
                 return result("blocked", problem)
         elif preflight.get("status") == "complete" or counts.get(
-            config.ledger_groups[0], 0
+            config.journal_groups[0], 0
         ):
             return result("blocked", "preflight has work but no training-state record")
 
@@ -486,12 +484,12 @@ def _inspect_direct_evidence(config: WatchConfig) -> EvidenceState:
         "complete",
     }:
         return blocked("formal status is not recognized")
-    counts, pending = _ledger_state(config)
+    counts, pending = _journal_state(config)
     pending_count = sum(pending.values())
     if pending_count:
         return EvidenceState(
             "blocked",
-            "a related spend-ledger request is pending",
+            "a related journal request is pending",
             status,
             "formal",
             pending_count,
@@ -515,7 +513,9 @@ def _inspect_formal(
         )
 
     formal_groups = (
-        config.ledger_groups[1:] if config.preflight_required else config.ledger_groups
+        config.journal_groups[1:]
+        if config.preflight_required
+        else config.journal_groups
     )
     formal = _read_object(config.formal_pilot)
     formal_training = _read_object(config.formal_training)
@@ -553,7 +553,7 @@ def _inspect_formal(
         return result("blocked", "completed formal run has no training-state record")
     elif sum(counts.get(group, 0) for group in formal_groups):
         return result(
-            "blocked", "formal run has ledger activity but no training-state record"
+            "blocked", "formal run has journal activity but no training-state record"
         )
     if formal.get("status") == "complete":
         if not _formal_complete(formal, formal_training):
@@ -719,7 +719,7 @@ def _log_cycle(
         "worker_reason": worker.reason,
         "log_age_seconds": round(log_age, 1) if log_age is not None else None,
         "pending_request_count": evidence.pending_requests,
-        "related_request_counts": evidence.ledger_requests,
+        "related_request_counts": evidence.journal_requests,
         "restart_attempts": attempts,
         "restart_not_before": (
             _timestamp(restart_not_before) if restart_not_before is not None else None

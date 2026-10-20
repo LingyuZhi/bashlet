@@ -139,13 +139,6 @@ def _decision(record: dict[str, Any]) -> None:
         else "insufficient_evidence",
         "reason": "Report paired evidence for research review",
     }
-    record["billing"] = {
-        "teacher_category_verified": False,
-        "cache_discount_assumed": False,
-        "actual_cny": record["cost"]["actual_cny"],
-        "sdk_scoring": "0.2.9 compute_logprobs uses prompt logprobs and max_tokens=1",
-        "limitation": "SDK drops billing details; usage and ceilings are not bills",
-    }
 
 
 def development_curve(record: dict[str, Any]) -> dict[str, Any]:
@@ -173,11 +166,12 @@ def development_curve(record: dict[str, Any]) -> dict[str, Any]:
                 row = runs.get(str(seed), {}).get(identity, {})
                 metadata = row or metadata
                 outcome = row.get("outcome", "not_started")
-                unavailable = (
-                    outcome
-                    in {"not_started", "running", "interrupted", "infrastructure_error"}
-                    or row.get("budget_kind") == "spend"
-                )
+                unavailable = outcome in {
+                    "not_started",
+                    "running",
+                    "interrupted",
+                    "infrastructure_error",
+                }
                 outcomes[str(seed)] = None if unavailable else int(outcome == "passed")
                 if unavailable:
                     missing.append({"task_id": identity, "seed": seed})

@@ -59,7 +59,6 @@ def _sampling_request_reconciled(
         or resolution.get("response_abandoned") is not True
         or resolution.get("remote_outcome") != "unknown"
         or resolution.get("update_submitted") is not False
-        or resolution.get("full_ceiling_retained") is not True
         or entry.get("state") != "pending"
         or payload.get("run_id") != before.get("run_id")
         or not record.get("reason", "").startswith(prefix)
@@ -68,9 +67,9 @@ def _sampling_request_reconciled(
         or record.get("policy") != batch["student_policy"]
     ):
         return False
-    ledger = Path(before["ledger"]).resolve()
+    journal = Path(before["journal"]).resolve()
     with closing(
-        sqlite3.connect(ledger.as_uri() + "?mode=ro", uri=True, timeout=2)
+        sqlite3.connect(journal.as_uri() + "?mode=ro", uri=True, timeout=2)
     ) as db:
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA query_only = ON")
@@ -85,9 +84,6 @@ def _sampling_request_reconciled(
         current["operation"] == operation
         and current["state"] == "failed"
         and current["fingerprint"] == entry["fingerprint"]
-        and current["upper_micros"] == entry["upper_micros"]
-        and current["charged_micros"] == current["upper_micros"]
-        and current["billing_basis"] == "upper_bound"
         and evidence.get("payload") == payload
         and evidence.get("request_id") == original["request_id"]
         and abandoned.get("recovery_receipt") == str(path)

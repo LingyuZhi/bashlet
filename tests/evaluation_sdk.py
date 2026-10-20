@@ -58,7 +58,7 @@ def _evaluate_checkpoint(
         raise ValueError(
             "Checkpoint evaluation must retain its snapshot, step and allocation"
         )
-    # A cash stop can leave the student at an already evaluated checkpoint.
+    # A resumed run may have already evaluated the selected checkpoint.
     # Identical checkpoint/seed evidence supplies the final report once.
     if phase == "final" and config.evaluation_seeds and not stage["runs"]:
         for previous_phase, previous in stages.items():

@@ -47,10 +47,9 @@ def baseline_record(tmp_path: Path) -> Path:
                         "rate": 0.0,
                     },
                 },
-                "cost": {
-                    "charged_upper_bound_cny": 1.64,
-                    "pending_upper_bound_cny": 0.0,
-                    "actual_cny": None,
+                "requests": {
+                    "count": 41,
+                    "pending_count": 0,
                 },
                 "tasks": [{"private": "HIDDEN_TEST_AND_TOKENS"}],
             }
@@ -90,8 +89,8 @@ def test_historical_baseline_import_retains_identity_and_uploads_only_allowliste
     assert row["eval/planned_tasks"] == 8
     assert row["eval/passed_tasks"] == 5
     assert row["eval/final_pass_rate"] == 0.625
-    assert row["spend/run_actual_known"] is False
-    assert "spend/run_actual_cny" not in row
+    assert row["requests/count"] == 41
+    assert row["requests/pending_count"] == 0
     assert not any(s in json.dumps(remote) for s in ("secret", "HIDDEN_TEST"))
     assert remote["settings"]["console"] == "off"
     assert remote["settings"]["save_code"] is False

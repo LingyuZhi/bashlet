@@ -13,7 +13,6 @@ condition:
     max_consecutive_invalid: 3
 train_manifest: ../runs/data/cohort/manifest.json
 dev_plan: ../runs/data/cohort/harness-dev.json
-ledger_path: ../runs/spend.sqlite3
 backend:
   base_model: Qwen/Qwen3.5-4B
   model_revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
@@ -25,7 +24,7 @@ backend:
   train_unembed: false
   thinking: true
   timeout_seconds: 300
-  api_key_env: pytrio_api_key
+  api_key_env: PYTRIO_API_KEY
   dotenv_path: ../.env
   tokenizer_cache_dir: ../runs/tokenizers
 training:
@@ -38,14 +37,11 @@ monitoring:
   mode: online
   dotenv_path: ../.env
   group: opsd-current
-stop_on_training_budget: true
 shuffle_seed: 31003
 require_complete_training: true
 evaluation:
-  base_path: ../runs/issue21-local-inference/hub/models--Qwen--Qwen3.5-4B/snapshots/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
-  executor:
-  - ssh
-  - n30126
+  # Set this to your local model weights directory.
+  base_path: ../runs/models/Qwen3.5-4B
   model:
     base_url: http://127.0.0.1:8004
     api_key_env: null
@@ -53,7 +49,6 @@ evaluation:
     max_retries: 0
   server:
     session: bashlet-opsd-vllm
-    cuda_module: cuda/12.8
     timeout_seconds: 600
     options:
       served-model-name: Qwen/Qwen3.5-4B
@@ -66,8 +61,8 @@ evaluation:
       enforce-eager: true
       generation-config: vllm
       language-model-only: true
-output_dir: ../runs/opsd-current
-group: opsd-expanded-train-v1
+output_dir: ../runs/opsd
+group: opsd
 training_selection: ../runs/data/cohort/training-selection.json
 epochs: 2
 evaluation_seeds:
@@ -84,40 +79,6 @@ monitor:
   poll_seconds: 30
   backoff_min_seconds: 60
   backoff_max_seconds: 600
-spend:
-  limits:
-    regular_cny: 16484.58
-    reserve_cny: 50
-    project_cny: 16534.58
-    funded_cny: 16484.58
-    groups:
-      pytrio-smoke: 0.5
-      opsd-pilot: 5
-      development-baseline: 2
-      sft: 4
-      sft-development: 4
-      local-snapshot-inference: 5
-      renewed-harness-sft: 1.28
-      opsd-scale-train-v1: 8
-      opsd-scale-eval-v1: 7
-      opsd-full-train-v1: 200
-      opsd-full-baseline-v1: 30
-      opsd-full-epoch-v1: 30
-      opsd-full-eval-v1: 40
-      opsd-expanded-train-v1: 10205.68
-      opsd-expanded-dev-v1: 6003.0
-      opsd-expanded-preflight-v1: 37.04
-  prices_cny_per_million:
-    prefill: 1.49
-    cache: 0.3
-    sample: 4.54
-    train: 4.54
-  price_source: https://pytrio.cn/home/pricing
-  price_recorded: '2026-10-06'
-  price_catalog_url: https://pytrio.com/api/model-prices
-  price_version: '2026-08-21'
-  billing_quantum_cny: 0.01
-  ceiling_multiplier: 2
 preparation:
   budget:
     max_steps: 6

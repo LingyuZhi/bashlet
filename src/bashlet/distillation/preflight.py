@@ -315,12 +315,12 @@ def validate_preflight_evidence(
         or any(
             native.get("backend", {}).get(key) != value
             for key, value in asdict(backend_config).items()
-            if key not in {"group", "spend_config"}
+            if key not in {"group"}
         )
         or any(
             native.get("training", {}).get(key) != value
             for key, value in asdict(training).items()
-            if key not in {"group", "spend_config"}
+            if key not in {"group"}
         )
     ):
         raise ValueError("Native preflight evidence does not match formal conditions")

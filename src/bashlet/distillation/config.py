@@ -102,12 +102,11 @@ class RunConfig:
     train_task_ids: list[str]
     dev_plan: str
     condition: list[str] | dict[str, Any]
-    ledger_path: str = "runs/spend.sqlite3"
+    journal_path: str | None = None
     backend: dict[str, Any] = field(default_factory=dict)
     training: dict[str, Any] = field(default_factory=dict)
     monitoring: dict[str, Any] = field(default_factory=dict)
     evaluation_group: str | None = None
-    stop_on_training_budget: bool = False
     epochs: int = 1
     shuffle_seed: int | None = None
     evaluation_seeds: list[int] = field(default_factory=list)
@@ -122,22 +121,17 @@ class RunConfig:
     execution_limit: str | None = None
     monitor: dict[str, Any] = field(default_factory=dict)
     preparation: dict[str, Any] = field(default_factory=dict)
-    spend: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def read(cls, path: Path) -> RunConfig:
         settings = read_yaml(path)
-        if "spend" in settings:
-            settings.setdefault("spend_config", str(path.resolve()))
-        for key in ("group", "spend_config"):
-            if key not in settings:
-                continue
-            shared = settings.pop(key)
+        if "group" in settings:
+            shared = settings.pop("group")
             for section in ("backend", "training"):
                 target = settings.setdefault(section, {})
-                if key in target and target[key] != shared:
-                    raise ValueError(f"{section}.{key} conflicts with the shared {key}")
-                target[key] = shared
+                if "group" in target and target["group"] != shared:
+                    raise ValueError(f"{section}.group conflicts with the shared group")
+                target["group"] = shared
         if "train_task_ids" not in settings and settings.get("training_selection"):
             selected = json.loads(Path(settings["training_selection"]).read_text())
             settings["train_task_ids"] = selected["task_ids"]
@@ -223,12 +217,14 @@ def _validate_evaluation(settings: dict[str, Any]) -> None:
         if (
             not isinstance(server, dict)
             or set(server) - allowed_server
-            or any(
-                not isinstance(server.get(key), str) or not server[key]
-                for key in ("session", "cuda_module")
-            )
+            or not isinstance(server.get("session"), str)
+            or not server["session"]
         ):
-            raise ValueError("Local evaluation server needs session and cuda_module")
+            raise ValueError("Local evaluation server needs a session")
+        if "cuda_module" in server and (
+            not isinstance(server["cuda_module"], str) or not server["cuda_module"]
+        ):
+            raise ValueError("Local evaluation CUDA module must be a nonempty name")
         if ("template" in server) == ("options" in server):
             raise ValueError(
                 "Local evaluation server needs either options or a template"
@@ -260,7 +256,9 @@ def _monitor_settings(path: Path) -> dict[str, Any]:
         "preflight_validation": root / "preflight/checkpoint-validation.json",
         "formal_pilot": formal_root / "pilot.json",
         "formal_training": formal_root / "training/opsd.json",
-        "ledger": Path(config.ledger_path),
+        "journal": Path(config.journal_path)
+        if config.journal_path
+        else formal_root / "requests.sqlite3",
     }
     return {
         "schema_version": 1,
@@ -283,7 +281,7 @@ def _monitor_settings(path: Path) -> dict[str, Any]:
         "paths": {key: str(value) for key, value in paths.items()},
         "frozen_configurations": [str(path.resolve())]
         + ([config.preflight] if preflight else []),
-        "ledger_groups": list(
+        "journal_groups": list(
             dict.fromkeys(
                 ([preflight.training["group"]] if preflight else [])
                 + [config.training["group"]]
@@ -308,8 +306,8 @@ class WatchConfig:
     preflight_validation: Path
     formal_pilot: Path
     formal_training: Path
-    ledger: Path
-    ledger_groups: tuple[str, ...]
+    journal: Path
+    journal_groups: tuple[str, ...]
     config_files: tuple[Path, ...]
     worker_session: str
     monitor_session: str
@@ -371,7 +369,7 @@ class WatchConfig:
         if not isinstance(config_files_raw, list) or not config_files_raw:
             raise WatchdogError("frozen_configurations must be a non-empty list")
         config_files = tuple(_resolve(root, item) for item in config_files_raw)
-        groups = raw.get("ledger_groups")
+        groups = raw.get("journal_groups")
         preflight_required = raw.get("preflight_required", True)
         if type(preflight_required) is not bool:
             raise WatchdogError("preflight_required must be a boolean")
@@ -382,7 +380,8 @@ class WatchConfig:
             or len(groups) != len(set(groups))
         ):
             raise WatchdogError(
-                "ledger_groups require distinct allocations for the configured stages"
+                "journal_groups require distinct request groups "
+                "for the configured stages"
             )
         expected_groups = tuple(groups)
         poll_seconds = _required_int(timing, "poll_seconds")
@@ -402,8 +401,8 @@ class WatchConfig:
             preflight_validation=path_value("preflight_validation"),
             formal_pilot=path_value("formal_pilot"),
             formal_training=path_value("formal_training"),
-            ledger=path_value("ledger"),
-            ledger_groups=expected_groups,
+            journal=path_value("journal"),
+            journal_groups=expected_groups,
             config_files=config_files,
             worker_session=session,
             monitor_session=monitor_session,

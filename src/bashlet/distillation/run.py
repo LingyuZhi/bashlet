@@ -14,6 +14,7 @@ from typing import Any
 
 import yaml
 
+from bashlet.backends.journal import RequestJournal, summarize_requests
 from bashlet.config import config_record
 from bashlet.distillation import OPSDConfig, OPSDRun
 from bashlet.distillation.config import (
@@ -26,19 +27,23 @@ from bashlet.distillation.preflight import validate_preflight_evidence
 from bashlet.distillation.pytrio import PyTRIOOPSD
 from bashlet.harness.experiment import run_experiment, task_from_record
 from bashlet.harness.models import Task
-from bashlet.monitoring import MonitorConfig, RunMonitor, spend_metrics, write_document
-from bashlet.spend import SpendLedger, SpendPolicy, summarize_cost
+from bashlet.monitoring import (
+    MonitorConfig,
+    RunMonitor,
+    request_metrics,
+    write_document,
+)
 from bashlet.tasks import VERSIONED_CONVERSION, task_family, task_path, validate_task
 
 
-def _cost(
-    ledger: SpendLedger,
+def _requests(
+    journal: RequestJournal,
     group: str,
     evaluation_group: str | None = None,
     *additional_groups: str,
 ) -> dict[str, Any]:
-    snapshot = ledger.snapshot()
-    return summarize_cost(
+    snapshot = journal.snapshot()
+    return summarize_requests(
         snapshot,
         [
             e
@@ -131,22 +136,6 @@ def _training_progress(
             for kind in ("short_program", "code_edit", "workspace")
         },
     }
-
-
-def _training_budget_stop(
-    config: RunConfig,
-    run: OPSDRun,
-    batch: dict[str, Any],
-    *,
-    cash_exhausted: bool = False,
-) -> bool:
-    return bool(
-        config.stop_on_training_budget
-        and (batch["reason"] in {"budget_refused", "BudgetRefused"} or cash_exhausted)
-        and run.record["pending_update"] is None
-        and run.student.identity == run.record["student_policy"]
-        and not _cost(run.ledger, run.config.group)["pending_upper_bound_cny"]
-    )
 
 
 def _execution_limit(
@@ -250,14 +239,14 @@ def _load_training_tasks(
 def _recover_completed_visit(
     row: dict[str, Any],
     run: OPSDRun,
-) -> tuple[dict[str, Any], bool] | None:
+) -> bool:
     """Recognize an update completed before the parent saved its receipt."""
     if row["status"] != "running":
-        return None
+        return False
     index = row.get("batch_index")
     batches = run.record["batches"]
     if type(index) is not int or not 0 <= index < len(batches):
-        return None
+        return False
     batch = batches[index]
     episode = json.loads((Path(batch["episode"]) / "run.json").read_text())
     if (
@@ -265,10 +254,10 @@ def _recover_completed_visit(
         or episode["task_id"] != row["task_id"]
         or batch["student_policy"] != row.get("student_policy")
     ):
-        return None
+        return False
     _visit_receipt(row, batch)
     row.update(status="completed", recovered_completed_update=True)
-    return batch, episode.get("budget_kind") == "spend"
+    return True
 
 
 def _train(
@@ -281,12 +270,8 @@ def _train(
     config = RunConfig.read(config_path)
     condition, backend_config = resolve_condition(config)
     training = OPSDConfig(**config.training)
-    if (
-        not training.group
-        or backend_config.group != training.group
-        or backend_config.spend_config != training.spend_config
-    ):
-        raise ValueError("Pilot student and teacher must share a cash allocation")
+    if not training.group or backend_config.group != training.group:
+        raise ValueError("Student and teacher must share a request group")
     manifest = json.loads(Path(config.train_manifest).read_text())
     planned_visits = _visits(config)
     selection_sha256 = validate_training_selection(config, manifest)
@@ -301,16 +286,11 @@ def _train(
     if config.evaluation is None:
         raise ValueError("OPSD requires explicit local evaluation settings")
     monitoring.credential()
-    ledger = SpendLedger(
-        Path(config.ledger_path), policy=SpendPolicy.read(Path(training.spend_config))
+    journal = RequestJournal(
+        Path(config.journal_path) if config.journal_path else root / "requests.sqlite3"
     )
     evaluation_group = config.evaluation_group or training.group
     extra_groups = tuple(config.evaluation_groups.values())
-    if any(
-        group not in ledger.policy.groups
-        for group in (training.group, evaluation_group, *extra_groups)
-    ):
-        raise ValueError("Pilot training and evaluation need named cash allocations")
     path = root / "pilot.json"
     frozen = {
         "pilot": asdict(config),
@@ -367,7 +347,9 @@ def _train(
             "evaluation": None,
             "dev_task_ids": [t.task_id for t in dev_tasks],
             "elapsed_seconds": 0.0,
-            "cost": _cost(ledger, training.group, evaluation_group, *extra_groups),
+            "requests": _requests(
+                journal, training.group, evaluation_group, *extra_groups
+            ),
         }
         write_document(path, record)
     maximum = _execution_limit(execution_limit, config_path, config, root, record)
@@ -401,13 +383,13 @@ def _train(
     run = None
     try:
         adapter = PyTRIOOPSD(
-            backend_config, ledger=ledger, output_dir=root / "training"
+            backend_config, journal=journal, output_dir=root / "training"
         )
         run = OPSDRun(
             root / "training",
             snapshot=adapter.snapshot,
             adapter=adapter,
-            ledger=ledger,
+            journal=journal,
             config=training,
             monitoring=monitoring,
             resume=(root / "training/opsd.json").exists(),
@@ -456,24 +438,11 @@ def _train(
                 row for row in record["training_tasks"] if row["epoch"] == epoch
             ]
             for row in epoch_rows:
-                if record.get("training_stop"):
-                    break
                 task = tasks_by_id[row["task_id"]]
-                recovered = _recover_completed_visit(row, run)
-                if recovered is not None:
-                    batch, cash_exhausted = recovered
-                    if _training_budget_stop(
-                        config,
-                        run,
-                        batch,
-                        cash_exhausted=cash_exhausted,
-                    ):
-                        record["training_stop"] = "budget_refused"
+                if _recover_completed_visit(row, run):
                     record["optimizer_step"] = run.record["optimizer_step"]
                     record["training_progress"] = _training_progress(record, run, epoch)
                     write_document(path, record)
-                if record.get("training_stop"):
-                    break
                 if row["status"] == "completed":
                     continue
                 if row["status"] != "not_started":
@@ -486,7 +455,7 @@ def _train(
                     status="running",
                     batch_index=len(run.record["batches"]),
                     student_policy=run.student.identity,
-                    request_count_before_attempt=len(ledger.snapshot()["entries"]),
+                    request_count_before_attempt=len(journal.snapshot()["entries"]),
                     family_id=task_family(task),
                     task_type=task.task_type or "short_program",
                 )
@@ -511,18 +480,10 @@ def _train(
                     f"step={record['optimizer_step']}",
                     flush=True,
                 )
-                if _training_budget_stop(
-                    config, run, batch, cash_exhausted=result.budget_kind == "spend"
-                ):
-                    record["training_stop"] = "budget_refused"
-                    write_document(path, record)
-                    break
                 if row["status"] != "completed":
                     raise ValueError(
                         "Pilot visit did not complete; stop before another update"
                     )
-            if record.get("training_stop"):
-                break
             if any(row["status"] != "completed" for row in epoch_rows):
                 break
             record["epochs_completed"] = epoch
@@ -549,24 +510,6 @@ def _train(
                     optimizer_step=last["optimizer_step"],
                 )
                 if stage["status"] != "complete":
-                    last_evaluation = json.loads(
-                        Path(next(reversed(stage["runs"].values()))["path"]).read_text()
-                    )
-                    if (
-                        config.stop_on_training_budget
-                        and not _cost(
-                            ledger, training.group, evaluation_group, *extra_groups
-                        )["pending_upper_bound_cny"]
-                        and any(
-                            row.get("budget_kind") == "spend"
-                            for row in last_evaluation["tasks"]
-                        )
-                    ):
-                        record["training_stop"] = (
-                            "intermediate_evaluation_budget_refused"
-                        )
-                        write_document(path, record)
-                        break
                     raise ValueError("Intermediate checkpoint evaluation is incomplete")
             if maximum is not None and epoch * len(config.train_task_ids) >= maximum:
                 break
@@ -633,7 +576,7 @@ def _train(
             )
             and run.record["pending_update"] is None
         ):
-            snapshot = ledger.snapshot()
+            snapshot = journal.snapshot()
             for row in record["training_tasks"]:
                 if (
                     row["status"] == "running"
@@ -641,10 +584,10 @@ def _train(
                     and row.get("student_policy") == run.student.identity
                     and row.get("request_count_before_attempt")
                     == len(snapshot["entries"])
-                    and not snapshot["pending_cny"]
+                    and not snapshot["pending_count"]
                 ):
-                    # begin() can fail before sampling. The unchanged ledger
-                    # and batch count prove this visit has no paid work to replay.
+                    # begin() can fail before sampling. The unchanged journal
+                    # and batch count prove this visit has no remote work to replay.
                     row.update(
                         status="not_started",
                         recovered_unstarted_visit=True,
@@ -662,7 +605,9 @@ def _train(
         record["elapsed_seconds"] += time.monotonic() - started
         if run is not None:
             record["optimizer_step"] = run.record["optimizer_step"]
-        record["cost"] = _cost(ledger, training.group, evaluation_group, *extra_groups)
+        record["requests"] = _requests(
+            journal, training.group, evaluation_group, *extra_groups
+        )
         _decision(record)
         write_document(path, record)
         monitor = RunMonitor.resume(root / "summary")
@@ -672,7 +617,7 @@ def _train(
                 "run/status": record["status"],
                 "train/optimizer_step": record["optimizer_step"],
                 "run/reason": record["decision"]["action"],
-                **spend_metrics(record["cost"]),
+                **request_metrics(record["requests"]),
             },
         )
         for phase, point in record["development_curve"].items():
@@ -724,8 +669,8 @@ def verify_opsd_checkpoints(
     if backend_config.source != "base":
         raise ValueError("Checkpoint parameters: only Base initialization is supported")
     training = OPSDConfig(**config.training)
-    ledger = SpendLedger(
-        Path(config.ledger_path), policy=SpendPolicy.read(Path(training.spend_config))
+    journal = RequestJournal(
+        Path(config.journal_path) if config.journal_path else root / "requests.sqlite3"
     )
     path = root / "checkpoint-validation.json"
     with (root / "pilot.lock").open("a") as lock:
@@ -738,7 +683,7 @@ def verify_opsd_checkpoints(
             previous = json.loads(path.read_text())
             if not retry or previous.get("status") not in ("started", "failed"):
                 raise ValueError(
-                    "Checkpoint validation exists; do not repeat paid probes"
+                    "Checkpoint validation exists; do not repeat remote probes"
                 )
             workflow_path = root.parent / "workflow.json"
             if workflow_path.exists() and json.loads(workflow_path.read_text()).get(
@@ -748,7 +693,7 @@ def verify_opsd_checkpoints(
             training_record = json.loads((root / "training/opsd.json").read_text())
             if (
                 training_record["pending_update"] is not None
-                or ledger.snapshot()["pending_cny"]
+                or journal.snapshot()["pending_count"]
             ):
                 raise ValueError(
                     "Checkpoint retry requires settled updates and requests"
@@ -778,14 +723,14 @@ def verify_opsd_checkpoints(
         try:
             adapter = PyTRIOOPSD(
                 backend_config,
-                ledger=ledger,
+                journal=journal,
                 output_dir=root / "training",
             )
             run = OPSDRun(
                 root / "training",
                 snapshot=adapter.snapshot,
                 adapter=adapter,
-                ledger=ledger,
+                journal=journal,
                 config=training,
                 monitoring=MonitorConfig(**config.monitoring),
                 resume=True,
@@ -813,8 +758,8 @@ def verify_opsd_checkpoints(
                 record["reason"] = str(error)
         finally:
             record.update(verification_attempt=attempt, previous_attempts=history)
-            record["cost"] = _cost(
-                ledger,
+            record["requests"] = _requests(
+                journal,
                 training.group,
                 config.evaluation_group,
                 *config.evaluation_groups.values(),
@@ -822,7 +767,7 @@ def verify_opsd_checkpoints(
             write_document(path, record)
             pilot_path = root / "pilot.json"
             pilot = json.loads(pilot_path.read_text())
-            pilot["cost"] = record["cost"]
+            pilot["requests"] = record["requests"]
             pilot["checkpoint_validation"] = str(path)
             _decision(pilot)
             write_document(pilot_path, pilot)
@@ -832,7 +777,7 @@ def verify_opsd_checkpoints(
                 {
                     "run/status": record["status"],
                     "checkpoint/verified": record["status"] == "complete",
-                    **spend_metrics(record["cost"]),
+                    **request_metrics(record["requests"]),
                 },
             )
             monitor.finish()

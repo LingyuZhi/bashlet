@@ -1,4 +1,4 @@
-"""Epoch visits and checkpoint evaluation through the paid-workflow CLI seam."""
+"""Epoch visits and checkpoint evaluation through the training workflow CLI seam."""
 
 import hashlib
 import json
@@ -10,8 +10,7 @@ from test_cli import cli
 from test_mbpp import double_row, prepare
 from test_monitoring import external_sdks
 
-from bashlet import SpendLedger, SpendPolicy
-from bashlet.spend import DEFAULT_POLICY, read_spend_config
+from bashlet import RequestJournal
 
 
 @pytest.fixture
@@ -37,17 +36,6 @@ def epoch_pilot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
         "runs/tokenizers/models--Qwen--Qwen3.5-4B/snapshots/"
         "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
     ).resolve()
-    policy = read_spend_config(DEFAULT_POLICY)
-    policy["limits"]["groups"].update(
-        {
-            "epoch-train": 4,
-            "epoch-baseline": 1,
-            "epoch-middle": 1,
-            "epoch-final": 1,
-        }
-    )
-    policy_path = tmp_path / "spend.yaml"
-    policy_path.write_text(yaml.safe_dump(policy))
     pilot = tmp_path / "pilot.yaml"
     pilot.write_text(
         yaml.safe_dump(
@@ -69,15 +57,13 @@ def epoch_pilot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
                     "base_path": str(tokenizer),
                     "model": {"base_url": "http://test-double"},
                 },
-                "ledger_path": str(tmp_path / "spend.sqlite3"),
+                "journal_path": str(tmp_path / "requests.sqlite3"),
                 "backend": {
                     "tokenizer_cache_dir": str(tokenizer.parents[2]),
-                    "spend_config": str(policy_path),
                     "group": "epoch-train",
                 },
-                "training": {"spend_config": str(policy_path), "group": "epoch-train"},
+                "training": {"group": "epoch-train"},
                 "monitoring": {"group": "epoch-fixture"},
-                "stop_on_training_budget": True,
             }
         )
     )
@@ -176,12 +162,12 @@ def test_each_epoch_resamples_current_student_and_evaluates_paired_seeds(
         assert (
             before["summary"]["passed_tasks"] == after["summary"]["passed_tasks"] == 2
         )
-    cost = record["cost"]
+    requests = record["requests"]
     resumed = cli(
         "train-opsd", str(config), "--output-dir", str(root), "--resume", cwd=tmp_path
     )
     assert resumed.returncode == 0, resumed.stderr
-    assert json.loads((root / "pilot.json").read_text())["cost"] == cost
+    assert json.loads((root / "pilot.json").read_text())["requests"] == requests
 
 
 def execution_limit(config: Path, max_updates: int) -> Path:
@@ -197,6 +183,27 @@ def execution_limit(config: Path, max_updates: int) -> Path:
         )
     )
     return path
+
+
+def test_default_request_journal_uses_the_selected_run_directory(
+    epoch_pilot: tuple[Path, Path], tmp_path: Path
+) -> None:
+    config, root = epoch_pilot
+    settings = yaml.safe_load(config.read_text())
+    settings.pop("journal_path")
+    settings.update(epochs=1, train_task_ids=["mbpp/602"], evaluation_seeds=[4])
+    config.write_text(yaml.safe_dump(settings))
+    result = cli(
+        "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    record = json.loads((root / "pilot.json").read_text())
+    journal = RequestJournal(root / "requests.sqlite3")
+    assert record["requests"]["journal"] == str(journal.path)
+    assert record["training_complete"] and record["optimizer_step"] == 1
+    assert record["requests"]["request_ids"]
+    assert journal.snapshot()["pending_count"] == 0
+    assert not (tmp_path / "runs/requests.sqlite3").exists()
 
 
 def test_execution_limit_finishes_epoch_development_without_promoting_endpoint(
@@ -349,68 +356,15 @@ def test_resume_recovers_second_epoch_update_without_reusing_first_epoch_episode
         assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == digest
 
 
-def test_training_budget_stop_preserves_final_evaluation_and_reuses_same_checkpoint(
-    epoch_pilot: tuple[Path, Path],
-    tmp_path: Path,
-) -> None:
-    config, root = epoch_pilot
-    configuration = yaml.safe_load(config.read_text())
-    policy_path = Path(configuration["training"]["spend_config"])
-    policy = yaml.safe_load(policy_path.read_text())
-    policy["limits"]["groups"]["epoch-train"] = 0.7
-    policy_path.write_text(yaml.safe_dump(policy))
-    result = cli(
-        "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    record = json.loads((root / "pilot.json").read_text())
-    assert record["training_stop"] == "budget_refused"
-    assert record["optimizer_step"] == 2
-    assert record["epochs_completed"] == 1
-    assert record["evaluations"]["final"]["status"] == "complete"
-    assert record["evaluations"]["final"]["reused_from"] == "epoch-1"
-    assert (
-        record["evaluations"]["final"]["runs"]
-        == record["evaluations"]["epoch-1"]["runs"]
-    )
-    assert record["comparison"]["matched_complete"]
-    assert not record["cost"]["pending_upper_bound_cny"]
-
-
-def test_formal_run_never_promotes_budget_stopped_weights_to_main_result(
-    epoch_pilot: tuple[Path, Path], tmp_path: Path
-) -> None:
-    config, root = epoch_pilot
-    configuration = yaml.safe_load(config.read_text())
-    configuration["require_complete_training"] = True
-    config.write_text(yaml.safe_dump(configuration))
-    policy_path = Path(configuration["training"]["spend_config"])
-    policy = yaml.safe_load(policy_path.read_text())
-    policy["limits"]["groups"]["epoch-train"] = 0.7
-    policy_path.write_text(yaml.safe_dump(policy))
-    result = cli(
-        "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
-    )
-    assert result.returncode == 2, result.stdout + result.stderr
-    record = json.loads((root / "pilot.json").read_text())
-    assert record["status"] == "incomplete"
-    assert record["optimizer_step"] < 4
-    assert not record["training_complete"]
-    assert record["main_result"] is None
-    assert "final" not in record["evaluations"]
-    assert record["training_progress"]["planned_updates"] == 4
-
-
 def test_incomplete_final_seed_does_not_claim_a_complete_paired_comparison(
     epoch_pilot: tuple[Path, Path],
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config, root = epoch_pilot
-    configuration = yaml.safe_load(config.read_text())
-    policy_path = Path(configuration["training"]["spend_config"])
-    policy = yaml.safe_load(policy_path.read_text())
-    policy["limits"]["groups"]["epoch-final"] = 0.31
-    policy_path.write_text(yaml.safe_dump(policy))
+    monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL", "1")
+    monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL_PHASE", "final-eval")
+    monkeypatch.setenv("FAKE_OPSD_INTERRUPT_EVAL_SEED", "5")
     result = cli(
         "train-opsd", str(config), "--output-dir", str(root), cwd=tmp_path, timeout=90
     )
@@ -430,7 +384,7 @@ def test_incomplete_final_seed_does_not_claim_a_complete_paired_comparison(
     assert development["observed_success_lower_bound"] < 1
 
 
-def test_pending_second_epoch_update_is_retained_without_new_paid_requests(
+def test_pending_second_epoch_update_is_retained_without_new_remote_requests(
     epoch_pilot: tuple[Path, Path],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -445,12 +399,11 @@ def test_pending_second_epoch_update_is_retained_without_new_paid_requests(
     assert training["optimizer_step"] == 2
     assert training["pending_update"]["optimizer_step"] == 3
     configuration = yaml.safe_load(config.read_text())
-    ledger = SpendLedger(
-        Path(configuration["ledger_path"]),
-        policy=SpendPolicy.read(Path(configuration["training"]["spend_config"])),
+    journal = RequestJournal(
+        Path(configuration["journal_path"]),
     )
-    before = ledger.snapshot()
-    assert before["pending_cny"] > 0
+    before = journal.snapshot()
+    assert before["pending_count"] > 0
     monkeypatch.delenv("FAKE_OPTIM_FAIL_STEP")
     resumed = cli(
         "train-opsd",
@@ -462,7 +415,7 @@ def test_pending_second_epoch_update_is_retained_without_new_paid_requests(
         timeout=90,
     )
     assert resumed.returncode == 2
-    assert ledger.snapshot()["entries"] == before["entries"]
+    assert journal.snapshot()["entries"] == before["entries"]
     after = json.loads((root / "training/opsd.json").read_text())
     assert after["pending_update"] == training["pending_update"]
     assert after["optimizer_step"] == 2
@@ -553,7 +506,7 @@ def test_native_preflight_gates_an_independent_formal_run_and_reuses_its_receipt
     resumed = cli(*arguments, "--resume", cwd=tmp_path, timeout=60)
     assert resumed.returncode == 0, resumed.stdout + resumed.stderr
     after = json.loads((root / "formal/pilot.json").read_text())
-    assert after["cost"] == formal["cost"]
+    assert after["requests"] == formal["requests"]
 
 
 @pytest.mark.parametrize("thinking", [False, True])
@@ -610,11 +563,10 @@ def test_checkpoint_verification_uses_parameters_without_rescoring(
     )
     assert trained.returncode == 0, trained.stdout + trained.stderr
     updates = (tmp_path / "sdk-updates.json").read_bytes()
-    ledger = SpendLedger(
-        Path(settings["ledger_path"]),
-        policy=SpendPolicy.read(Path(settings["training"]["spend_config"])),
+    journal = RequestJournal(
+        Path(settings["journal_path"]),
     )
-    requests = ledger.snapshot()["entries"]
+    requests = journal.snapshot()["entries"]
     monkeypatch.setenv("FAKE_CHECKPOINT_SCORING_FORBIDDEN", "1")
     monkeypatch.setenv("FAKE_STUDENT_PARAMETER_DELTA", str(parameter_delta))
     verified = cli(
@@ -634,7 +586,7 @@ def test_checkpoint_verification_uses_parameters_without_rescoring(
     )
     assert proof["training_state"]["optimizer_step"] == 1
     assert proof["training_state"]["completed_state"].endswith("restored-state-0001")
-    assert ledger.snapshot()["entries"] == requests
+    assert journal.snapshot()["entries"] == requests
     assert (tmp_path / "sdk-updates.json").read_bytes() == updates
     assert not (root / "training/checkpoint-scores.json").exists()
     for obsolete in (
@@ -739,7 +691,7 @@ def test_checkpoint_retry_preserves_failure_and_does_not_repeat_updates(
     assert Path(archive["checkpoint-validation.json"]["path"]).read_bytes() == previous
     assert Path(archive["checkpoint-scores.json"]["path"]).read_bytes() == scores
     assert (tmp_path / "sdk-updates.json").read_bytes() == updates
-    # A successful proof cannot be replaced or trigger another paid probe.
+    # A successful proof cannot be replaced or trigger another remote probe.
     complete = path.read_bytes()
     rejected = cli(
         "verify-opsd",

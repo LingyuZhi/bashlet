@@ -382,7 +382,7 @@ class EpisodeResult:
     encoding: str = ""
     encoding_details: dict[str, JSONValue] = field(default_factory=dict)
     budget: InteractionBudget = field(default_factory=InteractionBudget)
-    budget_kind: Literal["interaction", "spend"] | None = None
+    budget_kind: Literal["interaction"] | None = None
     started_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     status: str = "running"
     trajectory: list[Step] = field(default_factory=list)

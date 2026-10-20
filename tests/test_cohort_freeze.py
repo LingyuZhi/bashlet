@@ -549,9 +549,7 @@ def test_training_cli_rejects_changed_frozen_subset_before_remote_work(
         "evaluation_seeds": [4, 17, 29, 41, 53],
         "evaluate_each_epoch": True,
         "require_complete_training": True,
-        "ledger_path": str(tmp_path / "spend.sqlite3"),
-        "backend": {"spend_config": str(CONFIGS / "opsd.yaml")},
-        "training": {"spend_config": str(CONFIGS / "opsd.yaml")},
+        "journal_path": str(tmp_path / "requests.sqlite3"),
     }
     config = tmp_path / "pilot.yaml"
     config.write_text(yaml.safe_dump(configuration))
@@ -560,7 +558,7 @@ def test_training_cli_rejects_changed_frozen_subset_before_remote_work(
     )
     assert process.returncode == 2
     assert "Frozen training" in process.stderr
-    assert not (tmp_path / "spend.sqlite3").exists()
+    assert not (tmp_path / "requests.sqlite3").exists()
 
 
 def test_subset_and_epoch_orders_repeat_when_pool_order_and_workers_change(

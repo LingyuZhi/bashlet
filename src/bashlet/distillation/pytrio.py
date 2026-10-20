@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 
 from bashlet.backends.encoding import QwenChatMLEncoding
+from bashlet.backends.journal import RequestJournal
 from bashlet.backends.pytrio import (
     MODEL,
     SDK_VERSION,
@@ -32,7 +33,6 @@ from bashlet.distillation import (
 )
 from bashlet.harness.models import Encoding, Model, ModelResponseError
 from bashlet.monitoring import write_document
-from bashlet.spend import DEFAULT_POLICY, SpendLedger, TokenPricing
 
 if TYPE_CHECKING:
     import pytrio as trio
@@ -54,7 +54,6 @@ class PyTRIOOPSDConfig:
     api_key_env: str = "pytrio_api_key"
     dotenv_path: str = ".env"
     group: str = "opsd-pilot"
-    spend_config: str = str(DEFAULT_POLICY)
 
     def __post_init__(self) -> None:
         if type(self.thinking) is not bool:
@@ -100,7 +99,7 @@ class PyTRIOOPSD:
         self,
         config: PyTRIOOPSDConfig,
         *,
-        ledger: SpendLedger,
+        journal: RequestJournal,
         output_dir: Path,
         service_client: Any = None,
         encoding: Encoding | None = None,
@@ -109,19 +108,15 @@ class PyTRIOOPSD:
 
         import pytrio as trio
 
-        from bashlet.spend import read_spend_config
-
         if version("pytrio") != SDK_VERSION:
             raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
-        self.config, self.ledger = config, ledger
+        self.config, self.journal = config, journal
         self.path = output_dir.resolve() / "backend.json"
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.run_id: str | None = None
-        self.pricing = TokenPricing(read_spend_config(Path(config.spend_config)))
         if service_client is None:
-            catalog = self.pricing.verify(config.base_model, config.timeout_seconds)
             trio.configure(
-                home=str(ledger.path.parent / "pytrio-sdk"),
+                home=str(journal.path.parent / "pytrio-sdk"),
                 retry_max_attempts=1,
                 control_retry_timeout_seconds=0,
                 training_retry_timeout_seconds=0,
@@ -136,10 +131,8 @@ class PyTRIOOPSD:
             service_client = trio.ServiceClient(
                 api_key=_credential(config.api_key_env, Path(config.dotenv_path))
             )
-        else:
-            catalog = None
         self.service = service_client
-        ledger.bind_account(self.service.workspace_cuid)
+        journal.bind_account(self.service.workspace_cuid)
         supported = next(
             (
                 item
@@ -194,7 +187,6 @@ class PyTRIOOPSD:
                 "sdk_version": SDK_VERSION,
                 "workspace_cuid": self.service.workspace_cuid,
                 "initial_training_run_cuid": self.client.training_run_cuid,
-                "price_catalog": catalog,
                 "updates": [],
                 "loads": [],
             }
@@ -249,8 +241,7 @@ class PyTRIOOPSD:
             model_path=path,
             encoding=self.teacher_encoding,
             service_client=self.service,
-            ledger=self.ledger,
-            spend_config=self.config.spend_config,
+            journal=self.journal,
             group=group if group is not None else self.config.group,
             timeout_seconds=self.config.timeout_seconds,
             max_retries=0,

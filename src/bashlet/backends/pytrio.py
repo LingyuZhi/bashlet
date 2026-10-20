@@ -1,4 +1,4 @@
-"""Qwen3.5-4B sampling and raw-token scoring under the shared spend guard."""
+"""Qwen3.5-4B sampling and raw-token scoring with durable request records."""
 
 import json
 import logging
@@ -9,13 +9,16 @@ import threading
 import time
 from collections.abc import Sequence
 from dataclasses import asdict, replace
-from decimal import Decimal
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Literal, cast
 
 from dotenv import dotenv_values
 
+from bashlet.backends.journal import (
+    RequestConflict,
+    RequestJournal,
+)
 from bashlet.harness.models import (
     ContextExhausted,
     Encoding,
@@ -23,13 +26,6 @@ from bashlet.harness.models import (
     JSONValue,
     ModelResponseError,
     SamplingParams,
-)
-from bashlet.spend import (
-    DEFAULT_POLICY,
-    BudgetRefused,
-    SpendLedger,
-    SpendPolicy,
-    TokenPricing,
 )
 
 MODEL = "Qwen/Qwen3.5-4B"
@@ -93,9 +89,9 @@ class _RequestIdentity(logging.Handler):
     ID must match it. Each sampling client has at most one active call here.
     """
 
-    def __init__(self, run: str, ledger: SpendLedger | None = None) -> None:
+    def __init__(self, run: str, journal: RequestJournal | None = None) -> None:
         super().__init__(logging.DEBUG)
-        self.run, self.ledger = run, ledger
+        self.run, self.journal = run, journal
         self.entry = ""
         self.sent = ""
         self.received = ""
@@ -106,9 +102,9 @@ class _RequestIdentity(logging.Handler):
             return
         if record.msg == "Sending Actor sample request task=%s request=%s actor=%s":
             self.sent = str(args[1])
-            if self.ledger is None:
+            if self.journal is None:
                 return
-            self.ledger.annotate(
+            self.journal.annotate(
                 self.entry,
                 {
                     "request_id": self.sent,
@@ -121,8 +117,10 @@ class _RequestIdentity(logging.Handler):
             == "Received Actor sample response task=%s request=%s sequences=%s actor=%s"
         ):
             self.received = str(args[1])
-            if self.ledger is not None:
-                self.ledger.annotate(self.entry, {"response_request_id": self.received})
+            if self.journal is not None:
+                self.journal.annotate(
+                    self.entry, {"response_request_id": self.received}
+                )
 
 
 class PyTRIOModel:
@@ -139,9 +137,8 @@ class PyTRIOModel:
         tokenizer_revision: str | None = None,
         tokenizer_cache_dir: str | None = None,
         thinking: bool = False,
-        ledger_path: str = "runs/spend.sqlite3",
-        spend_config: str | None = None,
-        ledger: SpendLedger | None = None,
+        journal_path: str = "runs/requests.sqlite3",
+        journal: RequestJournal | None = None,
         service_client: Any = None,
         api_key_env: str = "PYTRIO_API_KEY",
         dotenv_path: str = ".env",
@@ -150,7 +147,6 @@ class PyTRIOModel:
         retry_delay_seconds: float = 0.5,
         group: str = "pytrio-smoke",
         operation: str = "sampling",
-        probe_budget_cny: float = 0.20,
         run_id: str | None = None,
     ) -> None:
         if model != MODEL:
@@ -167,8 +163,6 @@ class PyTRIOModel:
             raise ValueError("max_retries must be a non-negative integer")
         if not math.isfinite(retry_delay_seconds) or retry_delay_seconds < 0:
             raise ValueError("retry_delay_seconds must be finite and non-negative")
-        if not math.isfinite(probe_budget_cny) or probe_budget_cny <= 0:
-            raise ValueError("probe_budget_cny must be finite and positive")
         if encoding is not None and tokenizer is not None:
             raise ValueError("Supply either encoding or tokenizer")
         if encoding is None:
@@ -184,14 +178,7 @@ class PyTRIOModel:
             )
         if version("pytrio") != SDK_VERSION:
             raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
-        policy_path = Path(spend_config) if spend_config else DEFAULT_POLICY
-        from bashlet.spend import read_spend_config
-
-        self._pricing = read_spend_config(policy_path)
-        self._prices = TokenPricing(self._pricing)
-        self.ledger = ledger or SpendLedger(
-            Path(ledger_path), policy=SpendPolicy.read(policy_path)
-        )
+        self.journal = journal or RequestJournal(Path(journal_path))
         self.model, self.encoding = model, encoding
         self.model_path = model_path
         # The SDK accepts a base alias, not a Hub commit.
@@ -200,8 +187,6 @@ class PyTRIOModel:
         self.retry_delay_seconds = retry_delay_seconds
         self.group, self.operation = group, operation
         self.run_id = run_id
-        self._probe_cap = Decimal(str(probe_budget_cny))
-        self._probe_reserved = Decimal(0)
         self._service = service_client
         self._sampler: Any = None
         self._key_env, self._dotenv = api_key_env, Path(dotenv_path)
@@ -219,9 +204,7 @@ class PyTRIOModel:
             "reference_model_revision": model_revision,
             "server_model_revision": None,
             "revision_limitation": "SDK exposes an alias, not a weight commit",
-            "probe_budget_cny": probe_budget_cny,
             "capability_probe": {"passed": False},
-            "pricing": self._pricing,
         }
 
     def describe(self) -> dict[str, JSONValue]:
@@ -230,34 +213,36 @@ class PyTRIOModel:
             json.loads(
                 json.dumps(
                     self._details
-                    | {"retry_count": self._retries, "spend": self.ledger.snapshot()}
+                    | {
+                        "retry_count": self._retries,
+                        "requests": self.journal.snapshot(),
+                    }
                 )
             ),
         )
 
-    def validate_spend_owner(
-        self, ledger: SpendLedger, group: str, run_id: str
+    def validate_request_owner(
+        self, journal: RequestJournal, group: str, run_id: str
     ) -> None:
         if (
-            self.ledger.path != ledger.path
+            self.journal.path != journal.path
             or self.group != group
             or self.run_id != run_id
         ):
-            raise ValueError("Paid student must share the OPSD ledger and sub-budget")
+            raise ValueError(
+                "Student must share the OPSD request journal, group and run"
+            )
 
     def _connect(self) -> None:
         if self._sampler is not None:
             return
         if self._service is None:
             key = _credential(self._key_env, self._dotenv)
-            self._details["live_price_catalog"] = self._prices.verify(
-                self.model, self.timeout_seconds
-            )
             import pytrio as trio
 
-            # Each explicit retry needs its own reservation.
+            # Persist each explicit retry as a separate request attempt.
             trio.configure(
-                home=str(self.ledger.path.parent / "pytrio-sdk"),
+                home=str(self.journal.path.parent / "pytrio-sdk"),
                 request_timeout_seconds=self.timeout_seconds,
                 retry_max_attempts=1,
                 control_retry_timeout_seconds=0,
@@ -290,7 +275,7 @@ class PyTRIOModel:
         if not known:
             raise ModelResponseError("PyTRIO must report a finite context limit")
         self.max_context_tokens = min(known)
-        self.ledger.bind_account(self._service.workspace_cuid)
+        self.journal.bind_account(self._service.workspace_cuid)
         arguments = {"base_model": self.model}
         if self.model_path is not None:
             arguments["model_path"] = self.model_path
@@ -324,9 +309,6 @@ class PyTRIOModel:
     ) -> tuple[Any, str, str]:
         import pytrio as trio
 
-        upper = self._prices.upper_bound(
-            len(prompt), sampling.max_tokens, scoring=scoring
-        )
         payload = {
             "model": self.model,
             "prompt_tokens": list(prompt),
@@ -339,22 +321,18 @@ class PyTRIOModel:
             payload["model_path"] = self.model_path
         with self._lock:
             for attempt in range(self.max_retries + 1):
-                probing = operation == "capability_probe"
-                if probing and self._probe_reserved + upper > self._probe_cap:
-                    raise BudgetRefused("Capability probe cash ceiling is exhausted")
-                capture = _RequestIdentity(self._sampler.sampling_run_cuid, self.ledger)
+                capture = _RequestIdentity(
+                    self._sampler.sampling_run_cuid, self.journal
+                )
                 _SDK_LOG.setLevel(logging.DEBUG)
                 _SDK_LOG.addHandler(capture)
 
                 def submit(
                     entry: str,
                     capture: _RequestIdentity = capture,
-                    probing: bool = probing,
                 ) -> Any:
-                    if probing:
-                        self._probe_reserved += upper
                     capture.entry = entry
-                    self.ledger.annotate(
+                    self.journal.annotate(
                         entry,
                         {
                             "service_session_cuid": self._service.service_session_cuid,
@@ -377,11 +355,10 @@ class PyTRIOModel:
 
                 started = time.monotonic()
                 try:
-                    value, entry = self.ledger.execute(
+                    value, entry = self.journal.execute(
                         operation=operation,
                         group=group,
                         payload=payload,
-                        upper_cny=upper,
                         submit=submit,
                         timeout=self.timeout_seconds,
                         terminal_failure=self._terminal,
@@ -391,7 +368,7 @@ class PyTRIOModel:
                             "PyTRIO did not preserve its server request identity"
                         )
                     return value, capture.received, entry
-                except (BudgetRefused, ModelResponseError, KeyboardInterrupt):
+                except (RequestConflict, ModelResponseError, KeyboardInterrupt):
                     raise
                 except Exception as error:
                     code = getattr(error, "code", type(error).__name__)
@@ -416,7 +393,7 @@ class PyTRIOModel:
                 finally:
                     _SDK_LOG.removeHandler(capture)
                     if capture.entry:
-                        self.ledger.annotate(
+                        self.journal.annotate(
                             capture.entry, {"seconds": time.monotonic() - started}
                         )
         raise RuntimeError("Unreachable retry state")
@@ -484,7 +461,7 @@ class PyTRIOModel:
             raise ModelResponseError(
                 "PyTRIO usage does not match raw token lengths", generation
             )
-        self.ledger.annotate(
+        self.journal.annotate(
             entry,
             {
                 "usage": {

@@ -327,7 +327,7 @@ class RunMonitor:
             if key.split("/", 1)[0] not in {
                 "train",
                 "eval",
-                "spend",
+                "requests",
                 "run",
                 "monitor",
                 "checkpoint",
@@ -418,8 +418,8 @@ def evaluation_metrics(record: dict[str, Any]) -> dict[str, Any]:
             datetime.fromisoformat(record["finished_at"])
             - datetime.fromisoformat(record["started_at"])
         ).total_seconds()
-    entries = record.get("snapshot_details", {}).get("spend", {}).get("entries", [])
-    request_ids = set(record["cost"].get("request_ids", []))
+    entries = record.get("snapshot_details", {}).get("requests", {}).get("entries", [])
+    request_ids = set(record["requests"].get("request_ids", []))
     usage_rows = [
         (e["evidence"].get("usage") or {}) for e in entries if e["id"] in request_ids
     ]
@@ -446,7 +446,7 @@ def evaluation_metrics(record: dict[str, Any]) -> dict[str, Any]:
             for k in sorted(outcomes | set(summary["outcomes"]))
         }
     )
-    metrics.update(spend_metrics(record["cost"]))
+    metrics.update(request_metrics(record["requests"]))
     if record.get("track") == "coding":
         for key in (
             "first_implementation_passed",
@@ -471,33 +471,11 @@ def evaluation_metrics(record: dict[str, Any]) -> dict[str, Any]:
     return metrics
 
 
-def spend_metrics(cost: dict[str, Any]) -> dict[str, Any]:
-    metrics = {
-        "spend/run_upper_cny": cost["charged_upper_bound_cny"],
-        "spend/run_pending_cny": cost["pending_upper_bound_cny"],
-        "spend/run_actual_known": cost["actual_cny"] is not None,
+def request_metrics(requests: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "requests/count": requests["count"],
+        "requests/pending_count": requests["pending_count"],
     }
-    if cost["actual_cny"] is not None:
-        metrics["spend/run_actual_cny"] = cost["actual_cny"]
-    metrics.update(
-        {
-            f"spend/{key}": cost[key]
-            for key in (
-                "project_upper_cny",
-                "project_pending_cny",
-                "funded_remaining_cny",
-                "project_remaining_cny",
-                "group_upper_cny",
-                "group_pending_cny",
-            )
-            if key in cost
-        }
-    )
-    if "project_actual_cny" in cost:
-        metrics["spend/project_actual_known"] = cost["project_actual_cny"] is not None
-        if cost["project_actual_cny"] is not None:
-            metrics["spend/project_actual_cny"] = cost["project_actual_cny"]
-    return metrics
 
 
 def import_evaluation(path: Path, output_dir: Path, config: MonitorConfig) -> None:

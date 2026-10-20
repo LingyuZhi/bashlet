@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from bashlet.backends.journal import summarize_requests
 from bashlet.backends.vllm import VLLMModel, configured_request_policy
 from bashlet.config import ExperimentConfig, config_record, load_model
 from bashlet.harness.experiment import run_experiment, serialize_task, task_from_record
@@ -20,7 +21,6 @@ from bashlet.monitoring import (
     code_revision,
     evaluation_metrics,
 )
-from bashlet.spend import summarize_cost
 from bashlet.tasks import task_family, task_path
 
 VERSION = "development-evaluation-v1"
@@ -41,7 +41,7 @@ RULES = {
     "episode_attempts": 1,
     "retry_policy": (
         "No episode retries. Only the configured bounded backend request retries; "
-        "all paid attempts use the same persistent ledger. Stop on infrastructure "
+        "all remote attempts use the same persistent journal. Stop on infrastructure "
         "failure or interruption and retain every remaining task as not_started."
     ),
 }
@@ -126,7 +126,6 @@ def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for row in rows
         if row["outcome"]
         in {"not_started", "running", "infrastructure_error", "interrupted"}
-        or row.get("budget_kind") == "spend"
     ]
     first_missing = [
         row["task_id"]
@@ -208,19 +207,19 @@ def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _cost(model: Model) -> dict[str, Any]:
+def _requests(model: Model) -> dict[str, Any]:
     details: dict[str, Any] = (
         model.describe() if isinstance(model, ModelBackend) else {}
     )
-    spend = details.get("spend", {})
+    requests = details.get("requests", {})
     entries = [
         entry
-        for entry in spend.get("entries", [])
+        for entry in requests.get("entries", [])
         if entry["evidence"].get("sampling_run_cuid")
         == details.get("sampling_run_cuid")
         and details.get("sampling_run_cuid") is not None
     ]
-    return summarize_cost(spend, entries)
+    return summarize_requests(requests, entries)
 
 
 def _episode_row(row: dict[str, Any], path: Path, episode: dict[str, Any]) -> None:
@@ -378,7 +377,7 @@ def evaluate(
         if previous["status"] == "complete":
             return path
         record, rows, comparison = previous, previous["tasks"], previous["comparison"]
-        previous_requests = set(previous["cost"]["request_ids"])
+        previous_requests = set(previous["requests"]["request_ids"])
         for row in rows:
             if row["outcome"] != "running":
                 continue
@@ -426,18 +425,19 @@ def evaluate(
             comparison["inference"] = runtime.get("inference_conditions")
         record["comparison_sha256"] = _digest(comparison)
         record["summary"] = _summary(rows)
-        record["cost"] = _cost(model)
+        record["requests"] = _requests(model)
         if previous_requests and isinstance(model, ModelBackend):
-            spend_details: dict[str, Any] = model.describe()
-            spend = spend_details.get("spend", {})
-            assert isinstance(spend, dict)
-            selected_ids = previous_requests | set(record["cost"]["request_ids"])
-            record["cost"] = summarize_cost(
-                spend, [e for e in spend.get("entries", []) if e["id"] in selected_ids]
+            request_details: dict[str, Any] = model.describe()
+            requests = request_details.get("requests", {})
+            assert isinstance(requests, dict)
+            selected_ids = previous_requests | set(record["requests"]["request_ids"])
+            record["requests"] = summarize_requests(
+                requests,
+                [e for e in requests.get("entries", []) if e["id"] in selected_ids],
             )
         _write(path, record)
 
-    save()  # All denominators are durable before any paid probe or task starts.
+    save()  # All denominators are durable before any remote probe or task starts.
     monitor = None
     active_row = None
     try:
@@ -504,14 +504,10 @@ def evaluate(
                 )
                 monitor.log(f"task-{task.task_id}", evaluation_metrics(record))
             print(f"{task.task_id}: {row['outcome']}", flush=True)
-            if (
-                row["outcome"] in {"infrastructure_error", "interrupted"}
-                or result.budget_kind == "spend"
-                or (
-                    result.first_implementation is not None
-                    and result.first_implementation.status
-                    in {"infrastructure_error", "interrupted"}
-                )
+            if row["outcome"] in {"infrastructure_error", "interrupted"} or (
+                result.first_implementation is not None
+                and result.first_implementation.status
+                in {"infrastructure_error", "interrupted"}
             ):
                 break
     except (OSError, KeyboardInterrupt) as error:

@@ -14,6 +14,12 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TextIO
 
+from bashlet.backends.journal import (
+    RemoteFuture,
+    RequestConflict,
+    RequestJournal,
+    summarize_requests,
+)
 from bashlet.config import ExperimentConfig, read_yaml
 from bashlet.distillation.supervision import validate_history
 from bashlet.harness.models import (
@@ -33,17 +39,8 @@ from bashlet.monitoring import (
     MonitorConfig,
     RunMonitor,
     code_revision,
-    spend_metrics,
+    request_metrics,
     write_document,
-)
-from bashlet.spend import (
-    DEFAULT_POLICY,
-    BudgetRefused,
-    RemoteFuture,
-    SpendLedger,
-    TokenPricing,
-    read_spend_config,
-    summarize_cost,
 )
 from bashlet.tasks import validate_training_task
 
@@ -82,7 +79,6 @@ class OPSDConfig:
     timeout_seconds: float = 180
     max_context_tokens: int = 32768
     group: str = "opsd-pilot"
-    spend_config: str = str(DEFAULT_POLICY)
 
     @classmethod
     def read(cls, path: Path) -> OPSDConfig:
@@ -199,8 +195,8 @@ class _Student:
         from bashlet.backends.pytrio import PyTRIOModel
 
         if isinstance(self.model, PyTRIOModel):
-            self.model.validate_spend_owner(
-                self.run.ledger, self.run.config.group, self.run.record["run_id"]
+            self.model.validate_request_owner(
+                self.run.journal, self.run.config.group, self.run.record["run_id"]
             )
             generation = self.model.sample(prompt, sampling)
             self.run.calls.append((tuple(prompt), sampling, generation))
@@ -212,7 +208,6 @@ class _Student:
                 "prompt_tokens": list(prompt),
                 "sampling": asdict(sampling),
             },
-            self.run.pricing.upper_bound(len(prompt), sampling.max_tokens),
             lambda: _SampleFuture(lambda: self.model.sample(prompt, sampling)),
         )
         self.run.calls.append((tuple(prompt), sampling, generation))
@@ -235,7 +230,7 @@ class _Student:
 
 
 class OPSDRun:
-    """One episode per rollout batch, sharing policy progress, spend and monitoring.
+    """One episode per rollout batch, sharing progress, requests and monitoring.
 
     Use ``run_experiment(model=run.student, opsd_run=run, ...)``. Each call keeps
     its real episode and independent grade. Only sampled-token probabilities
@@ -248,7 +243,7 @@ class OPSDRun:
         *,
         snapshot: InitialSnapshot,
         adapter: OPSDAdapter,
-        ledger: SpendLedger,
+        journal: RequestJournal,
         monitoring: MonitorConfig,
         config: OPSDConfig | None = None,
         resume: bool = False,
@@ -258,9 +253,8 @@ class OPSDRun:
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = self.root / "opsd.json"
         self._lockfile: TextIO | None = None
-        self.snapshot, self.adapter, self.ledger = snapshot, adapter, ledger
+        self.snapshot, self.adapter, self.journal = snapshot, adapter, journal
         self.config, self.monitoring = config, monitoring
-        self.pricing = TokenPricing(read_spend_config(Path(config.spend_config)))
         self.calls: list[tuple[tuple[int, ...], SamplingParams, Generation]] = []
         self.monitor: RunMonitor | None = None
         self.record: dict[str, Any] = {
@@ -275,7 +269,7 @@ class OPSDRun:
             "pending_update": None,
             "batches": [],
             "status": "ready",
-            "ledger": str(ledger.path),
+            "journal": str(journal.path),
             "last_update": None,
             "encoding_details": self.student.encoding.describe(),
         }
@@ -287,10 +281,10 @@ class OPSDRun:
                 previous = json.loads(self.path.read_text())
                 if any(
                     previous.get(key) != self.record[key]
-                    for key in ("schema_version", "snapshot", "config", "ledger")
+                    for key in ("schema_version", "snapshot", "config", "journal")
                 ):
                     raise ValueError(
-                        "OPSD resume must preserve configuration, snapshot and ledger"
+                        "OPSD resume must preserve configuration, snapshot and journal"
                     )
                 if previous["pending_update"] is not None:
                     raise ValueError(
@@ -424,7 +418,6 @@ class OPSDRun:
         self,
         operation: str,
         payload: dict[str, Any],
-        upper: object,
         submit: Callable[[], RemoteFuture[T]],
     ) -> T:
         started = time.monotonic()
@@ -440,7 +433,7 @@ class OPSDRun:
                 if operation == "teacher_scoring"
                 else payload["input_tokens"]
             )
-            self.ledger.annotate(
+            self.journal.annotate(
                 entry,
                 {
                     "run_id": self.record["run_id"],
@@ -450,17 +443,16 @@ class OPSDRun:
             if operation == "opsd_update":
                 self.record["pending_update"] = {
                     "optimizer_step": payload["optimizer_step"],
-                    "ledger_request": entry,
+                    "journal_request": entry,
                 }
                 write_document(self.path, self.record)
             return submit()
 
         try:
-            result, entry = self.ledger.execute(
+            result, entry = self.journal.execute(
                 operation=operation,
                 group=self.config.group,
                 payload=payload | {"run_id": self.record["run_id"]},
-                upper_cny=upper,
                 submit=guarded_submit,
                 timeout=self.config.timeout_seconds,
                 terminal_failure=lambda error: isinstance(
@@ -469,7 +461,7 @@ class OPSDRun:
             )
         except ModelResponseError as error:
             if submitted is not None and error.generation is not None:
-                self.ledger.annotate(
+                self.journal.annotate(
                     submitted,
                     {
                         "usage": {"output_tokens": len(error.generation.tokens)},
@@ -480,13 +472,15 @@ class OPSDRun:
             ) from None
         except ContextExhausted:
             raise ContextExhausted("Sampling context exhausted") from None
-        except (UpdateRejected, BudgetRefused):
+        except (UpdateRejected, RequestConflict):
             raise
         except Exception as error:
             raise _RemoteFailure(error) from None
         finally:
             if submitted is not None:
-                self.ledger.annotate(submitted, {"seconds": time.monotonic() - started})
+                self.journal.annotate(
+                    submitted, {"seconds": time.monotonic() - started}
+                )
         usage: dict[str, int] = {}
         if isinstance(result, Generation):
             usage = {
@@ -497,7 +491,7 @@ class OPSDRun:
             usage = {"input_tokens": len(payload["tokens"])}
         elif isinstance(result, UpdateResult):
             usage = {"input_tokens": payload["input_tokens"]}
-        self.ledger.annotate(
+        self.journal.annotate(
             entry,
             {
                 "run_id": self.record["run_id"],
@@ -521,8 +515,6 @@ class OPSDRun:
                 "tokens": list(tokens),
                 "target_start": target_start,
             },
-            # SDK 0.2.9 implements scoring with an extra one-token decode.
-            self.pricing.upper_bound(len(tokens), 1, scoring=True),
             partial(self.adapter.score, tokens),
         )
         # Preserve rejected responses locally before any identity/alignment check.
@@ -543,19 +535,19 @@ class OPSDRun:
             )
         return scores
 
-    def _cost(self) -> dict[str, Any]:
-        snapshot = self.ledger.snapshot()
+    def _requests(self) -> dict[str, Any]:
+        snapshot = self.journal.snapshot()
         entries = [
             e
             for e in snapshot["entries"]
             if e["evidence"]["payload"].get("run_id") == self.record["run_id"]
         ]
-        return summarize_cost(snapshot, entries)
+        return summarize_requests(snapshot, entries)
 
     def _usage_metrics(self) -> dict[str, Any]:
         entries = [
             e
-            for e in self.ledger.snapshot()["entries"]
+            for e in self.journal.snapshot()["entries"]
             if e["evidence"]["payload"].get("run_id") == self.record["run_id"]
         ]
         metrics: dict[str, Any] = {}
@@ -633,10 +625,6 @@ class OPSDRun:
                 raise ValueError(
                     f"Episode cannot supply valid supervision: {result.status}"
                 )
-            if result.budget_kind == "spend" and not result.trajectory:
-                raise BudgetRefused(
-                    "No rollout fits within the remaining cash allocation"
-                )
             validate_history(asdict(result), task, model.encoding, condition.protocol)
             if result.policy != self.record["student_policy"] or not result.trajectory:
                 raise ValueError("Trajectory has no current-student sampling evidence")
@@ -687,7 +675,6 @@ class OPSDRun:
                     ).hexdigest(),
                     "input_tokens": len(datum.model_input.to_ints()),
                 },
-                self.pricing.training_bound(len(datum.model_input.to_ints())),
                 lambda: self.adapter.update(
                     [datum],
                     loss_fn="importance_sampling",
@@ -720,8 +707,8 @@ class OPSDRun:
             if refreshed.identity != update.student_policy:
                 raise ValueError("Refreshed sampler differs from the completed update")
             self._roles()
-        except BudgetRefused:
-            batch.update(status="rejected", reason="budget_refused")
+        except RequestConflict as error:
+            batch.update(status="rejected", reason=str(error))
         except UpdateRejected as error:
             self.record["pending_update"] = None
             batch.update(
@@ -755,7 +742,7 @@ class OPSDRun:
                 self._release_lock()
 
     def _publish_batch(self, batch: dict[str, Any]) -> None:
-        batch["cost"] = self._cost()
+        batch["requests"] = self._requests()
         self.record["status"] = batch["status"]
         write_document(self.path, self.record)
         if self.monitor is not None:
@@ -775,7 +762,7 @@ class OPSDRun:
                 ),
                 "run/status": batch["status"],
                 "run/reason": batch["reason"],
-                **spend_metrics(batch["cost"]),
+                **request_metrics(batch["requests"]),
                 **self._usage_metrics(),
             }
             metrics["train/sampling_seconds"] = metrics["train/rollout_seconds"]

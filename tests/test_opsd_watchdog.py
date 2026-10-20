@@ -41,11 +41,11 @@ def _fixture(tmp_path: Path, *, proof_status: str = "complete") -> dict[str, Any
 
     run_root = root / "runs" / "issue32"
     monitor_root = run_root / "monitor"
-    ledger = root / "runs" / "spend.sqlite3"
-    ledger.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(ledger) as connection:
+    journal = root / "runs" / "requests.sqlite3"
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(journal) as connection:
         connection.execute(
-            "CREATE TABLE requests (id TEXT, budget_group TEXT, state TEXT)"
+            "CREATE TABLE requests (id TEXT, request_group TEXT, state TEXT)"
         )
 
     configuration_hashes = {
@@ -59,7 +59,7 @@ def _fixture(tmp_path: Path, *, proof_status: str = "complete") -> dict[str, Any
         "preflight_validation": "runs/issue32/preflight/checkpoint-validation.json",
         "formal_pilot": "runs/issue32/formal/pilot.json",
         "formal_training": "runs/issue32/formal/training/opsd.json",
-        "ledger": "runs/spend.sqlite3",
+        "journal": "runs/requests.sqlite3",
     }
     monitor_config = {
         "schema_version": 1,
@@ -75,7 +75,7 @@ def _fixture(tmp_path: Path, *, proof_status: str = "complete") -> dict[str, Any
             "configs/opsd-expanded-v1.yaml",
             "configs/opsd-expanded-preflight-v1.yaml",
         ],
-        "ledger_groups": [
+        "journal_groups": [
             "opsd-expanded-preflight-v1",
             "opsd-expanded-train-v1",
             "opsd-expanded-dev-v1",
@@ -168,7 +168,7 @@ def _fixture(tmp_path: Path, *, proof_status: str = "complete") -> dict[str, Any
         "service_state": service_state,
         "tmux_log": tmux_log,
         "fake_bin": fake_bin,
-        "ledger": ledger,
+        "journal": journal,
         "worker_log": worker_log,
         "preflight": preflight,
         "configuration_hashes": configuration_hashes,
@@ -273,9 +273,9 @@ def test_frozen_configuration_drift_blocks_before_resume(tmp_path: Path) -> None
     )
 
 
-def test_pending_ledger_request_blocks_a_dead_worker_restart(tmp_path: Path) -> None:
+def test_pending_journal_request_blocks_a_dead_worker_restart(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
-    with sqlite3.connect(fixture["ledger"]) as connection:
+    with sqlite3.connect(fixture["journal"]) as connection:
         connection.execute(
             "INSERT INTO requests VALUES (?, ?, ?)",
             ("request-in-flight", "opsd-expanded-preflight-v1", "pending"),
@@ -525,10 +525,10 @@ def test_isolation_failure_retry_requires_evidence_before_model_calls(
 
 @pytest.mark.parametrize(
     "damage",
-    [None, "pending", "update", "released_ceiling", "payload_mismatch"],
+    [None, "pending", "update", "fingerprint_mismatch", "payload_mismatch"],
 )
 @pytest.mark.parametrize("operation", ["sampling", "capability_probe"])
-def test_sampling_transport_failure_requires_explicit_cost_preserving_reconciliation(
+def test_sampling_transport_recovery_preserves_request_identity(
     tmp_path: Path,
     damage: str | None,
     operation: str,
@@ -560,7 +560,7 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
     _write_json(episode_path, episode)
     training_path = root / "formal/training/opsd.json"
     training = json.loads(training_path.read_text())
-    training.update(ledger=str(fixture["ledger"]), run_id="training-run")
+    training.update(journal=str(fixture["journal"]), run_id="training-run")
     training["batches"][3].update(
         interaction_steps=0 if probe else 5,
         reason="Episode cannot supply valid supervision: infrastructure_error",
@@ -581,7 +581,6 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
             "response_abandoned": True,
             "remote_outcome": "unknown",
             "update_submitted": False,
-            "full_ceiling_retained": True,
         },
     )
     pending: dict[str, Any] = {
@@ -589,8 +588,6 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
         "operation": operation,
         "state": "pending",
         "fingerprint": "original-sampling",
-        "upper_micros": 40000,
-        "charged_micros": 0,
         "evidence": json.dumps(
             {
                 "request_id": "remote-sample",
@@ -629,27 +626,23 @@ def test_sampling_transport_failure_requires_explicit_cost_preserving_reconcilia
         "remote_outcome": "unknown",
         "response_will_not_be_used": True,
     }
-    with sqlite3.connect(fixture["ledger"]) as connection:
+    with sqlite3.connect(fixture["journal"]) as connection:
         for column in (
             "operation TEXT",
-            "upper_micros INTEGER",
-            "charged_micros INTEGER",
-            "billing_basis TEXT",
             "fingerprint TEXT",
             "evidence TEXT",
         ):
             connection.execute("ALTER TABLE requests ADD COLUMN " + column)
         connection.execute(
-            "INSERT INTO requests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO requests VALUES (?, ?, ?, ?, ?, ?)",
             (
                 "discarded-sample",
                 "opsd-expanded-train-v1",
                 "pending" if damage == "pending" else "failed",
                 "opsd_update" if damage == "update" else operation,
-                40000,
-                0 if damage == "released_ceiling" else 40000,
-                "upper_bound",
-                "original-sampling",
+                "changed-sampling"
+                if damage == "fingerprint_mismatch"
+                else "original-sampling",
                 json.dumps(evidence),
             ),
         )

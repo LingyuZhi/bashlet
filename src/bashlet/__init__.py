@@ -1,6 +1,7 @@
 """The shared small-experiment interface for bashlet."""
 
 from bashlet.backends.encoding import QwenChatMLEncoding
+from bashlet.backends.journal import RequestConflict, RequestJournal
 from bashlet.backends.pytrio import PyTRIOModel
 from bashlet.backends.replay import ReplayModel, Utf8Encoding
 from bashlet.backends.vllm import VLLMModel
@@ -28,13 +29,12 @@ from bashlet.harness.models import (
     TaskOrigin,
 )
 from bashlet.harness.protocol import PROTOCOL_SHA256, PROTOCOL_VERSION
-from bashlet.spend import BudgetRefused, SpendLedger, SpendPolicy
 
 __all__ = [
     "PROTOCOL_SHA256",
     "PROTOCOL_VERSION",
     "Bash",
-    "BudgetRefused",
+    "RequestConflict",
     "CommandGrader",
     "ContextExhausted",
     "DecodedReply",
@@ -54,8 +54,7 @@ __all__ = [
     "PyTRIOModel",
     "ReplayModel",
     "SamplingParams",
-    "SpendLedger",
-    "SpendPolicy",
+    "RequestJournal",
     "Task",
     "TaskOrigin",
     "Utf8Encoding",

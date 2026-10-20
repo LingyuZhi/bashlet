@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Invoke from the repository root, after loading the recorded CUDA module.
+# Start vLLM with the configured model and service options.
 cd "$(dirname "$0")/.."
 service_config="${1:-runs/local-vllm/serve.yaml}"
 if (( $# == 0 )); then

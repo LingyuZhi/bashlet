@@ -161,10 +161,16 @@ def _server(config: dict[str, Any], manifest: Path) -> None:
         )
         path = root / f"serve-{identity}.yaml"
         path.write_text(yaml.safe_dump(template))
-        command = (
+        setup = (
             "source /etc/profile\nmodule load "
             + shlex.quote(server["cuda_module"])
-            + "\nexec bash scripts/serve-local-vllm.sh "
+            + "\n"
+            if server.get("cuda_module")
+            else ""
+        )
+        command = (
+            setup
+            + "exec bash scripts/serve-local-vllm.sh "
             + shlex.quote(str(path))
             + " >> "
             + shlex.quote(str(root / "server.log"))

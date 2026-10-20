@@ -377,7 +377,6 @@ def test_training_cli_rejects_old_dev_even_when_its_candidate_is_not_sampled(
     prepared_tasks: Path,
 ) -> None:
     pilot = tmp_path / "pilot.yaml"
-    policy = str(CONFIGS / "opsd.yaml")
     pilot.write_text(
         yaml.safe_dump(
             {
@@ -385,8 +384,6 @@ def test_training_cli_rejects_old_dev_even_when_its_candidate_is_not_sampled(
                 "train_task_ids": ["fixture/sign-runs"],
                 "dev_plan": str(prepared_tasks / "harness-dev.json"),
                 "condition": [],
-                "backend": {"spend_config": policy},
-                "training": {"spend_config": policy},
             }
         )
     )
@@ -399,7 +396,7 @@ def test_training_cli_rejects_old_dev_even_when_its_candidate_is_not_sampled(
     )
     assert process.returncode == 2, process.stdout + process.stderr
     assert "disjoint" in process.stderr
-    assert not (tmp_path / "spend.sqlite3").exists()
+    assert not (tmp_path / "requests.sqlite3").exists()
 
 
 def test_new_development_cli_records_current_roles_and_original_splits(
