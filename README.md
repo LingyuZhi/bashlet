@@ -119,7 +119,7 @@ bash scripts/serve-local-vllm.sh
 
 OPSD 从原始指令模型开始，学生更新，特权教师冻结。训练使用 PyTRIO，评测使用本地 vLLM。
 
-`configs/` 只包含两份默认配置：[defaults.yaml](configs/defaults.yaml) 定义 Harness、协议和沙箱；[opsd.yaml](configs/opsd.yaml) 汇总训练、评测、数据质量检查与费用策略。配置中的路径相对声明它的 YAML 文件解析。本地 tokenizer 路径使用 `./` 或 `../` 前缀，Hub 模型名保持原样。先按[数据准备说明](docs/data-preparation.md)生成数据，再准备模型权重与服务环境，并按实际资源调整配置。
+`configs/` 只包含两份默认配置：[defaults.yaml](configs/defaults.yaml) 定义 Harness、协议和沙箱；[opsd.yaml](configs/opsd.yaml) 汇总训练、评测、数据质量检查与费用策略。配置中的路径相对声明它的 YAML 文件解析。本地 tokenizer 路径使用 `./` 或 `../` 前缀，Hub 模型名保持原样。先准备数据、模型权重与服务环境，再按实际资源调整该配置。
 
 ```bash
 uv run --locked bashlet train-opsd configs/opsd.yaml
@@ -134,7 +134,7 @@ uv run --locked bashlet watch-opsd --config configs/opsd.yaml
 | --- | --- | --- |
 | 准备 MBPP 任务 | `prepare-mbpp --source-lock data/sources.json` | [来源定义](data/sources.json) |
 | 导入公开任务 | `import-public-tasks data/sources.json --catalog public-python`（或 `p3`） | [来源与导入计划](data/sources.json) |
-| 验证和冻结混合任务集 | `prepare-harness --cohort data/cohort.json` | [任务划分](data/cohort.json)、[准备说明](docs/data-preparation.md) |
+| 验证和冻结混合任务集 | `prepare-harness --cohort data/cohort.json` | [任务划分](data/cohort.json) |
 | 导出保存的权重 | `export-snapshot` | 使用 OPSD 运行中的 `training/` 目录 |
 | 准备本地模型 | `prepare-local-snapshot` | 基模与导出的 adapter |
 | 独立任务评测 | `evaluate` | 固定任务清单与已验证的本地模型 |
@@ -153,7 +153,3 @@ uv run --locked pytest
 ```
 
 测试需要可用的 Bubblewrap namespaces，以及测试所用的 Qwen tokenizer 本地缓存。
-
----
-
-项目术语见 [CONTEXT.md](CONTEXT.md)，架构决策见 [docs/adr/](docs/adr/)。

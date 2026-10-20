@@ -13,8 +13,7 @@ wheels/
 .scratch
 
 # Developing Docs
-docs/*
-!docs/data-preparation.md
+/docs/
 
 # Agent-assistant docs
 AGENTS.md
