@@ -185,9 +185,9 @@ class PyTRIOModel:
         if version("pytrio") != SDK_VERSION:
             raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
         policy_path = Path(spend_config) if spend_config else DEFAULT_POLICY
-        from bashlet.config import read_yaml
+        from bashlet.spend import read_spend_config
 
-        self._pricing = read_yaml(policy_path)
+        self._pricing = read_spend_config(policy_path)
         self._prices = TokenPricing(self._pricing)
         self.ledger = ledger or SpendLedger(
             Path(ledger_path), policy=SpendPolicy.read(policy_path)

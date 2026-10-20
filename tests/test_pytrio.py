@@ -409,20 +409,21 @@ def test_invalid_paid_evidence_is_charged_but_never_executed(
 
 
 @pytest.mark.parametrize("missing", ["prefill", "billing_quantum_cny"])
+@pytest.mark.parametrize("embedded", [False, True])
 def test_unknown_prices_refuse_even_the_first_paid_probe(
-    tmp_path: Path, missing: str
+    tmp_path: Path, missing: str, embedded: bool
 ) -> None:
     import yaml
 
-    from bashlet.spend import DEFAULT_POLICY
+    from bashlet.spend import DEFAULT_POLICY, read_spend_config
 
-    data = yaml.safe_load(DEFAULT_POLICY.read_text())
+    data = read_spend_config(DEFAULT_POLICY)
     if missing == "prefill":
         data["prices_cny_per_million"][missing] = None
     else:
         data[missing] = None
     policy_file = tmp_path / "unknown-prices.yaml"
-    policy_file.write_text(yaml.safe_dump(data))
+    policy_file.write_text(yaml.safe_dump({"spend": data} if embedded else data))
     sdk = FakeSampling([response([65])])
     ledger = SpendLedger(tmp_path / "spend.sqlite3", policy=SpendPolicy(funded_cny=10))
     result = run_experiment(

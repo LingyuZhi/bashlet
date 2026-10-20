@@ -16,10 +16,21 @@ from typing import Any, Protocol
 import httpx
 
 _MICROS = 1_000_000
-DEFAULT_POLICY = Path(__file__).with_name("configs") / "spend.yaml"
-_SOURCE_POLICY = Path(__file__).resolve().parents[2] / "configs" / "spend.yaml"
+DEFAULT_POLICY = Path(__file__).with_name("configs") / "opsd.yaml"
+_SOURCE_POLICY = Path(__file__).resolve().parents[2] / "configs" / "opsd.yaml"
 if _SOURCE_POLICY.is_file():
     DEFAULT_POLICY = _SOURCE_POLICY
+
+
+def read_spend_config(path: Path) -> dict[str, Any]:
+    """Read a standalone policy or the spend section of an experiment."""
+    from bashlet.config import read_yaml
+
+    data = read_yaml(path)
+    policy = data.get("spend", data)
+    if not isinstance(policy, dict):
+        raise ValueError("spend must be a mapping")
+    return policy
 
 
 class BudgetRefused(Exception):
@@ -54,9 +65,7 @@ class SpendPolicy:
 
     @classmethod
     def read(cls, path: Path) -> "SpendPolicy":
-        from bashlet.config import read_yaml
-
-        data = read_yaml(path)
+        data = read_spend_config(path)
         return cls(**data["limits"])
 
     def validate(self) -> None:
@@ -653,7 +662,7 @@ class TokenPricing:
                 str(price["unit_price"])
             ) / 100 > Decimal(str(configured[local])):
                 raise BudgetRefused(
-                    "Live prices exceed the configured ceilings; review spend.yaml"
+                    "Live prices exceed the ceilings; review the spend policy"
                 )
         return {
             "version": catalog["version"],

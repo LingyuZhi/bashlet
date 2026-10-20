@@ -25,8 +25,21 @@ def replay_config(tmp_path: Path, replies: list[str]) -> Path:
 def cli(
     *arguments: str, cwd: Path, timeout: float = 20
 ) -> subprocess.CompletedProcess[str]:
+    command = [sys.executable, "-m", "bashlet", *arguments]
+    source_configs = os.environ.get("BASHLET_TEST_SOURCE_DATA")
+    if source_configs:
+        # Keep synthetic sources in the test process and its CLI children.
+        bootstrap = (
+            "import runpy, sys; from pathlib import Path; "
+            "from bashlet.tasks import preparation, sources; "
+            "sources._DATA = Path(sys.argv.pop(1)); "
+            "sources.SOURCE_REGISTRY = sources._DATA / 'sources.json'; "
+            "preparation.SOURCE_REGISTRY = sources.SOURCE_REGISTRY; "
+            "runpy.run_module('bashlet', run_name='__main__')"
+        )
+        command = [sys.executable, "-c", bootstrap, source_configs, *arguments]
     return subprocess.run(
-        [sys.executable, "-m", "bashlet", *arguments],
+        command,
         cwd=cwd,
         env=os.environ | {"NO_COLOR": "1"},
         capture_output=True,

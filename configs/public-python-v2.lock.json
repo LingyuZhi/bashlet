@@ -1,7 +1,0 @@
-{
-  "dataset": "bashlet/public-python",
-  "revision": "public-python-v2-20261009",
-  "sha256": "76fa23f7f45bbac2e54c2d69f91e4ba78776ed71fba4ca9628a22608894c414e",
-  "file": "../runs/issue31-public-catalog-v2-20261009/private/catalog.json",
-  "conversion": "public-python-v2"
-}

@@ -11,7 +11,7 @@ import signal
 import sqlite3
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -175,9 +175,10 @@ def _ledger_state(config: WatchConfig) -> tuple[dict[str, int], dict[str, int]]:
             config.ledger.as_uri() + "?mode=ro", uri=True, timeout=2
         )
         connection.execute("PRAGMA query_only = ON")
+        placeholders = ", ".join("?" for _ in groups)
         rows = connection.execute(
             "SELECT budget_group, state, COUNT(*) FROM requests "
-            "WHERE budget_group IN (?, ?, ?) GROUP BY budget_group, state",
+            f"WHERE budget_group IN ({placeholders}) GROUP BY budget_group, state",
             groups,
         ).fetchall()
     except sqlite3.Error:
@@ -349,6 +350,8 @@ def _formal_complete(pilot: dict[str, Any], training: dict[str, Any] | None) -> 
 
 
 def _inspect_evidence(config: WatchConfig) -> EvidenceState:
+    if not config.preflight_required:
+        return _inspect_direct_evidence(config)
     workflow = _read_object(config.workflow)
     if workflow is None:
         return EvidenceState("blocked", "workflow record is missing", None, None, 0, {})
@@ -439,6 +442,81 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             "resume", "preflight evidence permits the existing --resume workflow"
         )
 
+    return _inspect_formal(
+        config, workflow_status, workflow_stage, pending_count, counts
+    )
+
+
+def _inspect_direct_evidence(config: WatchConfig) -> EvidenceState:
+    """Use the training journal itself when no separate preflight is configured."""
+    from bashlet.config import config_record
+    from bashlet.distillation.config import RunConfig, resolve_condition
+
+    def blocked(reason: str) -> EvidenceState:
+        return EvidenceState("blocked", reason, None, "formal", 0, {})
+
+    pilot = _read_object(config.formal_pilot)
+    if pilot is None:
+        return blocked("formal pilot record is missing")
+    try:
+        run = RunConfig.read(config.config_files[0])
+        expected = {
+            "pilot": asdict(run),
+            "condition": config_record(resolve_condition(run)[0]),
+            "dev_plan_sha256": _sha256(Path(run.dev_plan)),
+            "train_manifest_sha256": _sha256(Path(run.train_manifest)),
+        }
+        if run.training_selection:
+            expected["training_selection_sha256"] = _sha256(
+                Path(run.training_selection)
+            )
+        if run.preflight_evidence:
+            expected["preflight_sha256"] = _sha256(Path(run.preflight_evidence))
+        if pilot.get("configuration") != json.loads(json.dumps(expected)):
+            return blocked("frozen configuration or data changed")
+    except (OSError, ValueError, TypeError, KeyError):
+        return blocked("frozen configuration or data is unreadable")
+    status = pilot.get("status")
+    if status not in {
+        "preflight",
+        "running",
+        "incomplete",
+        "interrupted",
+        "failed",
+        "complete",
+    }:
+        return blocked("formal status is not recognized")
+    counts, pending = _ledger_state(config)
+    pending_count = sum(pending.values())
+    if pending_count:
+        return EvidenceState(
+            "blocked",
+            "a related spend-ledger request is pending",
+            status,
+            "formal",
+            pending_count,
+            counts,
+        )
+    return _inspect_formal(
+        config, "complete" if status == "complete" else "formal", "formal", 0, counts
+    )
+
+
+def _inspect_formal(
+    config: WatchConfig,
+    workflow_status: str,
+    workflow_stage: str,
+    pending_count: int,
+    counts: dict[str, int],
+) -> EvidenceState:
+    def result(kind: str, reason: str) -> EvidenceState:
+        return EvidenceState(
+            kind, reason, workflow_status, workflow_stage, pending_count, counts
+        )
+
+    formal_groups = (
+        config.ledger_groups[1:] if config.preflight_required else config.ledger_groups
+    )
     formal = _read_object(config.formal_pilot)
     formal_training = _read_object(config.formal_training)
     if formal is None:
@@ -446,7 +524,7 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             return result(
                 "blocked", "workflow failure requires explicit reconciliation"
             )
-        if sum(counts.get(group, 0) for group in config.ledger_groups[1:]):
+        if sum(counts.get(group, 0) for group in formal_groups):
             return result(
                 "blocked", "formal pilot record is missing after related work started"
             )
@@ -473,7 +551,7 @@ def _inspect_evidence(config: WatchConfig) -> EvidenceState:
             return result("blocked", problem)
     elif formal.get("status") == "complete":
         return result("blocked", "completed formal run has no training-state record")
-    elif sum(counts.get(group, 0) for group in config.ledger_groups[1:]):
+    elif sum(counts.get(group, 0) for group in formal_groups):
         return result(
             "blocked", "formal run has ledger activity but no training-state record"
         )

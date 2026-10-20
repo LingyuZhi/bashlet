@@ -207,6 +207,11 @@ def _parser() -> argparse.ArgumentParser:
     checkpoint_eval.add_argument("evaluation_config", type=Path)
     checkpoint_eval.add_argument("--phase", default="baseline")
     checkpoint_eval.add_argument("--run-dir", type=Path)
+    vllm_config = commands.add_parser(
+        "write-vllm-config", help="Write the configured local vLLM service YAML"
+    )
+    vllm_config.add_argument("experiment_config", type=Path)
+    vllm_config.add_argument("--output", type=Path, required=True)
     prepare = commands.add_parser(
         "prepare-mbpp", help="Import pinned MBPP and validate references in isolation"
     )
@@ -220,12 +225,20 @@ def _parser() -> argparse.ArgumentParser:
     harness_tasks.add_argument("--cohort", type=Path, default=DEFAULT_COHORT)
     harness_tasks.add_argument("--workers", type=int, default=1)
     harness_tasks.add_argument("--collect-quality", action="store_true")
+    harness_tasks.add_argument(
+        "--artifact-root",
+        type=Path,
+        help="Catalog and audit root (default: runs/data beside the data definitions)",
+    )
     _execution_options(harness_tasks)
     public_tasks = commands.add_parser(
         "import-public-tasks",
         help="Convert pinned public Python tasks to a private catalog",
     )
     public_tasks.add_argument("plan", type=Path)
+    public_tasks.add_argument(
+        "--catalog", help="Import plan in sources.json, for example public-python or p3"
+    )
     public_tasks.add_argument("--source-dir", type=Path)
     public_tasks.add_argument("--output-dir", type=Path, required=True)
     opsd = commands.add_parser("train-opsd", help="Run a bounded, paired OPSD pilot")
@@ -469,14 +482,22 @@ def main() -> None:
             record = json.loads(path.read_text())
             print(f"{record['status']}\n{path}")
             raise SystemExit(0 if record["status"] == "complete" else 2)
+        if options.command == "write-vllm-config":
+            from bashlet.evaluation.checkpoints import write_vllm_config
+
+            print(write_vllm_config(options.experiment_config, options.output))
+            return
         if options.command == "prepare-harness":
             manifest = prepare_harness(
                 mbpp_manifest=options.mbpp_manifest,
                 cohort_path=options.cohort,
                 workers=options.workers,
                 collect_quality=options.collect_quality,
+                artifact_root=options.artifact_root,
                 output_dir=options.output_dir,
-                config=load_config(options.config, options.overrides),
+                config=load_config(
+                    options.config, options.overrides, section="preparation"
+                ),
             )
             print(manifest)
             return
@@ -488,6 +509,7 @@ def main() -> None:
                     plan_path=options.plan,
                     source_dir=options.source_dir,
                     output_dir=options.output_dir,
+                    catalog=options.catalog,
                 )
             )
             return
@@ -496,7 +518,9 @@ def main() -> None:
                 source_lock=options.source_lock,
                 source_file=options.source_file,
                 output_dir=options.output_dir,
-                config=load_config(options.config, options.overrides),
+                config=load_config(
+                    options.config, options.overrides, section="preparation"
+                ),
             )
             print(manifest)
             return

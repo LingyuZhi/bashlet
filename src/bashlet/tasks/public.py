@@ -422,10 +422,16 @@ def convert_problem(
 
 
 def prepare_public_catalog(
-    *, plan_path: Path, source_dir: Path | None, output_dir: Path
+    *,
+    plan_path: Path,
+    source_dir: Path | None,
+    output_dir: Path,
+    catalog: str | None = None,
 ) -> Path:
     """Materialize a private, reproducible catalog; execution is prepare-harness."""
-    plan = json.loads(plan_path.read_text())
+    from bashlet.tasks.sources import import_definition
+
+    plan, plan_bytes, locks = import_definition(plan_path, catalog)
     if plan["version"] != "public-python-plan-v1":
         raise ValueError("Unsupported public import plan")
     output_dir.mkdir(parents=True, mode=0o700)
@@ -435,7 +441,11 @@ def prepare_public_catalog(
     upstream.mkdir(mode=0o700)
     families, rejected, sources = [], [], []
     for item in plan["sources"]:
-        source = json.loads((plan_path.parent / item["lock"]).read_text())
+        source = (
+            locks[item["lock"]]
+            if locks
+            else json.loads((plan_path.parent / item["lock"]).read_text())
+        )
         raw = (
             _download(source["url"])
             if source_dir is None
@@ -487,12 +497,12 @@ def prepare_public_catalog(
                         "reason": str(error) or type(error).__name__,
                     }
                 )
-    catalog = {
+    catalog_record = {
         "dataset": plan["dataset"],
         "revision": plan["revision"],
         "families": families,
         "upstream_sources": sources,
-        "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+        "plan_sha256": hashlib.sha256(plan_bytes).hexdigest(),
     }
     usage = {
         "conversion_attempts": sum(len(s["task_types"]) for s in plan["sources"]),
@@ -501,7 +511,9 @@ def prepare_public_catalog(
         "paid_model_calls": 0,
     }
     destination = private / "catalog.json"
-    destination.write_text(json.dumps(catalog, indent=2, ensure_ascii=True) + "\n")
+    destination.write_text(
+        json.dumps(catalog_record, indent=2, ensure_ascii=True) + "\n"
+    )
     (private / "usage.json").write_text(json.dumps(usage, indent=2) + "\n")
-    (private / "plan.json").write_bytes(plan_path.read_bytes())
+    (private / "plan.json").write_bytes(plan_bytes)
     return destination

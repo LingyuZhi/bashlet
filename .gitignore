@@ -13,7 +13,8 @@ wheels/
 .scratch
 
 # Developing Docs
-docs
+docs/*
+!docs/data-preparation.md
 
 # Agent-assistant docs
 AGENTS.md
@@ -24,6 +25,7 @@ CONTEXT.md
 .mypy_cache/
 .ruff_cache/
 .uv-cache/
+.runs/
 runs/
 outputs/
 

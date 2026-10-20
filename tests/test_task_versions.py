@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 from adapters import bash, sample_text, submit, turn_number
+from task_fixtures import role_cohort, role_sources
 from test_cli import cli, replay_config, saved_run
 from test_opsd import controlled_run
 from test_task_sets import prepared_tasks, small_cohort
@@ -17,14 +18,15 @@ from bashlet import run_experiment
 from bashlet.harness.experiment import task_from_record
 
 CONFIGS = Path(__file__).parents[1] / "configs"
-__all__ = ["prepared_tasks"]
+__all__ = ["prepared_tasks", "role_sources"]
 
 
 def test_new_source_requires_a_versioned_role_even_as_a_standalone_task(
     tmp_path: Path,
+    role_sources: Path,
 ) -> None:
-    lock = json.loads((CONFIGS / "harness-supplement-v2.lock.json").read_text())
-    catalog = json.loads((CONFIGS / lock["file"]).read_text())
+    lock = json.loads((role_sources / "sources.json").read_text())["locks"]["roles-v1"]
+    catalog = json.loads((role_sources / lock["file"]).read_text())
     family = catalog["families"][0]
     task = family["variants"][0]["task"] | {
         "task_type": family["task_type"],
@@ -54,7 +56,7 @@ def test_standalone_task_cannot_reassign_a_frozen_test_family(
 ) -> None:
     manifest = json.loads((prepared_version / "manifest.json").read_text())
     entry = next(
-        e for e in manifest["tasks"] if e["task_id"] == "supplement/circular-windows"
+        e for e in manifest["tasks"] if e["task_id"] == "fixture/circular-windows"
     )
     task = json.loads((prepared_version / entry["task_file"]).read_text())
     task["assignment"]["role"] = "train_candidate"
@@ -147,13 +149,17 @@ def test_old_dev_is_trained_without_changing_its_source_or_historical_split(
 
 
 @pytest.fixture(scope="module")
-def prepared_version(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def prepared_version(
+    tmp_path_factory: pytest.TempPathFactory, role_sources: Path
+) -> Path:
     tmp_path = tmp_path_factory.mktemp("versioned-roles")
+    cohort = tmp_path / "cohort.json"
+    cohort.write_text(json.dumps(role_cohort()))
     output = tmp_path / "roles"
     process = cli(
         "prepare-harness",
         "--cohort",
-        str(CONFIGS / "harness-cohort-v3.json"),
+        str(cohort),
         "--output-dir",
         str(output),
         cwd=tmp_path,
@@ -211,7 +217,7 @@ def test_three_task_types_and_all_roles_have_real_private_quality_evidence(
             assert not any(
                 "_grading" in path for path in run["initial_workspace_manifest"]
             )
-        if entry["origin"]["dataset"] == "bashlet/harness-supplement":
+        if entry["origin"]["dataset"] == "test/role-fixture":
             assert entry["origin"]["split"] == "unsplit"
     assert roles["train_candidate"].isdisjoint(roles["dev"] | roles["test"])
     assert roles["dev"].isdisjoint(roles["test"])
@@ -258,7 +264,7 @@ def test_loading_keeps_the_whole_frozen_candidate_pool_reserved(
             manifest["tasks"].pop(0)
         else:
             manifest["cohort"]["training_candidates"]["task_ids"].pop(0)
-        selected, split = "supplement/interval-union", "dev"
+        selected, split = "fixture/interval-union", "dev"
     path.write_text(json.dumps(manifest))
     model = replay_config(tmp_path, [submit()])
     process = cli(
@@ -315,7 +321,7 @@ def test_corrected_cache_grading_rejects_mutation_false_coercion_and_expiry(
         "task",
         str(prepared_version / "manifest.json"),
         "--task-id",
-        "supplement/cache-expiry/v3",
+        "fixture/cache-expiry/v2",
         "--split",
         "dev",
         "-c",
@@ -332,18 +338,19 @@ def test_corrected_cache_grading_rejects_mutation_false_coercion_and_expiry(
 @pytest.mark.parametrize("same_role", [False, True])
 def test_source_revisions_cannot_add_an_independent_family_or_cross_roles(
     tmp_path: Path,
+    role_sources: Path,
     same_role: bool,
 ) -> None:
-    cohort = json.loads((CONFIGS / "harness-cohort-v3.json").read_text())
+    cohort = role_cohort()
     if same_role:
-        cohort["development"]["task_ids"].append("supplement/cache-expiry")
+        cohort["development"]["task_ids"].append("fixture/cache-expiry")
         cohort["development"]["per_type"] = {
             "short_program": 1,
             "code_edit": 2,
             "workspace": 1,
         }
     else:
-        cohort["training_candidates"]["task_ids"].append("supplement/cache-expiry")
+        cohort["training_candidates"]["task_ids"].append("fixture/cache-expiry")
         cohort["training_candidates"]["per_type"]["code_edit"] += 1
     path = tmp_path / "conflicting-revisions.json"
     path.write_text(json.dumps(cohort))
@@ -370,12 +377,12 @@ def test_training_cli_rejects_old_dev_even_when_its_candidate_is_not_sampled(
     prepared_tasks: Path,
 ) -> None:
     pilot = tmp_path / "pilot.yaml"
-    policy = str(CONFIGS / "spend.yaml")
+    policy = str(CONFIGS / "opsd.yaml")
     pilot.write_text(
         yaml.safe_dump(
             {
                 "train_manifest": str(prepared_version / "manifest.json"),
-                "train_task_ids": ["supplement/sign-runs"],
+                "train_task_ids": ["fixture/sign-runs"],
                 "dev_plan": str(prepared_tasks / "harness-dev.json"),
                 "condition": [],
                 "backend": {"spend_config": policy},
@@ -484,7 +491,7 @@ def test_cli_rejects_unregistered_sources_and_conflicting_or_changed_identities(
     path = output / "manifest.json"
     manifest = json.loads(path.read_text())
     entry = manifest["tasks"][0]
-    selected = "supplement/interval-union"
+    selected = "fixture/interval-union"
     split = "dev"
     if change == "source":
         entry["origin"]["dataset"] = "model-author/unregistered"
@@ -500,7 +507,9 @@ def test_cli_rejects_unregistered_sources_and_conflicting_or_changed_identities(
     elif change == "original_split":
         entry["origin"]["split"] = "train"
     elif change == "known_mbpp_alias":
-        source = json.loads((CONFIGS / "mbpp-sanitized-v1.json").read_text())
+        from bashlet.tasks.sources import mbpp_source_lock
+
+        source = mbpp_source_lock(CONFIGS.parent / "data/sources.json")
         entry["origin"] = {
             "dataset": source["dataset"],
             "revision": source["revision"],

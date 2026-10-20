@@ -2630,56 +2630,141 @@
   },
   "audit_documents": [
     {
-      "file": "../runs/issue31-source-discovery-20261009/family-candidates-v3.json",
-      "sha256": "d62f4e65f9e658b4b86cf906c982d1dfaceed63697fab62c762f395233a29f8b"
+      "sha256": "d62f4e65f9e658b4b86cf906c982d1dfaceed63697fab62c762f395233a29f8b",
+      "name": "family-candidates-v3.json",
+      "artifact": "audits/d62f4e65f9e658b4b86cf906c982d1dfaceed63697fab62c762f395233a29f8b.json"
     },
     {
-      "file": "../runs/issue31-source-discovery-20261009/family-review-v5.json",
-      "sha256": "0450c8a186ea51f48dedb854a6f5e1d2d7045076fa12eb018a7159bed4885855"
+      "sha256": "0450c8a186ea51f48dedb854a6f5e1d2d7045076fa12eb018a7159bed4885855",
+      "name": "family-review-v5.json",
+      "artifact": "audits/0450c8a186ea51f48dedb854a6f5e1d2d7045076fa12eb018a7159bed4885855.json"
     },
     {
-      "file": "../runs/issue31-source-discovery-20261009/rare-term-candidates-v4.json",
-      "sha256": "76b23f1151c5e144de3c51c95f08cc7f1ef99f75867febc15c1c2aafc9448b66"
+      "sha256": "76b23f1151c5e144de3c51c95f08cc7f1ef99f75867febc15c1c2aafc9448b66",
+      "name": "rare-term-candidates-v4.json",
+      "artifact": "audits/76b23f1151c5e144de3c51c95f08cc7f1ef99f75867febc15c1c2aafc9448b66.json"
     },
     {
-      "file": "../runs/issue31-source-discovery-20261009/early-return-candidates-v5.json",
-      "sha256": "eaf93868f41c3ec1e3ba8e2ab0d2f3fd54077834e2b9d126166b2dc56eb6a1e6"
+      "sha256": "eaf93868f41c3ec1e3ba8e2ab0d2f3fd54077834e2b9d126166b2dc56eb6a1e6",
+      "name": "early-return-candidates-v5.json",
+      "artifact": "audits/eaf93868f41c3ec1e3ba8e2ab0d2f3fd54077834e2b9d126166b2dc56eb6a1e6.json"
     },
     {
-      "file": "../runs/issue31-source-discovery-20261009/selection-audit-v8.json",
-      "sha256": "fbb36399dab42a5ebcaa9007b41584385dfe85f672161b2b4554fd3d611fc250"
+      "sha256": "fbb36399dab42a5ebcaa9007b41584385dfe85f672161b2b4554fd3d611fc250",
+      "name": "selection-audit-v8.json",
+      "artifact": "audits/fbb36399dab42a5ebcaa9007b41584385dfe85f672161b2b4554fd3d611fc250.json"
     },
     {
-      "file": "../runs/issue31-reference-counterexamples-20261009/report.json",
-      "sha256": "e298619cd02307a95867cd82be79ab60c7f9a008c083e8d4312747a59ed3f8d6"
+      "sha256": "e298619cd02307a95867cd82be79ab60c7f9a008c083e8d4312747a59ed3f8d6",
+      "name": "reference-counterexamples",
+      "artifact": "audits/e298619cd02307a95867cd82be79ab60c7f9a008c083e8d4312747a59ed3f8d6.json"
     },
     {
-      "file": "../runs/issue31-reference-counterexamples-v2-20261009/report.json",
-      "sha256": "2a604a7536344f094ceb6f767560b55bd1a9157f80f39256f98520d1336c827d"
+      "sha256": "2a604a7536344f094ceb6f767560b55bd1a9157f80f39256f98520d1336c827d",
+      "name": "reference-counterexamples-v2",
+      "artifact": "audits/2a604a7536344f094ceb6f767560b55bd1a9157f80f39256f98520d1336c827d.json"
     },
     {
-      "file": "../runs/issue31-reference-counterexamples-v3-20261009/report.json",
-      "sha256": "5da2d455a6cfdbade099cc5466bdf99496002bc5c5b1583b19282f3766f84971"
+      "sha256": "5da2d455a6cfdbade099cc5466bdf99496002bc5c5b1583b19282f3766f84971",
+      "name": "reference-counterexamples-v3",
+      "artifact": "audits/5da2d455a6cfdbade099cc5466bdf99496002bc5c5b1583b19282f3766f84971.json"
     },
     {
-      "file": "../runs/issue31-public-catalog-v5-20261009/private/usage.json",
-      "sha256": "25975a16ccc7b0b6f6c1fff77c20fddad68031a1cae03e1d9b642499359fc3ee"
+      "sha256": "25975a16ccc7b0b6f6c1fff77c20fddad68031a1cae03e1d9b642499359fc3ee",
+      "name": "private",
+      "artifact": "audits/25975a16ccc7b0b6f6c1fff77c20fddad68031a1cae03e1d9b642499359fc3ee.json"
     },
     {
-      "file": "../runs/issue31-source-reproduction-v5-20261009/report.json",
-      "sha256": "0b89c2e29d6814372439a45c78f02312f2cc9f2ff320c1358846454d2baae76f"
+      "sha256": "0b89c2e29d6814372439a45c78f02312f2cc9f2ff320c1358846454d2baae76f",
+      "name": "source-reproduction-v5",
+      "artifact": "audits/0b89c2e29d6814372439a45c78f02312f2cc9f2ff320c1358846454d2baae76f.json"
     },
     {
-      "file": "../runs/issue31-p3-catalog-v1-reviewed-20261009/private/usage.json",
-      "sha256": "55e838fc84b7023b93372033b9dab0f1137d1edc9ba7209df609ec939e6de14f"
+      "sha256": "55e838fc84b7023b93372033b9dab0f1137d1edc9ba7209df609ec939e6de14f",
+      "name": "private",
+      "artifact": "audits/55e838fc84b7023b93372033b9dab0f1137d1edc9ba7209df609ec939e6de14f.json"
     },
     {
-      "file": "../configs/opsd-expanded-plan-v1.json",
-      "sha256": "cb98bae8ba9275a321a0da1d6809ca72a5d15846d1013f2ca8488b735e328a61"
+      "sha256": "cb98bae8ba9275a321a0da1d6809ca72a5d15846d1013f2ca8488b735e328a61",
+      "embedded": "generation_plan"
     },
     {
-      "file": "../runs/issue31-quality-index-v2-20261009/index.json",
-      "sha256": "0ab3464b7598d3d880eb82c63be32789fa73fc4437b378fb7baacd4c5696cd8b"
+      "sha256": "0ab3464b7598d3d880eb82c63be32789fa73fc4437b378fb7baacd4c5696cd8b",
+      "name": "quality-index-v2",
+      "artifact": "audits/0ab3464b7598d3d880eb82c63be32789fa73fc4437b378fb7baacd4c5696cd8b.json"
     }
-  ]
+  ],
+  "generation_plan": {
+    "sha256": "cb98bae8ba9275a321a0da1d6809ca72a5d15846d1013f2ca8488b735e328a61",
+    "definition": {
+      "version": "opsd-expanded-plan-v1",
+      "name": "opsd-expanded-836-v8",
+      "split_seed": 31000,
+      "quotas": {
+        "training_candidates": {
+          "short_program": 214,
+          "code_edit": 161,
+          "workspace": 161
+        },
+        "development": {
+          "short_program": 40,
+          "code_edit": 30,
+          "workspace": 30
+        },
+        "test": {
+          "short_program": 80,
+          "code_edit": 60,
+          "workspace": 60
+        }
+      },
+      "difficulty_thresholds": {
+        "easy": {
+          "statements": 8,
+          "branches": 2
+        },
+        "medium": {
+          "statements": 20,
+          "branches": 5
+        }
+      },
+      "freeze": {
+        "version": "opsd-cohort-freeze-v1",
+        "subset_size": 268,
+        "sampling_seed": 31001,
+        "training_seed": 31002,
+        "epoch_shuffle_seed": 31003,
+        "evaluation_seeds": [
+          4,
+          17,
+          29,
+          41,
+          53
+        ],
+        "epochs": 4,
+        "difficulty_basis": "Static original reference AST: easy <=8 statements/2 branches; medium <=20/5; otherwise hard. Public adapter code excluded. Recorded before subset sampling; no Baseline/Student outcomes."
+      },
+      "rules": {
+        "selection": "One verified representative per reviewed component; all components containing historical families reserved to candidates, including replacements for failed historical references; split quotas fixed before execution.",
+        "remainder": "Largest remainder; workspace wins the 30% tie.",
+        "test": "Reference/mutation quality checks only; no Baseline/Student performance filtering.",
+        "seeds": "Routine execution configuration, not user-specified seed values."
+      }
+    }
+  },
+  "family_guard": {
+    "version": "harness-family-guard-v1",
+    "rules": "Harness cohorts retain native source origins and additionally reserve known equivalent tasks to a single split, including supplemental cohorts.",
+    "equivalent_families": [
+      {
+        "dataset": "google-research/mbpp",
+        "family_id": "mbpp/591",
+        "split": "dev",
+        "members": [
+          "mbpp/591",
+          "mbpp/625"
+        ],
+        "reason": "Both original questions interchange the first and last list elements. The development family is reserved; its training duplicate is inadmissible in Harness cohorts."
+      }
+    ]
+  }
 }

@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 import yaml
 from adapters import submit
+from task_fixtures import role_cohort, role_sources
 from test_cli import cli, replay_config, saved_run
 
 CONFIGS = Path(__file__).parents[1] / "configs"
+__all__ = ["role_sources"]
 
 
 @pytest.fixture(scope="module")
@@ -368,6 +370,7 @@ def test_public_import_records_pinned_lineage_and_private_conversion_failures(
 
 def test_new_equivalence_guard_rejects_duplicate_families_before_execution(
     tmp_path: Path,
+    role_sources: Path,
 ) -> None:
     path = freeze_cohort(tmp_path / "duplicate-cohort.json")
     cohort = json.loads(path.read_text())
@@ -449,7 +452,7 @@ def test_public_import_has_the_same_content_identity_across_python_hash_seeds(
 
 
 def freeze_cohort(path: Path) -> Path:
-    cohort = json.loads((CONFIGS / "harness-cohort-v3.json").read_text())
+    cohort = role_cohort()
     cohort["freeze"] = {
         "version": "opsd-cohort-freeze-v1",
         "subset_size": 3,
@@ -460,7 +463,7 @@ def freeze_cohort(path: Path) -> Path:
         "epochs": 4,
         "difficulty_basis": "Reviewed task requirements, before model execution.",
         "difficulty": {
-            "supplement/sign-runs": "easy",
+            "fixture/sign-runs": "easy",
             "harness/header-key": "easy",
             "harness/nested-setting": "easy",
             "harness/stock-value": "easy",
@@ -472,7 +475,7 @@ def freeze_cohort(path: Path) -> Path:
 
 
 @pytest.fixture(scope="module")
-def frozen_cohort(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def frozen_cohort(tmp_path_factory: pytest.TempPathFactory, role_sources: Path) -> Path:
     root = tmp_path_factory.mktemp("cohort-freeze")
     cohort = freeze_cohort(root / "cohort.json")
     output = root / "frozen"
@@ -547,8 +550,8 @@ def test_training_cli_rejects_changed_frozen_subset_before_remote_work(
         "evaluate_each_epoch": True,
         "require_complete_training": True,
         "ledger_path": str(tmp_path / "spend.sqlite3"),
-        "backend": {"spend_config": str(CONFIGS / "spend.yaml")},
-        "training": {"spend_config": str(CONFIGS / "spend.yaml")},
+        "backend": {"spend_config": str(CONFIGS / "opsd.yaml")},
+        "training": {"spend_config": str(CONFIGS / "opsd.yaml")},
     }
     config = tmp_path / "pilot.yaml"
     config.write_text(yaml.safe_dump(configuration))
@@ -658,6 +661,7 @@ def test_loading_rejects_changes_to_the_subset_orders_or_unsampled_pool(
 @pytest.mark.parametrize("change", ["quota", "difficulty", "seed"])
 def test_invalid_freeze_configuration_is_rejected_before_any_execution(
     tmp_path: Path,
+    role_sources: Path,
     change: str,
 ) -> None:
     path = freeze_cohort(tmp_path / "invalid.json")
@@ -665,7 +669,7 @@ def test_invalid_freeze_configuration_is_rejected_before_any_execution(
     if change == "quota":
         cohort["training_candidates"]["per_type"]["short_program"] = 2
     elif change == "difficulty":
-        del cohort["freeze"]["difficulty"]["supplement/sign-runs"]
+        del cohort["freeze"]["difficulty"]["fixture/sign-runs"]
     else:
         cohort["freeze"]["sampling_seed"] = 4
     path.write_text(json.dumps(cohort))

@@ -23,11 +23,17 @@ from bashlet.tasks.freeze import validate_selection
 
 def resolve_condition(config: RunConfig) -> tuple[ExperimentConfig, PyTRIOOPSDConfig]:
     backend = PyTRIOOPSDConfig(**config.backend)
-    explicit = any(
-        "thinking" in read_yaml(Path(p)).get("model", {}) for p in config.condition
+    layers = (
+        [config.condition]
+        if isinstance(config.condition, dict)
+        else [read_yaml(Path(p)) for p in config.condition]
     )
+    layers = [layer.get("condition", layer) for layer in layers]
+    if any(not isinstance(layer, dict) for layer in layers):
+        raise ValueError("condition must contain Harness settings")
+    explicit = any("thinking" in layer.get("model", {}) for layer in layers)
     condition = load_config(
-        [Path(p) for p in config.condition],
+        layers,
         [] if explicit else [f"model.thinking={backend.thinking}"],
     )
     thinking = condition.model.parameters["thinking"]
@@ -95,7 +101,7 @@ class RunConfig:
     train_manifest: str
     train_task_ids: list[str]
     dev_plan: str
-    condition: list[str]
+    condition: list[str] | dict[str, Any]
     ledger_path: str = "runs/spend.sqlite3"
     backend: dict[str, Any] = field(default_factory=dict)
     training: dict[str, Any] = field(default_factory=dict)
@@ -115,10 +121,14 @@ class RunConfig:
     evaluation: dict[str, Any] | None = None
     execution_limit: str | None = None
     monitor: dict[str, Any] = field(default_factory=dict)
+    preparation: dict[str, Any] = field(default_factory=dict)
+    spend: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def read(cls, path: Path) -> RunConfig:
         settings = read_yaml(path)
+        if "spend" in settings:
+            settings.setdefault("spend_config", str(path.resolve()))
         for key in ("group", "spend_config"):
             if key not in settings:
                 continue
@@ -174,7 +184,7 @@ class RunConfig:
 
 
 def _validate_evaluation(settings: dict[str, Any]) -> None:
-    allowed = {"base_path", "test_plan", "executor", "model", "server", "monitoring"}
+    allowed = {"base_path", "executor", "model", "server", "monitoring"}
     if unknown := set(settings) - allowed:
         raise ValueError(f"Unknown evaluation setting: {sorted(unknown)[0]}")
     if not isinstance(settings.get("base_path"), str) or not settings["base_path"]:
@@ -203,18 +213,32 @@ def _validate_evaluation(settings: dict[str, Any]) -> None:
         )
     server = settings.get("server")
     if server is not None:
-        allowed_server = {"session", "template", "cuda_module", "timeout_seconds"}
+        allowed_server = {
+            "session",
+            "template",
+            "options",
+            "cuda_module",
+            "timeout_seconds",
+        }
         if (
             not isinstance(server, dict)
             or set(server) - allowed_server
             or any(
                 not isinstance(server.get(key), str) or not server[key]
-                for key in ("session", "template", "cuda_module")
+                for key in ("session", "cuda_module")
             )
         ):
+            raise ValueError("Local evaluation server needs session and cuda_module")
+        if ("template" in server) == ("options" in server):
             raise ValueError(
-                "Local evaluation server needs session, template and cuda_module"
+                "Local evaluation server needs either options or a template"
             )
+        if "options" in server and not isinstance(server["options"], dict):
+            raise ValueError("Local evaluation server options must be a mapping")
+        if "template" in server and (
+            not isinstance(server["template"], str) or not server["template"]
+        ):
+            raise ValueError("Local evaluation server template must be a path")
 
 
 class WatchdogError(ValueError):
@@ -224,23 +248,23 @@ class WatchdogError(ValueError):
 def _monitor_settings(path: Path) -> dict[str, Any]:
 
     config = RunConfig.read(path)
-    if config.preflight is None:
-        raise WatchdogError("The workflow monitor requires a configured preflight")
-    preflight = RunConfig.read(Path(config.preflight))
+    preflight = RunConfig.read(Path(config.preflight)) if config.preflight else None
     monitor = config.monitor
     root = Path(config.output_dir)
+    formal_root = root / "formal" if preflight else root
     paths = {
         "monitor_root": root / "monitor",
         "workflow": root / "workflow.json",
         "preflight_pilot": root / "preflight/pilot.json",
         "preflight_training": root / "preflight/training/opsd.json",
         "preflight_validation": root / "preflight/checkpoint-validation.json",
-        "formal_pilot": root / "formal/pilot.json",
-        "formal_training": root / "formal/training/opsd.json",
+        "formal_pilot": formal_root / "pilot.json",
+        "formal_training": formal_root / "training/opsd.json",
         "ledger": Path(config.ledger_path),
     }
     return {
         "schema_version": 1,
+        "preflight_required": preflight is not None,
         "repository_root": monitor["repository_root"],
         "monitor_session": monitor["monitor_session"],
         "worker": {
@@ -257,8 +281,16 @@ def _monitor_settings(path: Path) -> dict[str, Any]:
             ],
         },
         "paths": {key: str(value) for key, value in paths.items()},
-        "frozen_configurations": [str(path.resolve()), config.preflight],
-        "ledger_groups": [preflight.training["group"], config.training["group"]],
+        "frozen_configurations": [str(path.resolve())]
+        + ([config.preflight] if preflight else []),
+        "ledger_groups": list(
+            dict.fromkeys(
+                ([preflight.training["group"]] if preflight else [])
+                + [config.training["group"]]
+                + ([config.evaluation_group] if config.evaluation_group else [])
+                + list(config.evaluation_groups.values())
+            )
+        ),
         "timing": {
             key: monitor[key]
             for key in ("poll_seconds", "backoff_min_seconds", "backoff_max_seconds")
@@ -286,6 +318,7 @@ class WatchConfig:
     poll_seconds: int
     backoff_min_seconds: int
     backoff_max_seconds: int
+    preflight_required: bool = True
 
     @classmethod
     def read(cls, path: Path) -> WatchConfig:
@@ -339,14 +372,17 @@ class WatchConfig:
             raise WatchdogError("frozen_configurations must be a non-empty list")
         config_files = tuple(_resolve(root, item) for item in config_files_raw)
         groups = raw.get("ledger_groups")
+        preflight_required = raw.get("preflight_required", True)
+        if type(preflight_required) is not bool:
+            raise WatchdogError("preflight_required must be a boolean")
         if (
             not isinstance(groups, list)
-            or len(groups) < 2
+            or len(groups) < (2 if preflight_required else 1)
             or any(not isinstance(group, str) or not group for group in groups)
             or len(groups) != len(set(groups))
         ):
             raise WatchdogError(
-                "ledger_groups require distinct preflight and training allocations"
+                "ledger_groups require distinct allocations for the configured stages"
             )
         expected_groups = tuple(groups)
         poll_seconds = _required_int(timing, "poll_seconds")
@@ -376,6 +412,7 @@ class WatchConfig:
             poll_seconds=poll_seconds,
             backoff_min_seconds=backoff_min,
             backoff_max_seconds=backoff_max,
+            preflight_required=preflight_required,
         )
 
 

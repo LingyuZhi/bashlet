@@ -1,0 +1,103 @@
+{
+  "source": {
+    "path": "docs/experiment-results-summary.md",
+    "sha256": "80621da4ebfb03926a652e530dd4a048a4b823606813e794fd65ed7b6bdfe19d",
+    "note": "仅从此汇总文档提取；未读取其链接的原始运行结果。"
+  },
+  "evaluation": {
+    "split": "开发集",
+    "backend": "本地 vLLM",
+    "episodes_per_model": 500,
+    "seeds": [
+      4,
+      17,
+      29,
+      41,
+      53
+    ],
+    "episodes_by_seed": [
+      100,
+      100,
+      100,
+      100,
+      100
+    ],
+    "seed_note": "评估采样设置，不代表独立训练复现。",
+    "comparison_note": "Baseline 为新增评估；两个 OPSD checkpoint 复用既有本地评估。汇总文档记录的 comparison 配置逐 seed 一致。",
+    "denominator_note": "失败终态保留在分母中；总体通过率按回合数加权。",
+    "cost_note": "两项开销均对每组全部回合求均值；生成 tokens 包含 thinking。"
+  },
+  "models": [
+    {
+      "label": "Baseline step-0",
+      "optimizer_step": 0,
+      "passed_episodes": 351,
+      "episodes": 500,
+      "final_pass_rate_percent": 70.2,
+      "mean_generated_tokens_including_thinking": 1708.908,
+      "mean_interaction_steps": 8.424
+    },
+    {
+      "label": "OPSD step-268",
+      "optimizer_step": 268,
+      "passed_episodes": 387,
+      "episodes": 500,
+      "final_pass_rate_percent": 77.4,
+      "mean_generated_tokens_including_thinking": 1979.854,
+      "mean_interaction_steps": 9.152
+    },
+    {
+      "label": "OPSD step-536",
+      "optimizer_step": 536,
+      "passed_episodes": 402,
+      "episodes": 500,
+      "final_pass_rate_percent": 80.4,
+      "mean_generated_tokens_including_thinking": 1796.788,
+      "mean_interaction_steps": 8.564
+    }
+  ],
+  "task_types": [
+    {
+      "label": "短程序",
+      "episodes_per_model": 200,
+      "passed_episodes_by_model": [
+        144,
+        154,
+        157
+      ],
+      "final_pass_rate_percent_by_model": [
+        72.0,
+        77.0,
+        78.5
+      ]
+    },
+    {
+      "label": "代码修改",
+      "episodes_per_model": 150,
+      "passed_episodes_by_model": [
+        126,
+        130,
+        132
+      ],
+      "final_pass_rate_percent_by_model": [
+        84.0,
+        86.7,
+        88.0
+      ]
+    },
+    {
+      "label": "工作区信息利用",
+      "episodes_per_model": 150,
+      "passed_episodes_by_model": [
+        81,
+        103,
+        113
+      ],
+      "final_pass_rate_percent_by_model": [
+        54.0,
+        68.7,
+        75.3
+      ]
+    }
+  ]
+}

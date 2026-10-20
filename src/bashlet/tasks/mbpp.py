@@ -194,8 +194,9 @@ def prepare_mbpp(
     # Preparation orchestrates experiments; experiment-side origin validation
     # imports only the data rules above, not this orchestration dependency.
     from bashlet.harness.experiment import run_experiment
+    from bashlet.tasks.sources import mbpp_source_lock
 
-    lock = json.loads(source_lock.read_text())
+    lock = mbpp_source_lock(source_lock)
     if lock["variant"] != "sanitized" or lock["conversion"] != CONVERSION:
         raise ValueError("Only sanitized MBPP with mbpp-json-functions-v1 is supported")
     if (

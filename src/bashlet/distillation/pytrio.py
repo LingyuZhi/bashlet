@@ -32,7 +32,7 @@ from bashlet.distillation import (
 )
 from bashlet.harness.models import Encoding, Model, ModelResponseError
 from bashlet.monitoring import write_document
-from bashlet.spend import SpendLedger, TokenPricing
+from bashlet.spend import DEFAULT_POLICY, SpendLedger, TokenPricing
 
 if TYPE_CHECKING:
     import pytrio as trio
@@ -54,7 +54,7 @@ class PyTRIOOPSDConfig:
     api_key_env: str = "pytrio_api_key"
     dotenv_path: str = ".env"
     group: str = "opsd-pilot"
-    spend_config: str = "configs/spend.yaml"
+    spend_config: str = str(DEFAULT_POLICY)
 
     def __post_init__(self) -> None:
         if type(self.thinking) is not bool:
@@ -109,7 +109,7 @@ class PyTRIOOPSD:
 
         import pytrio as trio
 
-        from bashlet.config import read_yaml
+        from bashlet.spend import read_spend_config
 
         if version("pytrio") != SDK_VERSION:
             raise ValueError(f"Expected PyTRIO {SDK_VERSION}")
@@ -117,7 +117,7 @@ class PyTRIOOPSD:
         self.path = output_dir.resolve() / "backend.json"
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.run_id: str | None = None
-        self.pricing = TokenPricing(read_yaml(Path(config.spend_config)))
+        self.pricing = TokenPricing(read_spend_config(Path(config.spend_config)))
         if service_client is None:
             catalog = self.pricing.verify(config.base_model, config.timeout_seconds)
             trio.configure(

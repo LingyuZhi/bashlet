@@ -42,6 +42,7 @@ from bashlet.spend import (
     RemoteFuture,
     SpendLedger,
     TokenPricing,
+    read_spend_config,
     summarize_cost,
 )
 from bashlet.tasks import validate_training_task
@@ -259,7 +260,7 @@ class OPSDRun:
         self._lockfile: TextIO | None = None
         self.snapshot, self.adapter, self.ledger = snapshot, adapter, ledger
         self.config, self.monitoring = config, monitoring
-        self.pricing = TokenPricing(read_yaml(Path(config.spend_config)))
+        self.pricing = TokenPricing(read_spend_config(Path(config.spend_config)))
         self.calls: list[tuple[tuple[int, ...], SamplingParams, Generation]] = []
         self.monitor: RunMonitor | None = None
         self.record: dict[str, Any] = {

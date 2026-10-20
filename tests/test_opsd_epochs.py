@@ -11,6 +11,7 @@ from test_mbpp import double_row, prepare
 from test_monitoring import external_sdks
 
 from bashlet import SpendLedger, SpendPolicy
+from bashlet.spend import DEFAULT_POLICY, read_spend_config
 
 
 @pytest.fixture
@@ -36,7 +37,7 @@ def epoch_pilot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
         "runs/tokenizers/models--Qwen--Qwen3.5-4B/snapshots/"
         "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
     ).resolve()
-    policy = yaml.safe_load(Path("configs/spend.yaml").read_text())
+    policy = read_spend_config(DEFAULT_POLICY)
     policy["limits"]["groups"].update(
         {
             "epoch-train": 4,

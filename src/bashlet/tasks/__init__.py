@@ -16,18 +16,18 @@ from bashlet.tasks.mbpp import validate_origin as validate_mbpp_origin
 AUTHORED_DATASET = "bashlet/harness-authored"
 CONVERSION = "harness-task-families-v1"
 VERSIONED_CONVERSION = "harness-task-families-v2"
-_CONFIGS = Path(__file__).resolve().parents[3] / "configs"
-if not _CONFIGS.is_dir():
-    _CONFIGS = Path(__file__).resolve().parents[1] / "configs"
-AUTHORED_LOCK = _CONFIGS / "harness-authored-v1.lock.json"
-FAMILY_GUARD = _CONFIGS / "harness-family-guard-v1.json"
+_DATA = Path(__file__).resolve().parents[3] / "data"
+if not _DATA.is_dir():
+    _DATA = Path(__file__).resolve().parents[1] / "data"
 
 
 @lru_cache(maxsize=1)
 def authored_source() -> tuple[dict[str, Any], dict[str, Any]]:
     """Read the explicitly admitted, content-locked local source registry."""
-    lock = json.loads(AUTHORED_LOCK.read_text())
-    data = (AUTHORED_LOCK.parent / lock["file"]).read_bytes()
+    from bashlet.tasks.sources import source_definitions
+
+    lock = source_definitions()["locks"]["authored"]
+    data = (_DATA / lock["file"]).read_bytes()
     if hashlib.sha256(data).hexdigest() != lock["sha256"]:
         raise ValueError("Authored source SHA-256 mismatch")
     source = json.loads(data)
@@ -79,7 +79,9 @@ def validate_origin(origin: TaskOrigin, *, artifact_dir: Path | None = None) -> 
 
 @lru_cache(maxsize=1)
 def _family_reservations() -> dict[tuple[str, str], tuple[str, str]]:
-    guard = json.loads(FAMILY_GUARD.read_text())
+    from bashlet.tasks.sources import family_guard_bytes
+
+    guard = json.loads(family_guard_bytes())
     if guard["version"] != "harness-family-guard-v1":
         raise ValueError("Unsupported family guard version")
     reservations: dict[tuple[str, str], tuple[str, str]] = {}

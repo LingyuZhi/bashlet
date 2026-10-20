@@ -131,17 +131,26 @@ def load_model(config: ModelConfig) -> Model:
 
 
 def load_config(
-    paths: Sequence[Path] = (),
+    paths: Sequence[Path | Mapping[str, Any]] = (),
     overrides: Sequence[str] = (),
+    *,
+    section: str = "condition",
 ) -> ExperimentConfig:
     """Layer the built-in default, then ``paths``, then ``key=value`` overrides.
 
     Unknown keys and type errors are rejected before a run starts. Protocol
     strings are Jinja templates; an undefined variable is an error.
+    An experiment file supplies its named section. Mapping layers must already
+    have resolved paths, as returned by ``read_yaml``.
     """
     merged = read_yaml(_DEFAULT_PATH)
     for path in paths:
-        merged = _merge(merged, read_yaml(path))
+        layer = read_yaml(path) if isinstance(path, Path) else dict(path)
+        if section in layer:
+            layer = layer[section]
+        if not isinstance(layer, dict):
+            raise ValueError(f"{section} must contain Harness settings")
+        merged = _merge(merged, layer)
     for override in overrides:
         _apply_override(merged, override)
     config = bind_config(ExperimentConfig, merged, "config")
@@ -180,11 +189,6 @@ def read_yaml(path: Path, *, _parents: tuple[Path, ...] = ()) -> dict[str, Any]:
     for parent in parents:
         base = _merge(base, read_yaml(path.parent / parent, _parents=(*_parents, path)))
     _resolve_paths(loaded, path.parent)
-    environment = loaded.get("environment")
-    if isinstance(environment, dict):
-        python = environment.get("python")
-        if isinstance(python, dict) and isinstance(python.get("source"), str):
-            python["source"] = str((path.parent / python["source"]).resolve())
     return _merge(base, cast(dict[str, Any], loaded))
 
 
@@ -197,7 +201,6 @@ def _resolve_paths(data: dict[str, Any], directory: Path) -> None:
         "ledger_path",
         "spend_config",
         "base_path",
-        "test_plan",
         "template",
         "output_dir",
         "preflight",
@@ -210,10 +213,16 @@ def _resolve_paths(data: dict[str, Any], directory: Path) -> None:
     for key, value in data.items():
         if isinstance(value, dict):
             _resolve_paths(value, directory)
+            if key == "environment":
+                python = value.get("python")
+                if isinstance(python, dict) and isinstance(python.get("source"), str):
+                    python["source"] = str((directory / python["source"]).resolve())
         elif key in scalar and isinstance(value, str):
             data[key] = str((directory / value).resolve())
-        elif key == "tokenizer" and isinstance(value, str) and value.startswith(
-            ("./", "../", "/")
+        elif (
+            key == "tokenizer"
+            and isinstance(value, str)
+            and value.startswith(("./", "../", "/"))
         ):
             # Explicit local paths are distinct from Hub IDs such as Qwen/model.
             data[key] = str((directory / value).resolve())
@@ -315,8 +324,15 @@ def _convert(hint: Any, value: object, path: str) -> Any:
     if origin in (UnionType,):
         if value is None and type(None) in get_args(hint):
             return None
-        inner = next(arg for arg in get_args(hint) if arg is not type(None))
-        return _convert(inner, value, path)
+        errors = []
+        for inner in get_args(hint):
+            if inner is type(None):
+                continue
+            try:
+                return _convert(inner, value, path)
+            except ValueError as error:
+                errors.append(str(error))
+        raise ValueError(" or ".join(errors))
     if isinstance(hint, type) and is_dataclass(hint):
         return bind_config(hint, value, path)
     if hint is bool:

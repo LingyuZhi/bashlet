@@ -1,7 +1,0 @@
-{
-  "version": "development-evaluation-v1",
-  "name": "workspace-license-policy-green-v1",
-  "manifest": "../runs/harness-tasks-v1/manifest.json",
-  "split": "dev",
-  "task_ids": ["harness/license-audit/policy-green"]
-}

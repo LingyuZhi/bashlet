@@ -1,8 +1,0 @@
-{
-  "dataset": "google-research/mbpp",
-  "variant": "sanitized",
-  "revision": "e49bbfe381c9c0e564b937f1c4e163a2273c65cc",
-  "url": "https://raw.githubusercontent.com/google-research/google-research/e49bbfe381c9c0e564b937f1c4e163a2273c65cc/mbpp/sanitized-mbpp.json",
-  "sha256": "ca95deaa9a01ef0a6f439f88bcf0dd3db3563d22f22aad6cae04ebb9a8d8c8e9",
-  "conversion": "mbpp-json-functions-v1"
-}

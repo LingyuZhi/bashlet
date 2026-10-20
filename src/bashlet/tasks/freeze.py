@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from bashlet.tasks.sources import TASK_TYPES
+from bashlet.tasks.sources import TASK_TYPES, pinned_definition
 
 # Stable remainder tie order, recorded in every frozen selection.
 TYPE_REMAINDER_ORDER = ("workspace", "code_edit", "short_program")
@@ -328,6 +328,9 @@ def expanded_cohort(
     historical = json.loads(historical_path.read_text())
     review = json.loads(review_path.read_text())
     plan = json.loads(plan_path.read_text())
+    plan_bytes = plan_path.read_bytes()
+    if "generation_plan" in plan:
+        plan, plan_bytes = pinned_definition(plan["generation_plan"])
     if plan["version"] != "opsd-expanded-plan-v1":
         raise ValueError("Unsupported expanded cohort plan")
     quotas = plan["quotas"]
@@ -502,7 +505,7 @@ def expanded_cohort(
             inventory_path.read_bytes()
         ).hexdigest(),
         "family_review_sha256": hashlib.sha256(review_path.read_bytes()).hexdigest(),
-        "generation_plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+        "generation_plan_sha256": hashlib.sha256(plan_bytes).hexdigest(),
         "historical_entries": len(historical["tasks"]),
         "historical_retained": len(retained),
         "historical_exclusions": exclusions,

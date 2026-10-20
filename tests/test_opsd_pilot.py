@@ -396,7 +396,9 @@ def test_cli_pilot_compares_normal_inputs_and_resuming_keeps_steps_and_cash(
     ).resolve()
     pilot = tmp_path / "pilot.yaml"
     policy_path = tmp_path / "spend.yaml"
-    policy_path.write_text(Path("configs/spend.yaml").read_text())
+    from bashlet.spend import DEFAULT_POLICY, read_spend_config
+
+    policy_path.write_text(yaml.safe_dump(read_spend_config(DEFAULT_POLICY)))
     training_group = "opsd-pilot"
     extra: dict[str, object] = {}
     if training_cap is not None:

@@ -27,7 +27,7 @@ __all__ = ["official_tokenizer"]
 def test_registered_authored_family_runs_with_independent_grading(
     tmp_path: Path,
 ) -> None:
-    catalog = Path(__file__).parents[1] / "configs/harness-authored-v1.json"
+    catalog = Path(__file__).parents[1] / "data/authored.json"
     task = Task(
         task_id="harness/header-key/renamed",
         prompt="Repair app/headers.py and submit.",
@@ -64,7 +64,7 @@ def mixed_manifest(tmp_path: Path) -> Path:
     old = json.loads((root / "manifest.json").read_text())
     mbpp = old["tasks"][0]
     mbpp_task = json.loads((root / mbpp["task_file"]).read_text())
-    catalog_path = Path(__file__).parents[1] / "configs/harness-authored-v1.json"
+    catalog_path = Path(__file__).parents[1] / "data/authored.json"
     catalog = json.loads(catalog_path.read_text())
     family = catalog["families"][0]
     authored: dict[str, Any] = family["variants"][0]["task"]
@@ -514,7 +514,7 @@ def test_correct_return_values_cannot_hide_forbidden_input_mutation(
 ) -> None:
     from bashlet.harness.experiment import task_from_record
 
-    source = Path(__file__).parents[1] / "configs/harness-authored-v1.json"
+    source = Path(__file__).parents[1] / "data/authored.json"
     catalog = json.loads(source.read_text())
     family = next(f for f in catalog["families"] if f["family_id"] == task_id)
     data = family["variants"][0]["task"] | {

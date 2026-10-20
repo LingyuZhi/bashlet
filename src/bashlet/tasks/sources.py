@@ -12,9 +12,9 @@ from typing import Any
 
 from bashlet.harness.models import Task, TaskOrigin
 from bashlet.harness.protocol import fingerprint
-from bashlet.tasks import _CONFIGS
+from bashlet.tasks import _DATA
 
-SOURCE_REGISTRY = _CONFIGS / "task-sources-v2.json"
+SOURCE_REGISTRY = _DATA / "sources.json"
 TASK_TYPES = ("short_program", "code_edit", "workspace")
 type SourceRegistry = dict[
     tuple[str, str, str], tuple[dict[str, Any], dict[str, Any] | None]
@@ -22,16 +22,114 @@ type SourceRegistry = dict[
 _ADMISSIONS: ContextVar[SourceRegistry | None] = ContextVar(
     "preparing_sources", default=None
 )
+_ARTIFACT_ROOT: ContextVar[Path | None] = ContextVar(
+    "source_artifact_root", default=None
+)
+
+
+def definition_bytes(value: object) -> bytes:
+    """Canonical bytes preserve the pinned import and generation plan identities."""
+    return (
+        json.dumps(value, indent=2, ensure_ascii=True, allow_nan=False) + "\n"
+    ).encode()
+
+
+def pinned_definition(record: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
+    value = record.get("definition")
+    if not isinstance(value, dict):
+        raise ValueError("Pinned data definition must contain a mapping")
+    content = definition_bytes(value)
+    if hashlib.sha256(content).hexdigest() != record.get("sha256"):
+        raise ValueError("Pinned data definition SHA-256 mismatch")
+    return value, content
+
+
+def source_definitions(path: Path | None = None) -> dict[str, Any]:
+    return _source_definitions((path or SOURCE_REGISTRY).read_bytes())
+
+
+def _source_definitions(content: bytes) -> dict[str, Any]:
+    value: dict[str, Any] = json.loads(content)
+    if (
+        not isinstance(value, dict)
+        or value.get("version") != "task-source-registry-v3"
+        or not isinstance(value.get("sources"), list)
+        or not isinstance(value.get("locks"), dict)
+        or not isinstance(value.get("imports"), dict)
+    ):
+        raise ValueError("Unsupported or incomplete source definitions")
+    return value
+
+
+def mbpp_source_lock(path: Path) -> dict[str, Any]:
+    value: dict[str, Any] = json.loads(path.read_bytes())
+    if "locks" in value:
+        value = source_definitions(path)["locks"]["mbpp"]
+    return value
+
+
+def import_definition(
+    path: Path, catalog: str | None
+) -> tuple[dict[str, Any], bytes, dict[str, Any]]:
+    value = json.loads(path.read_bytes())
+    if "imports" not in value:
+        if catalog is not None:
+            raise ValueError("--catalog requires combined source definitions")
+        return value, path.read_bytes(), {}
+    definitions = source_definitions(path)
+    if catalog not in definitions["imports"]:
+        choices = ", ".join(definitions["imports"])
+        raise ValueError(f"Select --catalog from: {choices}")
+    plan, content = pinned_definition(definitions["imports"][catalog])
+    return plan, content, definitions["locks"]
+
+
+def artifact_root(path: Path | None = None) -> Path:
+    return (path or _ARTIFACT_ROOT.get() or _DATA.parent / "runs/data").resolve()
+
+
+def family_guard_bytes() -> bytes:
+    cohort = json.loads((_DATA / "cohort.json").read_bytes())
+    return definition_bytes(cohort["family_guard"])
+
+
+def audit_contents(
+    cohort: dict[str, Any], root: Path | None = None
+) -> list[tuple[dict[str, Any], bytes]]:
+    """Require every declared audit before any preparation output is created."""
+    verified = []
+    missing = []
+    for document in cohort.get("audit_documents", []):
+        if document.get("embedded") == "generation_plan":
+            _, content = pinned_definition(cohort["generation_plan"])
+        else:
+            path = source_file(document, artifact_directory=root)
+            if not path.is_file():
+                missing.append(str(path))
+                continue
+            content = path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != document["sha256"]:
+            raise ValueError("Cohort audit document content changed")
+        verified.append((document, content))
+    if missing:
+        raise FileNotFoundError(
+            f"Missing cohort audit documents ({len(missing)}):\n" + "\n".join(missing)
+        )
+    return verified
 
 
 @contextmanager
-def preparing_sources() -> Iterator[None]:
+def preparing_sources(artifact_directory: Path | None = None) -> Iterator[None]:
     """Share verified admission within preparation; ordinary loads read bytes."""
-    token = _ADMISSIONS.set(admitted_sources())
+    root_token = _ARTIFACT_ROOT.set(artifact_root(artifact_directory))
     try:
-        yield
+        token = _ADMISSIONS.set(admitted_sources())
+        try:
+            yield
+        finally:
+            _ADMISSIONS.reset(token)
     finally:
-        _ADMISSIONS.reset(token)
+        _ARTIFACT_ROOT.reset(root_token)
 
 
 WORKSPACE_GRADING_DRIVER = """import os, shutil, tempfile
@@ -46,25 +144,26 @@ with tempfile.TemporaryDirectory() as directory:
 """
 
 
-def _local_file(name: str) -> Path:
-    path = (_CONFIGS / name).resolve()
-    if not path.is_relative_to(_CONFIGS.resolve()):
-        raise ValueError("Source registration must remain inside configs")
-    return path
-
-
-def source_file(lock: dict[str, Any]) -> Path:
+def source_file(
+    lock: dict[str, Any], *, artifact_directory: Path | None = None
+) -> Path:
     """Repository registrations may pin generated private catalogs in runs."""
-    path = (_CONFIGS / Path(str(lock["file"]))).resolve()
+    if "artifact" in lock:
+        root = artifact_root(artifact_directory)
+        path = (root / str(lock["artifact"])).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError("Source artifact must remain inside its artifact root")
+        return path
+    path = (_DATA / Path(str(lock["file"]))).resolve()
     if not any(
         path.is_relative_to(root.resolve())
         for root in (
-            _CONFIGS,
-            _CONFIGS.parent / "runs",
-            _CONFIGS.parent / "outputs",
+            _DATA,
+            _DATA.parent / "runs",
+            _DATA.parent / "outputs",
         )
     ):
-        raise ValueError("Registered source must be in configs, runs or outputs")
+        raise ValueError("Registered source must be in data, runs or outputs")
     return path
 
 
@@ -74,9 +173,13 @@ def admitted_sources(artifact_dir: Path | None = None) -> SourceRegistry:
     if snapshot is not None:
         return snapshot
     raw = SOURCE_REGISTRY.read_bytes()
+    definitions = _source_definitions(raw)
     inputs = []
-    for registration in json.loads(raw)["sources"]:
-        lock_bytes = _local_file(registration["lock_file"]).read_bytes()
+    for registration in definitions["sources"]:
+        key = registration.get("lock")
+        if not isinstance(key, str) or key not in definitions["locks"]:
+            raise ValueError("Source registration has no pinned lock")
+        lock_bytes = definition_bytes(definitions["locks"][key])
         content = b""
         if registration["format"] == "catalog":
             path = source_file(json.loads(lock_bytes))
@@ -98,7 +201,7 @@ def _admitted_sources(
 ) -> SourceRegistry:
     # Cache parsing, never filesystem reads or content identities.
     registry = json.loads(raw)
-    if registry["version"] != "task-source-registry-v2":
+    if registry["version"] != "task-source-registry-v3":
         raise ValueError("Unsupported source registry version")
     sources: SourceRegistry = {}
     mappings: dict[tuple[str, str], tuple[str, str]] = {}

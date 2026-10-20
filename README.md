@@ -12,10 +12,11 @@
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.13%2B-3776AB?style=for-the-badge&amp;logo=python&amp;logoColor=white" alt="Python 3.13+"></a>
   <a href="configs/defaults.yaml"><img src="https://img.shields.io/badge/Harness-Bash-10B981?style=for-the-badge&amp;logo=gnubash&amp;logoColor=white" alt="Bash Harness"></a>
   <a href="#training"><img src="https://img.shields.io/badge/Training-OPSD-7C3AED?style=for-the-badge" alt="SFT &amp; OPSD"></a>
-  <a href="configs/local-vllm/"><img src="https://img.shields.io/badge/Inference-vLLM-0EA5E9?style=for-the-badge" alt="vLLM"></a>
+  <a href="environments/local-vllm/"><img src="https://img.shields.io/badge/Inference-vLLM-0EA5E9?style=for-the-badge" alt="vLLM"></a>
 </p>
 
 <p align="center">
+  <a href="#results">📊 实验结果</a> ·
   <a href="#features">✨ 核心能力</a> ·
   <a href="#quickstart">🚀 快速开始</a> ·
   <a href="#models">🔌 接入真实模型</a> ·
@@ -25,18 +26,34 @@
 
 ---
 
-bashlet 是一个通过 bash 命令编写、运行和修复代码的极简编程智能体。项目为任务交互、后训练和评测提供共用的 Harness。
+bashlet 是一个通过 bash 命令编写、运行和修复代码的极简编程智能体。
 
-项目研究 On-Policy Self-Distillation（OPSD）：学生模型生成真实交互轨迹，同源的冻结教师利用训练任务的参考实现，为学生已采样的 token 提供概率监督。
+项目研究 Harness + On-Policy Self-Distillation（OPSD）：学生模型和教师模型都从 [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) 初始化得到；学生执行编程任务生成真实交互轨迹，教师模型保持冻结，并结合参考实现为学生生成的轨迹提供 token-level 的监督。
+
+<a id="results"></a>
+
+## 📊 实验结果
+
+在相同的 500 个开发集评估回合上，对比 Baseline 和两个 OPSD checkpoint。每个模型覆盖 5 个评估 seed，每个 seed 100 回合。
+
+![开发集总体与分类最终通过率：Baseline step-0 为 70.2%，OPSD step-268 为 77.4%，OPSD step-536 为 80.4%。](assets/experiment-results.svg)
+
+| 评估对象 | 通过回合数 | 最终通过率 | 平均生成 tokens | 平均交互步数 |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline step-0 | 351 / 500 | 70.2% | 1708.908 | 8.424 |
+| OPSD step-268 | 387 / 500 | 77.4% | 1979.854 | 9.152 |
+| OPSD step-536 | 402 / 500 | 80.4% | 1796.788 | 8.564 |
+
+> 生成 tokens 包含 thinking。两项开销均为全部 500 回合的每回合均值。
 
 <a id="features"></a>
 
 ## ✨ 核心能力
 
 - 💻 **任务交互**：`agent` 接收自然语言指令和工作目录；`task` 运行带独立评分的编程任务。
-- 🛡️ **隔离执行**：使用 Bubblewrap 沙箱，每步启动新 shell，工作区文件在步骤之间保留。
+- 🛡️ **隔离执行**：使用 [Bubblewrap](https://github.com/containers/bubblewrap) 沙箱，每步启动新 shell，工作区文件在步骤之间保留。
 - 📝 **轨迹记录**：保存命令、真实观察、工作区变化，以及采样生成的原始 token 和 logprob。
-- 🧠 **后训练与评测**：通过 PyTRIO 进行 OPSD；支持本地 vLLM 采样与评测。
+- 🧠 **后训练与评测**：通过 [PyTRIO](https://pytrio.com) 进行 OPSD 训练；同时支持本地 vLLM 采样与评测。
 
 <a id="quickstart"></a>
 
@@ -54,7 +71,7 @@ bashlet 是一个通过 bash 命令编写、运行和修复代码的极简编程
 
 ```bash
 uv sync --locked
-uv sync --project configs/sandbox-python --python /usr/bin/python3 --locked
+uv sync --project environments/sandbox-python --python /usr/bin/python3 --locked
 uv run --locked bashlet task examples/sum.json
 ```
 
@@ -74,8 +91,9 @@ uv run --locked bashlet show runs/RUN_ID
 
 ```bash
 mkdir -p runs/demo-input
-uv run --locked bashlet agent "创建并运行 hello.py，然后提交" \
-  --workdir runs/demo-input -c configs/replay-agent.yaml
+uv run --locked bashlet agent "创建 result.txt，然后提交" \
+  --workdir runs/demo-input \
+  --set 'model.replies=["```bash\ntouch result.txt\necho COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT\n```"]'
 ```
 
 `agent` 操作输入目录的副本，结果保存在本次运行的 `workspace/` 中。通过 `-c` 选择模型配置；多个配置按顺序覆盖，`--set key=value` 覆盖单项设置。
@@ -84,17 +102,16 @@ uv run --locked bashlet agent "创建并运行 hello.py，然后提交" \
 
 ## 🔌 接入真实模型
 
-将 `PYTRIO_API_KEY=你的密钥` 写入仓库根目录的 `.env`，使用 [PyTRIO 配置](configs/pytrio-smoke.yaml)运行云端 Qwen3.5-4B：
+将 `PYTRIO_API_KEY=你的密钥` 写入仓库根目录的 `.env`。正式训练使用 [configs/opsd.yaml](configs/opsd.yaml) 中的 PyTRIO 设置，采样和训练共用 `runs/spend.sqlite3` 账本及其中的 `spend` 费用策略。
+
+本地 vLLM 的依赖锁位于 [environments/local-vllm/](environments/local-vllm/)。准备模型权重后，调整 `opsd.yaml` 的 `evaluation.base_path`、服务地址和 `evaluation.server.options`，再启动服务：
 
 ```bash
-uv run --locked bashlet spend status
-uv run --locked bashlet task examples/pytrio-smoke.json \
-  -c configs/pytrio-smoke.yaml
+uv sync --project environments/local-vllm --python 3.12 --locked
+bash scripts/serve-local-vllm.sh
 ```
 
-远端采样与训练会产生 API 费用，统一使用 `runs/spend.sqlite3` 账本。预算设置见 [configs/spend.yaml](configs/spend.yaml)。
-
-本地 vLLM 的环境见 [configs/local-vllm/](configs/local-vllm/)，运行配置见 [configs/local-base.yaml](configs/local-base.yaml)。使用前需准备模型权重，并调整服务地址、权重和快照清单路径。
+服务脚本将当前参数写入 `runs/local-vllm/serve.yaml`。在计算节点上运行前，先加载该节点可用的 CUDA module。
 
 <a id="training"></a>
 
@@ -102,7 +119,7 @@ uv run --locked bashlet task examples/pytrio-smoke.json \
 
 OPSD 从原始指令模型开始，学生更新，特权教师冻结。训练使用 PyTRIO，评测使用本地 vLLM。
 
-每个实验使用一个 YAML 入口。[configs/opsd.yaml](configs/opsd.yaml) 引用共用条件和预检配置；配置中的路径相对声明它的 YAML 文件解析。本地 tokenizer 路径使用 `./` 或 `../` 前缀，Hub 模型名保持原样。先准备数据、模型权重与服务环境，再按实际资源调整该配置。
+`configs/` 只包含两份默认配置：[defaults.yaml](configs/defaults.yaml) 定义 Harness、协议和沙箱；[opsd.yaml](configs/opsd.yaml) 汇总训练、评测、数据质量检查与费用策略。配置中的路径相对声明它的 YAML 文件解析。本地 tokenizer 路径使用 `./` 或 `../` 前缀，Hub 模型名保持原样。先按[数据准备说明](docs/data-preparation.md)生成数据，再准备模型权重与服务环境，并按实际资源调整配置。
 
 ```bash
 uv run --locked bashlet train-opsd configs/opsd.yaml
@@ -111,18 +128,18 @@ uv run --locked bashlet evaluate-checkpoint configs/opsd.yaml --phase final
 uv run --locked bashlet watch-opsd --config configs/opsd.yaml
 ```
 
-`train-opsd` 会先执行配置中的预检，再运行正式训练。每轮评测共享训练的 Harness、预算和采样条件，模型权重由保存的 checkpoint 确定。更改新实验的轮数、种子或预算只需改配置；同一运行恢复时必须保持其冻结条件。`--phase test` 仅允许在完整训练结束后访问最终测试集。
+`train-opsd` 直接运行正式训练。每轮评测共享训练的 Harness、预算和采样条件，模型权重由保存的 checkpoint 确定。更改新实验的轮数、种子或预算只需改配置；同一运行恢复时必须保持其冻结条件。`--phase test` 仅允许在完整训练结束后访问最终测试集。
 
 | 用途 | CLI 命令 | 配置或说明 |
 | --- | --- | --- |
-| 准备 MBPP 任务 | `prepare-mbpp` | [数据源](configs/mbpp-sanitized-v1.json) |
-| 导入公开任务 | `import-public-tasks` | [公开来源](configs/opsd-public-import-v5.json)、[P3](configs/opsd-p3-import-v1.json) |
-| 验证和冻结混合任务集 | `prepare-harness` | [当前数据计划](configs/opsd-expanded-plan-v1.json)、[准备说明](configs/opsd-expanded-data-v8.md) |
+| 准备 MBPP 任务 | `prepare-mbpp --source-lock data/sources.json` | [来源定义](data/sources.json) |
+| 导入公开任务 | `import-public-tasks data/sources.json --catalog public-python`（或 `p3`） | [来源与导入计划](data/sources.json) |
+| 验证和冻结混合任务集 | `prepare-harness --cohort data/cohort.json` | [任务划分](data/cohort.json)、[准备说明](docs/data-preparation.md) |
 | 导出保存的权重 | `export-snapshot` | 使用 OPSD 运行中的 `training/` 目录 |
 | 准备本地模型 | `prepare-local-snapshot` | 基模与导出的 adapter |
 | 独立任务评测 | `evaluate` | 固定任务清单与已验证的本地模型 |
 
-通过 `uv run --locked bashlet --help` 查看入口。历史 SFT 和旧协议实验使用对应 Git 版本；整理前的完整源码保存在标签 `opsd-536-before-refactor-20261016`。复现还需要相应数据、权重和锁定依赖。
+通过 `uv run --locked bashlet --help` 可以查看入口。
 
 <a id="development"></a>
 

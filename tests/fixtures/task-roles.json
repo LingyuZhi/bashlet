@@ -1,22 +1,21 @@
 {
-  "dataset": "bashlet/harness-supplement",
-  "revision": "harness-supplement-v2",
+  "dataset": "test/role-fixture",
+  "revision": "fixture-v1",
   "provenance": {
-    "kind": "model_assisted",
-    "author": "codex",
-    "description": "Small independently executed task catalog for versioned role admission; no model capability claims."
+    "kind": "synthetic",
+    "description": "Small source-admission, data-role and grading regression fixtures; never experimental data."
   },
   "families": [
     {
       "original_task_id": "sign-runs",
-      "family_id": "supplement/sign-runs",
+      "family_id": "fixture/sign-runs",
       "split": "unsplit",
       "task_type": "short_program",
       "variants": [
         {
           "variant_id": "base",
           "task": {
-            "task_id": "supplement/sign-runs",
+            "task_id": "fixture/sign-runs",
             "prompt": "Count maximal runs of equal sign after dropping all zero integers. The empty sequence has zero runs. Implement solution.py. Run python3 feedback.py for feedback, then submit. Keep feedback files unchanged.",
             "initial_files": {
               "feedback.py": "from solution import sign_runs\nassert sign_runs([1, 2]) == 1\n"
@@ -75,14 +74,14 @@
     },
     {
       "original_task_id": "interval-union",
-      "family_id": "supplement/interval-union",
+      "family_id": "fixture/interval-union",
       "split": "unsplit",
       "task_type": "short_program",
       "variants": [
         {
           "variant_id": "base",
           "task": {
-            "task_id": "supplement/interval-union",
+            "task_id": "fixture/interval-union",
             "prompt": "Return the total length covered by half-open integer intervals. Intervals may overlap, touch or be empty and arrive in any order. Implement solution.py. Run python3 feedback.py for feedback, then submit. Keep feedback files unchanged.",
             "initial_files": {
               "feedback.py": "from solution import covered_length\nassert covered_length([[0, 2], [4, 7]]) == 5\n"
@@ -152,14 +151,14 @@
     },
     {
       "original_task_id": "circular-windows",
-      "family_id": "supplement/circular-windows",
+      "family_id": "fixture/circular-windows",
       "split": "unsplit",
       "task_type": "short_program",
       "variants": [
         {
           "variant_id": "base",
           "task": {
-            "task_id": "supplement/circular-windows",
+            "task_id": "fixture/circular-windows",
             "prompt": "For each starting position, sum width consecutive entries of a circular list. Width is nonnegative and may exceed the list length. An empty list returns []. Implement solution.py. Run python3 feedback.py for feedback, then submit. Keep feedback files unchanged.",
             "initial_files": {
               "feedback.py": "from solution import window_sums\nassert window_sums([2, 5], 1) == [2, 5]\n"
@@ -231,61 +230,24 @@
     },
     {
       "original_task_id": "cache-expiry",
-      "family_id": "supplement/cache-expiry",
+      "family_id": "fixture/cache-expiry",
       "split": "unsplit",
       "task_type": "code_edit",
       "variants": [
         {
           "variant_id": "base",
           "task": {
-            "task_id": "supplement/cache-expiry",
+            "task_id": "fixture/cache-expiry",
             "prompt": "Repair the cache reader. Each entry is [value, expiry]. Return default for absent keys or now >= expiry; preserve valid false and zero values. Do not mutate entries. Implement app/cache.py. Run python3 feedback.py for feedback, then submit. Keep feedback files unchanged.",
             "initial_files": {
               "feedback.py": "from app.cache import read_cache\nassert read_cache({'a': [3, 10]}, 'a', 9, -1) == 3\n",
               "app/cache.py": "def read_cache(entries, key, now, default=None):\n    if key not in entries: return default\n    value, expiry = entries[key]\n    return value or default if now <= expiry else default\n"
             },
             "grader": {
-              "module_path": "app/cache.py",
-              "function_name": "read_cache",
-              "cases": [
-                {
-                  "args": [
-                    {
-                      "a": [
-                        0,
-                        10
-                      ]
-                    },
-                    "a",
-                    9,
-                    -1
-                  ],
-                  "expected": 0
-                },
-                {
-                  "args": [
-                    {
-                      "a": [
-                        3,
-                        10
-                      ]
-                    },
-                    "a",
-                    10,
-                    -1
-                  ],
-                  "expected": -1
-                },
-                {
-                  "args": [
-                    {},
-                    "missing",
-                    0,
-                    4
-                  ],
-                  "expected": 4
-                }
-              ]
+              "command": "python3 -c \"exec(open('_grading/cases.py').read())\"",
+              "hidden_files": {
+                "_grading/cases.py": "from copy import deepcopy\nfrom app.cache import read_cache\ncases = [\n    ({'a': [0, 10]}, 'a', 9, -1, 0),\n    ({'a': [False, 10]}, 'a', 9, 'missing', False),\n    ({'a': [3, 10]}, 'a', 10, -1, -1),\n    ({}, 'missing', 0, 4, 4),\n    ({'a': [3, 10], 'b': [8, 11]}, 'a', 9, None, 3),\n]\nfor entries, key, now, default, expected in cases:\n    before = deepcopy(entries)\n    actual = read_cache(entries, key, now, default)\n    assert type(actual) is type(expected) and actual == expected\n    assert entries == before, 'read_cache mutated entries'\n"
+              }
             },
             "reference_implementation": "def read_cache(entries, key, now, default=None):\n    if key not in entries: return default\n    value, expiry = entries[key]\n    return value if now < expiry else default\n",
             "implementation_paths": [
@@ -294,22 +256,22 @@
             "feedback_command": "python3 feedback.py"
           },
           "wrong_files": {
-            "app/cache.py": "def read_cache(entries, key, now, default=None):\n    if key not in entries: return default\n    value, expiry = entries[key]\n    return (value or default) if now < expiry else default\n"
+            "app/cache.py": "def read_cache(entries, key, now, default=None):\n    item = entries.pop(key, None)\n    if item is None: return default\n    value, expiry = item\n    return value if now < expiry else default\n"
           },
-          "wrong_reason": "Fixes expiry but still discards valid zero and false cache values."
+          "wrong_reason": "Returns correct values but removes entries from the caller cache."
         }
       ]
     },
     {
       "original_task_id": "bounded-drain",
-      "family_id": "supplement/bounded-drain",
+      "family_id": "fixture/bounded-drain",
       "split": "unsplit",
       "task_type": "code_edit",
       "variants": [
         {
           "variant_id": "base",
           "task": {
-            "task_id": "supplement/bounded-drain",
+            "task_id": "fixture/bounded-drain",
             "prompt": "Repair app/queue.py. drain(items, limit) removes and returns at most limit leading items, preserving the remainder in the same list. A negative limit raises ValueError without modifying items. Run python3 feedback.py and submit.",
             "initial_files": {
               "app/queue.py": "def drain(items, limit):\n    result = items[:limit]\n    items.clear()\n    return result\n",
@@ -336,14 +298,14 @@
     },
     {
       "original_task_id": "release-order",
-      "family_id": "supplement/release-order",
+      "family_id": "fixture/release-order",
       "split": "unsplit",
       "task_type": "workspace",
       "variants": [
         {
           "variant_id": "base",
           "task": {
-            "task_id": "supplement/release-order",
+            "task_id": "fixture/release-order",
             "prompt": "Read docs/release.md and packages.json. Implement tools/release.py to write reports/order.json. Run python3 feedback.py, then submit. Keep input, instructions and feedback unchanged.",
             "initial_files": {
               "docs/release.md": "packages.json maps each package to its dependencies. Emit the lexicographically smallest valid topological order as a JSON list. Dependencies must precede dependants. Inputs are acyclic and include every dependency as a key.\n",
@@ -371,14 +333,14 @@
     },
     {
       "original_task_id": "checksum-audit",
-      "family_id": "supplement/checksum-audit",
+      "family_id": "fixture/checksum-audit",
       "split": "unsplit",
       "task_type": "workspace",
       "variants": [
         {
           "variant_id": "base",
           "task": {
-            "task_id": "supplement/checksum-audit",
+            "task_id": "fixture/checksum-audit",
             "prompt": "Read docs/audit.md and index.json. Implement tools/audit.py to write reports/corrupt.json. Run python3 feedback.py and submit. Keep input and feedback files unchanged.",
             "initial_files": {
               "docs/audit.md": "index.json maps relative file paths to lowercase SHA-256 checksums of their bytes. Report all missing or mismatching files as a sorted JSON list. Unindexed files are ignored.\n",

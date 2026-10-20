@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 import shlex
 import subprocess
 import time
@@ -96,6 +97,31 @@ def _prepare(
     return manifest
 
 
+def _service_config(
+    server: dict[str, Any], model: str, tokenizer: str
+) -> dict[str, Any]:
+    if "options" in server:
+        settings = dict(server["options"])
+    else:
+        settings = yaml.safe_load(Path(server["template"]).read_text())
+    settings.update(model=model, tokenizer=tokenizer)
+    return settings
+
+
+def write_vllm_config(config_path: Path, output: Path) -> Path:
+    """Materialize the base-model service without requiring prepared training data."""
+    from bashlet.config import read_yaml
+    from bashlet.distillation.config import _validate_evaluation
+
+    evaluation = read_yaml(config_path)["evaluation"]
+    _validate_evaluation(evaluation)
+    base = evaluation["base_path"]
+    settings = _service_config(evaluation["server"], base, base)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(yaml.safe_dump(settings))
+    return output
+
+
 def _server(config: dict[str, Any], manifest: Path) -> None:
     """Own one configured tmux service; never replace an unrelated session."""
     server = config.get("server")
@@ -130,9 +156,8 @@ def _server(config: dict[str, Any], manifest: Path) -> None:
         exists = False
     if not exists:
         local = _read(manifest)
-        template = yaml.safe_load(Path(server["template"]).read_text())
-        template.update(
-            model=local["adapter"]["merged"]["path"], tokenizer=local["base_path"]
+        template = _service_config(
+            server, local["adapter"]["merged"]["path"], local["base_path"]
         )
         path = root / f"serve-{identity}.yaml"
         path.write_text(yaml.safe_dump(template))
@@ -190,6 +215,37 @@ def _settings(config_path: Path, run_dir: Path | None = None) -> dict[str, Any]:
         "model_revision": backend.model_revision,
         "api_key_env": backend.api_key_env,
     }
+
+
+def _heldout_plan(manifest_path: Path, directory: Path) -> Path:
+    """Derive one immutable evaluation list from the actual frozen task set."""
+    manifest = _read(manifest_path)
+    if manifest.get("status") != "complete":
+        raise ValueError("Held-out evaluation requires a complete frozen manifest")
+    identities = manifest["cohort"]["test"]["task_ids"]
+    if (
+        not isinstance(identities, list)
+        or not identities
+        or any(not isinstance(identity, str) or not identity for identity in identities)
+        or len(identities) != len(set(identities))
+    ):
+        raise ValueError("Held-out evaluation requires unique frozen test task IDs")
+    path = directory / "heldout-plan.json"
+    plan = {
+        "version": "development-evaluation-v1",
+        "name": f"{manifest['source']['revision']}-heldout",
+        "manifest": os.path.relpath(manifest_path.resolve(), directory.resolve()),
+        "split": "test",
+        "task_ids": identities,
+    }
+    content = (json.dumps(plan, indent=2) + "\n").encode()
+    if path.exists():
+        if path.read_bytes() != content:
+            raise ValueError("Frozen held-out evaluation plan changed")
+    else:
+        directory.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    return path
 
 
 def _stage(
@@ -252,7 +308,11 @@ def _stage(
         ),
     )
     local_snapshot = _read(manifest)["identity"]
-    plan_path = Path(settings["test_plan"] if heldout else original.dev_plan)
+    plan_path = (
+        _heldout_plan(Path(original.train_manifest), Path(settings["output_dir"]))
+        if heldout
+        else Path(original.dev_plan)
+    )
     plan = _read(plan_path)
     if (plan_path.parent / plan["manifest"]).resolve() != Path(
         original.train_manifest

@@ -16,10 +16,8 @@ from bashlet.harness.experiment import run_experiment, serialize_task, task_from
 from bashlet.harness.models import FunctionGrader, Task, TaskAssignment, TaskOrigin
 from bashlet.harness.protocol import fingerprint
 from bashlet.tasks import (
-    _CONFIGS,
-    AUTHORED_LOCK,
+    _DATA,
     CONVERSION,
-    FAMILY_GUARD,
     VERSIONED_CONVERSION,
     authored_source,
     canonical_family,
@@ -31,14 +29,16 @@ from bashlet.tasks import (
 from bashlet.tasks.sources import (
     SOURCE_REGISTRY,
     admitted_sources,
+    audit_contents,
     catalog_task_record,
+    family_guard_bytes,
     preparing_sources,
     registered_origin,
     source_file,
 )
 from bashlet.tasks.versions import preparing_cohort
 
-DEFAULT_COHORT = _CONFIGS / "opsd-expanded-plan-v1.json"
+DEFAULT_COHORT = _DATA / "cohort.json"
 _TYPES = ("short_program", "code_edit", "workspace")
 
 
@@ -478,12 +478,14 @@ def prepare_harness(
     cohort_path: Path = DEFAULT_COHORT,
     workers: int = 1,
     collect_quality: bool = False,
+    artifact_root: Path | None = None,
 ) -> Path:
     """Admit one cohort, then publish its verified tasks without leaking drafts."""
     if type(workers) is not int or not 1 <= workers <= 16:
         raise ValueError("Preparation workers must be between 1 and 16")
+    audit_contents(json.loads(cohort_path.read_bytes()), artifact_root)
     with (
-        preparing_sources(),
+        preparing_sources(artifact_root),
         preparing_cohort(
             cohort_path,
             output_dir.resolve() / "manifest.json",
@@ -520,6 +522,7 @@ def _prepare_harness(
     from bashlet.tasks.freeze import validate_plan
 
     validate_plan(cohort)
+    audits = audit_contents(cohort)
     versioned = cohort["version"] == "harness-task-cohort-v2"
     definitions, sources = _definitions(
         cohort,
@@ -533,17 +536,13 @@ def _prepare_harness(
     private = output_dir / "private"
     private.mkdir(mode=0o700)
     lock, _ = authored_source()
-    (private / "authored-source.json").write_bytes(
-        (AUTHORED_LOCK.parent / lock["file"]).read_bytes()
-    )
+    (private / "authored-source.json").write_bytes(source_file(lock).read_bytes())
     (private / "cohort.json").write_bytes(cohort_bytes)
-    (private / "family-guard.json").write_bytes(FAMILY_GUARD.read_bytes())
+    guard_content = family_guard_bytes()
+    (private / "family-guard.json").write_bytes(guard_content)
     audit_artifacts = []
-    for document in cohort.get("audit_documents", []):
-        content = source_file(document).read_bytes()
-        digest = hashlib.sha256(content).hexdigest()
-        if digest != document["sha256"]:
-            raise ValueError("Cohort audit document content changed")
+    for document, content in audits:
+        digest = document["sha256"]
         path = private / "audits" / (digest + ".json")
         path.parent.mkdir(exist_ok=True, mode=0o700)
         path.write_bytes(content)
@@ -570,7 +569,7 @@ def _prepare_harness(
         },
         "sources": sources,
         "cohort": cohort,
-        "family_guard_sha256": hashlib.sha256(FAMILY_GUARD.read_bytes()).hexdigest(),
+        "family_guard_sha256": hashlib.sha256(guard_content).hexdigest(),
         "upstream_manifest_sha256": (
             hashlib.sha256(mbpp_manifest.read_bytes()).hexdigest()
             if mbpp_manifest
